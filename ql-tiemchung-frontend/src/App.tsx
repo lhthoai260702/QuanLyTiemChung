@@ -10,7 +10,7 @@ import {
   initialSystemLogs,
   initialStockLogs
 } from './mockData';
-
+import { useNavigate } from 'react-router-dom';
 import {
   UserAccount,
   Vaccine,
@@ -104,6 +104,12 @@ export default function App() {
     const saved = localStorage.getItem('mediflow_stock_logs');
     return saved ? JSON.parse(saved) : initialStockLogs;
   });
+
+  const navigate = useNavigate();
+  const handleLogout = () => {
+	  localStorage.removeItem('user'); // Xóa thông tin đã lưu
+	  navigate('/login'); // Chuyển hướng về trang đăng nhập
+  };
 
   // 2. Navigation Active States
   const [activeRole, setActiveRole] = useState<RoleType>('Admin');
@@ -519,6 +525,7 @@ export default function App() {
                 </div>
 
                 {/* Active User Card at bottom */}
+
                 <div className="p-3 bg-sky-50/50 rounded-xl border border-sky-100">
                   <span className="text-[9px] font-extrabold text-sky-400 uppercase tracking-wider block">VĂN PHÒNG KHÁM CHỮA SC</span>
                   <div className="mt-2 flex items-center gap-2.5">

@@ -1,0 +1,6 @@
+{
+  "name": "MediFlow Pro",
+  "description": "Hệ thống quản lý tiêm phòng vắc-xin đa vai trò (Admin, Kho, Y tế, Khách hàng, Hỗ trợ, Tài chính)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -31,8 +31,8 @@ public class LichTiemChung {
     @Column(name = "DiaDiem")
     private String diaDiem;
 
-    @Column(name = "LoaiVacXin")
-    private String loaiVacXin;
+    @Column(name = "MaLoaiVacXin")
+    private Long maLoaiVacXin;
 
     @Column(name = "flag_delete")
     private Boolean flagDelete;

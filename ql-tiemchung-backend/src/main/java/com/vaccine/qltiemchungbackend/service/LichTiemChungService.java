@@ -3,6 +3,7 @@ package com.vaccine.qltiemchungbackend.service;
 import com.vaccine.qltiemchungbackend.dto.LichTiemChungDTO;
 import com.vaccine.qltiemchungbackend.entity.LichTiemChung;
 import com.vaccine.qltiemchungbackend.repository.LichTiemChungRepository;
+import com.vaccine.qltiemchungbackend.repository.LoaiVacXinRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +18,9 @@ public class LichTiemChungService {
     @Autowired
     private LichTiemChungRepository lichTiemChungRepository;
 
+    @Autowired
+    private LoaiVacXinRepository loaiVacXinRepository; // Bổ sung Repository này để lấy tên Vắc-xin
+
     public List<LichTiemChungDTO> getAllSchedules() {
         return lichTiemChungRepository.findByFlagDeleteFalseOrFlagDeleteIsNull().stream().map(ltc -> {
             LichTiemChungDTO dto = new LichTiemChungDTO();
@@ -30,7 +34,18 @@ public class LichTiemChungService {
             }
 
             dto.setThoiGian(ltc.getThoiGianChung());
-            dto.setLoaiVacXin(ltc.getLoaiVacXin());
+
+            // Kéo ID từ Database ra DTO
+            dto.setMaLoaiVacXin(ltc.getMaLoaiVacXin());
+
+            // Truy vấn lấy Tên Loại Vắc Xin để hiển thị ra màn hình Frontend
+            if (ltc.getMaLoaiVacXin() != null) {
+                loaiVacXinRepository.findById(ltc.getMaLoaiVacXin())
+                        .ifPresent(lvx -> dto.setLoaiVacXin(lvx.getTenLoaiVacXin()));
+            } else {
+                dto.setLoaiVacXin("Chưa xác định");
+            }
+
             dto.setSoLuong(ltc.getSoLuongNguoiTiem());
             dto.setDoTuoi(ltc.getDoiTuong());
             dto.setDiaDiem(ltc.getDiaDiem());
@@ -52,7 +67,10 @@ public class LichTiemChungService {
         ltc.setSoLuongNguoiTiem(dto.getSoLuong());
         ltc.setDiaDiem(dto.getDiaDiem());
         ltc.setGhiChu(dto.getGhiChu());
-        ltc.setLoaiVacXin(dto.getLoaiVacXin());
+
+        // Nhận ID từ Frontend và lưu xuống Database
+        ltc.setMaLoaiVacXin(dto.getMaLoaiVacXin());
+
         ltc.setFlagDelete(false);
 
         if (dto.getDateInput() != null && !dto.getDateInput().isEmpty()) {
@@ -85,7 +103,9 @@ public class LichTiemChungService {
         ltc.setSoLuongNguoiTiem(dto.getSoLuong());
         ltc.setDiaDiem(dto.getDiaDiem());
         ltc.setGhiChu(dto.getGhiChu());
-        ltc.setLoaiVacXin(dto.getLoaiVacXin());
+
+        // Cập nhật lại ID loại Vắc-xin từ Form
+        ltc.setMaLoaiVacXin(dto.getMaLoaiVacXin());
 
         if (dto.getDateInput() != null && !dto.getDateInput().isEmpty()) {
             ltc.setNgayTiem(LocalDate.parse(dto.getDateInput()));

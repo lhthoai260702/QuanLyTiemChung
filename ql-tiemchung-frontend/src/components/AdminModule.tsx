@@ -1,20 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  Users,
-  CalendarDays,
-  Plus,
-  Search,
-  Save,
-  X,
-  Clock,
-  MapPin,
-  Shield,
-  Edit,
-  Trash2,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-} from "lucide-react";
+import { Users, CalendarDays, Plus, Search, Save, X, Clock, MapPin, Shield, Edit, Trash2, ChevronLeft, ChevronRight, Filter } from "lucide-react";
 
 // --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
 export interface TaiKhoan {
@@ -43,11 +28,7 @@ export interface NguoiDangKy {
   ngaySinh: string;
   gioiTinh: string;
   sdt: string;
-  trangThaiTiem:
-    | "Chờ khám sàng lọc"
-    | "Đủ điều kiện tiêm"
-    | "Đã tiêm"
-    | "Đã hủy";
+  trangThaiTiem: "Chờ khám sàng lọc" | "Đủ điều kiện tiêm" | "Đã tiêm" | "Đã hủy";
 }
 
 export interface LichTiemChungSRS {
@@ -71,12 +52,8 @@ interface AdminModuleProps {
   triggerToast?: (msg: string) => void;
 }
 
-export default function AdminModule({
-  triggerToast = alert,
-}: AdminModuleProps) {
-  const [activeTab, setActiveTab] = useState<"schedules" | "accounts">(
-    "accounts",
-  );
+export default function AdminModule({ triggerToast = alert }: AdminModuleProps) {
+  const [activeTab, setActiveTab] = useState<"schedules" | "accounts">("accounts");
   const [searchQuery, setSearchQuery] = useState("");
   const [accounts, setAccounts] = useState<TaiKhoan[]>([]);
 
@@ -131,12 +108,9 @@ export default function AdminModule({
     }
   }, [activeTab]);
 
-  const [selectedSchedule, setSelectedSchedule] =
-    useState<LichTiemChungSRS | null>(null);
-  const [scheduleSearchStartDate, setScheduleSearchStartDate] =
-    useState<string>("");
-  const [scheduleSearchEndDate, setScheduleSearchEndDate] =
-    useState<string>("");
+  const [selectedSchedule, setSelectedSchedule] = useState<LichTiemChungSRS | null>(null);
+  const [scheduleSearchStartDate, setScheduleSearchStartDate] = useState<string>("");
+  const [scheduleSearchEndDate, setScheduleSearchEndDate] = useState<string>("");
 
   // --- THÊM MỚI: Logic lọc danh sách lịch tiêm theo thời gian ---
   const filteredSchedules = schedules.filter((s) => {
@@ -163,9 +137,7 @@ export default function AdminModule({
   // Tự động chọn record đầu tiên nếu danh sách thay đổi sau khi lọc
   useEffect(() => {
     if (filteredSchedules.length > 0) {
-      const exists = filteredSchedules.find(
-        (s) => s.maLichTiem === selectedSchedule?.maLichTiem,
-      );
+      const exists = filteredSchedules.find((s) => s.maLichTiem === selectedSchedule?.maLichTiem);
       if (!exists) setSelectedSchedule(filteredSchedules[0]);
     } else {
       setSelectedSchedule(null);
@@ -174,17 +146,12 @@ export default function AdminModule({
   // -----------------------------------------------------------
 
   useEffect(() => {
-    if (schedules.length > 0 && !selectedSchedule)
-      setSelectedSchedule(schedules[0]);
+    if (schedules.length > 0 && !selectedSchedule) setSelectedSchedule(schedules[0]);
   }, [schedules, selectedSchedule]);
 
   // --- STATE QUẢN LÝ CHẾ ĐỘ EDIT ---
-  const [editingAccountId, setEditingAccountId] = useState<
-    number | string | null
-  >(null);
-  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(
-    null,
-  );
+  const [editingAccountId, setEditingAccountId] = useState<number | string | null>(null);
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
   // --- FORM STATE ---
   const [showAddAccount, setShowAddAccount] = useState(false);
@@ -212,22 +179,18 @@ export default function AdminModule({
     let val = e.target.value.replace(/\D/g, "");
     if (val.length > 10) val = val.substring(0, 10);
     let formatted = val;
-    if (val.length > 3 && val.length <= 6)
-      formatted = `${val.slice(0, 3)} ${val.slice(3)}`;
-    else if (val.length > 6)
-      formatted = `${val.slice(0, 3)} ${val.slice(3, 6)} ${val.slice(6)}`;
+    if (val.length > 3 && val.length <= 6) formatted = `${val.slice(0, 3)} ${val.slice(3)}`;
+    else if (val.length > 6) formatted = `${val.slice(0, 3)} ${val.slice(3, 6)} ${val.slice(6)}`;
     setAccForm({ ...accForm, sdt: formatted });
     if (accErrors.sdt) setAccErrors({ ...accErrors, sdt: "" });
   };
 
-  const handleNumberOnlyChange =
-    (field: keyof typeof accForm, maxLength: number) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      let val = e.target.value.replace(/\D/g, "");
-      if (val.length > maxLength) val = val.substring(0, maxLength);
-      setAccForm({ ...accForm, [field]: val });
-      if (accErrors[field]) setAccErrors({ ...accErrors, [field]: "" });
-    };
+  const handleNumberOnlyChange = (field: keyof typeof accForm, maxLength: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/\D/g, "");
+    if (val.length > maxLength) val = val.substring(0, maxLength);
+    setAccForm({ ...accForm, [field]: val });
+    if (accErrors[field]) setAccErrors({ ...accErrors, [field]: "" });
+  };
 
   const formatDisplayPhone = (phone?: string) => {
     if (!phone) return "Chưa cập nhật";
@@ -240,20 +203,13 @@ export default function AdminModule({
   const getRoleBadgeStyle = (roleName?: string) => {
     if (!roleName) return "bg-slate-100 text-slate-500 border-slate-200";
     const name = roleName.toLowerCase();
-    if (name.includes("admin"))
-      return "bg-rose-50 text-rose-700 border-rose-200";
-    if (name.includes("kho"))
-      return "bg-amber-50 text-amber-700 border-amber-200";
-    if (name.includes("tài chính"))
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    if (name.includes("hỗ trợ"))
-      return "bg-violet-50 text-violet-700 border-violet-200";
-    if (name.includes("y tế"))
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    if (name.includes("khách"))
-      return "bg-slate-100 text-slate-700 border-slate-300";
-    if (name.includes(","))
-      return "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200";
+    if (name.includes("admin")) return "bg-rose-50 text-rose-700 border-rose-200";
+    if (name.includes("kho")) return "bg-amber-50 text-amber-700 border-amber-200";
+    if (name.includes("tài chính")) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (name.includes("hỗ trợ")) return "bg-violet-50 text-violet-700 border-violet-200";
+    if (name.includes("y tế")) return "bg-blue-50 text-blue-700 border-blue-200";
+    if (name.includes("khách")) return "bg-slate-100 text-slate-700 border-slate-300";
+    if (name.includes(",")) return "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200";
     return "bg-gray-100 text-gray-600 border-gray-200";
   };
 
@@ -269,10 +225,7 @@ export default function AdminModule({
   ];
 
   // Hàm xác định xem string phanQuyen có chứa từ khóa lọc không
-  const checkRoleMatch = (
-    phanQuyenStr: string | undefined,
-    filterId: string,
-  ) => {
+  const checkRoleMatch = (phanQuyenStr: string | undefined, filterId: string) => {
     if (!phanQuyenStr) return false;
     const str = phanQuyenStr.toLowerCase();
     if (filterId === "admin") return str.includes("admin");
@@ -281,8 +234,7 @@ export default function AdminModule({
     if (filterId === "tài chính") return str.includes("tài chính");
     if (filterId === "hỗ trợ") return str.includes("hỗ trợ");
     // Tránh trùng chữ "Khách" của "Hỗ trợ khách hàng"
-    if (filterId === "khách")
-      return str.includes("khách") && !str.includes("hỗ trợ");
+    if (filterId === "khách") return str.includes("khách") && !str.includes("hỗ trợ");
     return false;
   };
 
@@ -298,20 +250,14 @@ export default function AdminModule({
 
   // Thực thi Lọc
   const filteredAccounts = accounts.filter((a) => {
-    const matchSearch =
-      a.hoTen.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      a.tenDangNhap.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchRole =
-      roleFilter === "all" || checkRoleMatch(a.phanQuyen, roleFilter);
+    const matchSearch = a.hoTen.toLowerCase().includes(searchQuery.toLowerCase()) || a.tenDangNhap.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchRole = roleFilter === "all" || checkRoleMatch(a.phanQuyen, roleFilter);
     return matchSearch && matchRole;
   });
 
   // Thực thi Phân Trang
   const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE) || 1;
-  const currentAccounts = filteredAccounts.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE,
-  );
+  const currentAccounts = filteredAccounts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   // --- END LOGIC ---
 
@@ -328,9 +274,7 @@ export default function AdminModule({
   });
 
   // BỔ SUNG: State và API Call để lấy Combobox Loại Vắc Xin
-  const [vaccineTypes, setVaccineTypes] = useState<
-    { maLoaiVacXin: number; tenLoaiVacXin: string }[]
-  >([]);
+  const [vaccineTypes, setVaccineTypes] = useState<{ maLoaiVacXin: number; tenLoaiVacXin: string }[]>([]);
 
   const fetchVaccineTypes = async () => {
     try {
@@ -361,20 +305,13 @@ export default function AdminModule({
     });
   };
 
-  const [scheduleErrors, setScheduleErrors] = useState<Record<string, string>>(
-    {},
-  );
+  const [scheduleErrors, setScheduleErrors] = useState<Record<string, string>>({});
 
-  const handleDateChange = (dateStr: string) =>
-    setScheduleForm({ ...scheduleForm, dateInput: dateStr });
+  const handleDateChange = (dateStr: string) => setScheduleForm({ ...scheduleForm, dateInput: dateStr });
 
   // HÀM CALL API XÓA MỀM LỊCH TIÊM CHỦNG
   const handleDeleteSchedule = async (id: string) => {
-    if (
-      !window.confirm(
-        "Bạn có chắc chắn muốn hủy / xóa lịch tiêm chủng này không?",
-      )
-    ) {
+    if (!window.confirm("Bạn có chắc chắn muốn hủy / xóa lịch tiêm chủng này không?")) {
       return;
     }
 
@@ -382,12 +319,9 @@ export default function AdminModule({
     const numericId = id.replace("LTC", "");
 
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/schedules/${numericId}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const response = await fetch(`http://localhost:8080/api/admin/schedules/${numericId}`, {
+        method: "DELETE",
+      });
 
       if (response.ok) {
         triggerToast("Hủy lịch tiêm chủng thành công!");
@@ -404,20 +338,13 @@ export default function AdminModule({
 
   // HÀM CALL API XÓA MỀM USER
   const handleDeleteAccount = async (id: number | string) => {
-    if (
-      !window.confirm(
-        "Bạn có chắc chắn muốn xóa tài khoản người dùng này không?",
-      )
-    ) {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa tài khoản người dùng này không?")) {
       return;
     }
     try {
-      const response = await fetch(
-        `http://localhost:8080/api/admin/accounts/${id}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const response = await fetch(`http://localhost:8080/api/admin/accounts/${id}`, {
+        method: "DELETE",
+      });
 
       if (response.ok) {
         triggerToast("Xóa tài khoản người dùng thành công!");
@@ -524,32 +451,25 @@ export default function AdminModule({
     if (!accForm.tenDangNhap.trim()) {
       newErrors.tenDangNhap = "Vui lòng nhập tên đăng nhập";
     } else if (!editingAccountId) {
-      const isDuplicate = accounts.some(
-        (a) =>
-          a.tenDangNhap.toLowerCase() ===
-          accForm.tenDangNhap.trim().toLowerCase(),
-      );
+      const isDuplicate = accounts.some((a) => a.tenDangNhap.toLowerCase() === accForm.tenDangNhap.trim().toLowerCase());
       if (isDuplicate) {
         newErrors.tenDangNhap = "Tài khoản không được trùng";
       }
     }
 
-    if (!editingAccountId && !accForm.matKhau)
-      newErrors.matKhau = "Vui lòng nhập mật khẩu";
+    if (!editingAccountId && !accForm.matKhau) newErrors.matKhau = "Vui lòng nhập mật khẩu";
     if (!accForm.hoTen.trim()) newErrors.hoTen = "Vui lòng nhập họ và tên";
     if (!accForm.cmnd) newErrors.cmnd = "Vui lòng nhập CCCD/CMND";
 
     const phoneNum = accForm.sdt.replace(/\s/g, "");
     if (!phoneNum) newErrors.sdt = "Vui lòng nhập số điện thoại";
-    else if (phoneNum.length < 10)
-      newErrors.sdt = "Số điện thoại phải đủ 10 số";
+    else if (phoneNum.length < 10) newErrors.sdt = "Số điện thoại phải đủ 10 số";
 
     if (accForm.maQuyen === 6) {
       if (!accForm.ngaySinh) newErrors.ngaySinh = "Vui lòng chọn ngày sinh";
     } else {
       if (!accForm.namSinh) newErrors.namSinh = "Vui lòng nhập năm sinh";
-      else if (accForm.namSinh.length < 4)
-        newErrors.namSinh = "Năm sinh không hợp lệ";
+      else if (accForm.namSinh.length < 4) newErrors.namSinh = "Năm sinh không hợp lệ";
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -565,9 +485,7 @@ export default function AdminModule({
     };
 
     try {
-      const url = editingAccountId
-        ? `http://localhost:8080/api/admin/accounts/${editingAccountId}`
-        : "http://localhost:8080/api/admin/accounts";
+      const url = editingAccountId ? `http://localhost:8080/api/admin/accounts/${editingAccountId}` : "http://localhost:8080/api/admin/accounts";
 
       const response = await fetch(url, {
         method: editingAccountId ? "PUT" : "POST",
@@ -576,11 +494,7 @@ export default function AdminModule({
       });
 
       if (response.ok) {
-        triggerToast(
-          editingAccountId
-            ? "Cập nhật tài khoản thành công!"
-            : "Tạo mới và phân luồng thành công!",
-        );
+        triggerToast(editingAccountId ? "Cập nhật tài khoản thành công!" : "Tạo mới và phân luồng thành công!");
         fetchAccounts();
         resetAccountForm();
       } else {
@@ -597,21 +511,16 @@ export default function AdminModule({
 
     // 1. CHẠY VALIDATION TỰ TẠO CHO LỊCH TIÊM
     const newErrors: Record<string, string> = {};
-    if (!scheduleForm.dateInput)
-      newErrors.dateInput = "Vui lòng chọn ngày tiêm";
-    if (!scheduleForm.thoiGian.trim())
-      newErrors.thoiGian = "Vui lòng nhập thời gian tiêm";
-    if (!scheduleForm.maLoaiVacXin)
-      newErrors.maLoaiVacXin = "Vui lòng chọn loại vắc xin";
+    if (!scheduleForm.dateInput) newErrors.dateInput = "Vui lòng chọn ngày tiêm";
+    if (!scheduleForm.thoiGian.trim()) newErrors.thoiGian = "Vui lòng nhập thời gian tiêm";
+    if (!scheduleForm.maLoaiVacXin) newErrors.maLoaiVacXin = "Vui lòng chọn loại vắc xin";
     if (!scheduleForm.soLuong) {
       newErrors.soLuong = "Vui lòng nhập số lượng";
     } else if (scheduleForm.soLuong <= 0) {
       newErrors.soLuong = "Số lượng phải lớn hơn 0";
     }
-    if (!scheduleForm.doTuoi.trim())
-      newErrors.doTuoi = "Vui lòng nhập độ tuổi khuyên dùng";
-    if (!scheduleForm.diaDiem.trim())
-      newErrors.diaDiem = "Vui lòng nhập địa điểm tổ chức";
+    if (!scheduleForm.doTuoi.trim()) newErrors.doTuoi = "Vui lòng nhập độ tuổi khuyên dùng";
+    if (!scheduleForm.diaDiem.trim()) newErrors.diaDiem = "Vui lòng nhập địa điểm tổ chức";
 
     if (Object.keys(newErrors).length > 0) {
       setScheduleErrors(newErrors);
@@ -643,11 +552,7 @@ export default function AdminModule({
       });
 
       if (response.ok) {
-        triggerToast(
-          editingScheduleId
-            ? "Cập nhật lịch tiêm thành công!"
-            : "Tạo lịch tiêm mới thành công!",
-        );
+        triggerToast(editingScheduleId ? "Cập nhật lịch tiêm thành công!" : "Tạo lịch tiêm mới thành công!");
         fetchSchedules(); // Reset lại bảng
         resetScheduleForm(); // Đóng form
       } else {
@@ -663,12 +568,8 @@ export default function AdminModule({
     <div className="space-y-6 animate-fade-in">
       {/* Header Module */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
-          👑 Phân hệ Ban Quản Trị Hệ Thống (Admin)
-        </h2>
-        <p className="text-sm text-slate-500 mt-1">
-          Quản lý và điều chỉnh định mức danh mục hệ thống theo SRS V3.0.
-        </p>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">👑 Phân hệ Ban Quản Trị Hệ Thống (Admin)</h2>
+        <p className="text-sm text-slate-500 mt-1">Quản lý và điều chỉnh định mức danh mục hệ thống theo SRS V3.0.</p>
       </div>
 
       {/* Tabs Menu */}
@@ -751,16 +652,10 @@ export default function AdminModule({
                 <div className="flex items-center gap-2">
                   <Shield className="w-4 h-4 text-blue-600" />
                   <h4 className="text-sm font-bold text-slate-800">
-                    {editingAccountId
-                      ? `Chỉnh sửa User: ${accForm.tenDangNhap}`
-                      : "Tạo Tài khoản & Phân quyền"}
+                    {editingAccountId ? `Chỉnh sửa User: ${accForm.tenDangNhap}` : "Tạo Tài khoản & Phân quyền"}
                   </h4>
                 </div>
-                <button
-                  type="button"
-                  onClick={resetAccountForm}
-                  className="text-slate-400 hover:text-slate-600"
-                >
+                <button type="button" onClick={resetAccountForm} className="text-slate-400 hover:text-slate-600">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -788,18 +683,11 @@ export default function AdminModule({
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.tenDangNhap ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"} disabled:bg-slate-100 disabled:border-slate-200`}
                     />
-                    {accErrors.tenDangNhap && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {accErrors.tenDangNhap}
-                      </p>
-                    )}
+                    {accErrors.tenDangNhap && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.tenDangNhap}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">
-                      Mật khẩu{" "}
-                      {!editingAccountId && (
-                        <span className="text-red-500">*</span>
-                      )}
+                      Mật khẩu {!editingAccountId && <span className="text-red-500">*</span>}
                     </label>
                     <input
                       type="password"
@@ -815,18 +703,10 @@ export default function AdminModule({
                           matKhau: "",
                         });
                       }}
-                      placeholder={
-                        editingAccountId
-                          ? "Bỏ trống nếu không đổi mật khẩu"
-                          : "Nhập mật khẩu..."
-                      }
+                      placeholder={editingAccountId ? "Bỏ trống nếu không đổi mật khẩu" : "Nhập mật khẩu..."}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.matKhau ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
-                    {accErrors.matKhau && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {accErrors.matKhau}
-                      </p>
-                    )}
+                    {accErrors.matKhau && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.matKhau}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">
@@ -851,9 +731,7 @@ export default function AdminModule({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">
-                      Email
-                    </label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Email</label>
                     <input
                       type="email"
                       maxLength={255}
@@ -889,11 +767,7 @@ export default function AdminModule({
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.hoTen ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
-                    {accErrors.hoTen && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {accErrors.hoTen}
-                      </p>
-                    )}
+                    {accErrors.hoTen && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.hoTen}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">
@@ -906,16 +780,10 @@ export default function AdminModule({
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.cmnd ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                       placeholder="Chỉ nhập số..."
                     />
-                    {accErrors.cmnd && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {accErrors.cmnd}
-                      </p>
-                    )}
+                    {accErrors.cmnd && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.cmnd}</p>}
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">
-                      Hộ khẩu thường trú
-                    </label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Hộ khẩu thường trú</label>
                     <input
                       type="text"
                       maxLength={255}
@@ -934,14 +802,12 @@ export default function AdminModule({
                 {/* FORM RẼ NHÁNH DỰA VÀO QUYỀN */}
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-200">
                   <div className="md:col-span-2 text-xs font-extrabold text-blue-600 uppercase">
-                    Thông tin bổ sung (
-                    {accForm.maQuyen === 6 ? "Khách hàng" : "Nhân sự"})
+                    Thông tin bổ sung ({accForm.maQuyen === 6 ? "Khách hàng" : "Nhân sự"})
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">
-                      Số điện thoại liên hệ{" "}
-                      <span className="text-red-500">*</span>
+                      Số điện thoại liên hệ <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -950,11 +816,7 @@ export default function AdminModule({
                       placeholder="090 123 4567"
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.sdt ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
-                    {accErrors.sdt && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {accErrors.sdt}
-                      </p>
-                    )}
+                    {accErrors.sdt && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.sdt}</p>}
                   </div>
 
                   {accForm.maQuyen === 6 ? (
@@ -978,11 +840,7 @@ export default function AdminModule({
                           }}
                           className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.ngaySinh ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                         />
-                        {accErrors.ngaySinh && (
-                          <p className="text-[10px] text-red-500 font-bold mt-1">
-                            {accErrors.ngaySinh}
-                          </p>
-                        )}
+                        {accErrors.ngaySinh && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.ngaySinh}</p>}
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-slate-600 mb-1">
@@ -1003,9 +861,7 @@ export default function AdminModule({
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">
-                          Người giám hộ (Nếu là trẻ em)
-                        </label>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Người giám hộ (Nếu là trẻ em)</label>
                         <input
                           type="text"
                           maxLength={255}
@@ -1020,9 +876,7 @@ export default function AdminModule({
                         />
                       </div>
                       <div className="md:col-span-2">
-                        <label className="block text-xs font-bold text-slate-600 mb-1">
-                          Địa chỉ hiện tại
-                        </label>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">Địa chỉ hiện tại</label>
                         <input
                           type="text"
                           maxLength={255}
@@ -1049,19 +903,13 @@ export default function AdminModule({
                         placeholder="YYYY"
                         className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.namSinh ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                       />
-                      {accErrors.namSinh && (
-                        <p className="text-[10px] text-red-500 font-bold mt-1">
-                          {accErrors.namSinh}
-                        </p>
-                      )}
+                      {accErrors.namSinh && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.namSinh}</p>}
                     </div>
                   )}
                 </div>
 
                 <div className="md:col-span-2 pt-2">
-                  <label className="block text-xs font-bold text-slate-600 mb-1">
-                    Mô tả (Notes)
-                  </label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Mô tả (Notes)</label>
                   <textarea
                     value={accForm.moTa}
                     onChange={(e) =>
@@ -1109,15 +957,10 @@ export default function AdminModule({
                   {currentAccounts.length > 0 ? (
                     currentAccounts.map((a) => (
                       <tr key={a.maTaiKhoan} className="hover:bg-slate-50/50">
-                        <td
-                          className="px-3 py-3 font-semibold text-blue-600 truncate"
-                          title={a.tenDangNhap}
-                        >
+                        <td className="px-3 py-3 font-semibold text-blue-600 truncate" title={a.tenDangNhap}>
                           {a.tenDangNhap}
                         </td>
-                        <td className="px-3 py-3 font-bold text-slate-800 break-words">
-                          {a.hoTen}
-                        </td>
+                        <td className="px-3 py-3 font-bold text-slate-800 break-words">{a.hoTen}</td>
                         <td className="px-3 py-3">
                           <span
                             className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold border leading-tight ${getRoleBadgeStyle(a.phanQuyen)}`}
@@ -1125,9 +968,7 @@ export default function AdminModule({
                             {a.phanQuyen || "Thành viên"}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-slate-500 font-mono truncate">
-                          {a.sdt ? formatDisplayPhone(a.sdt) : "Chưa cập nhật"}
-                        </td>
+                        <td className="px-3 py-3 text-slate-500 font-mono truncate">{a.sdt ? formatDisplayPhone(a.sdt) : "Chưa cập nhật"}</td>
                         <td className="px-3 py-3 text-right space-x-1 whitespace-nowrap">
                           <button
                             onClick={() => handleEditAccount(a)}
@@ -1146,10 +987,7 @@ export default function AdminModule({
                     ))
                   ) : (
                     <tr>
-                      <td
-                        colSpan={5}
-                        className="px-3 py-8 text-center text-slate-400 font-medium"
-                      >
+                      <td colSpan={5} className="px-3 py-8 text-center text-slate-400 font-medium">
                         Không tìm thấy dữ liệu.
                       </td>
                     </tr>
@@ -1164,17 +1002,9 @@ export default function AdminModule({
                 <span className="text-[11px] font-semibold text-slate-500">
                   Đang hiển thị{" "}
                   <span className="text-slate-800">
-                    {(currentPage - 1) * ITEMS_PER_PAGE + 1} -{" "}
-                    {Math.min(
-                      currentPage * ITEMS_PER_PAGE,
-                      filteredAccounts.length,
-                    )}
+                    {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredAccounts.length)}
                   </span>{" "}
-                  trong tổng số{" "}
-                  <span className="text-slate-800">
-                    {filteredAccounts.length}
-                  </span>{" "}
-                  người dùng
+                  trong tổng số <span className="text-slate-800">{filteredAccounts.length}</span> người dùng
                 </span>
                 <div className="flex items-center gap-1.5">
                   <button
@@ -1188,9 +1018,7 @@ export default function AdminModule({
                     {currentPage} / {totalPages}
                   </span>
                   <button
-                    onClick={() =>
-                      setCurrentPage((p) => Math.min(totalPages, p + 1))
-                    }
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                     disabled={currentPage === totalPages}
                     className="p-1.5 border border-slate-200 rounded text-slate-600 hover:bg-white disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
                   >
@@ -1208,8 +1036,7 @@ export default function AdminModule({
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-blue-600" /> Điều chỉnh thiết lập
-              lịch tiêm trung tâm
+              <Clock className="w-5 h-5 text-blue-600" /> Điều chỉnh thiết lập lịch tiêm trung tâm
             </h3>
             <button
               onClick={() => {
@@ -1237,16 +1064,10 @@ export default function AdminModule({
                     {editingScheduleId ? "Chỉnh sửa" : "Tạo mới"}
                   </span>
                   <h4 className="text-sm font-bold text-slate-800">
-                    {editingScheduleId
-                      ? `Chỉnh sửa thông tin Lịch Tiêm: ${editingScheduleId}`
-                      : "Thêm mới thông tin lịch tiêm"}
+                    {editingScheduleId ? `Chỉnh sửa thông tin Lịch Tiêm: ${editingScheduleId}` : "Thêm mới thông tin lịch tiêm"}
                   </h4>
                 </div>
-                <button
-                  type="button"
-                  onClick={resetScheduleForm}
-                  className="text-slate-400 hover:text-slate-600"
-                >
+                <button type="button" onClick={resetScheduleForm} className="text-slate-400 hover:text-slate-600">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1268,61 +1089,33 @@ export default function AdminModule({
                     }}
                     className={`w-full px-2.5 py-1.5 border rounded-md text-xs outline-none transition-colors ${scheduleErrors.dateInput ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                   />
-                  {scheduleErrors.dateInput && (
-                    <p className="text-[10px] text-red-500 font-bold mt-1">
-                      {scheduleErrors.dateInput}
-                    </p>
-                  )}
+                  {scheduleErrors.dateInput && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.dateInput}</p>}
 
                   <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center">
                     <div>
-                      <span className="block text-[10px] text-slate-400 font-semibold">
-                        Ngày
-                      </span>
+                      <span className="block text-[10px] text-slate-400 font-semibold">Ngày</span>
                       <input
                         type="text"
                         readOnly
-                        value={
-                          scheduleForm.dateInput
-                            ? String(
-                                new Date(scheduleForm.dateInput).getDate(),
-                              ).padStart(2, "0")
-                            : ""
-                        }
+                        value={scheduleForm.dateInput ? String(new Date(scheduleForm.dateInput).getDate()).padStart(2, "0") : ""}
                         className="w-full text-center bg-slate-50 border-0 text-xs font-bold py-1 rounded"
                       />
                     </div>
                     <div>
-                      <span className="block text-[10px] text-slate-400 font-semibold">
-                        Tháng
-                      </span>
+                      <span className="block text-[10px] text-slate-400 font-semibold">Tháng</span>
                       <input
                         type="text"
                         readOnly
-                        value={
-                          scheduleForm.dateInput
-                            ? String(
-                                new Date(scheduleForm.dateInput).getMonth() + 1,
-                              ).padStart(2, "0")
-                            : ""
-                        }
+                        value={scheduleForm.dateInput ? String(new Date(scheduleForm.dateInput).getMonth() + 1).padStart(2, "0") : ""}
                         className="w-full text-center bg-slate-50 border-0 text-xs font-bold py-1 rounded"
                       />
                     </div>
                     <div>
-                      <span className="block text-[10px] text-slate-400 font-semibold">
-                        Năm
-                      </span>
+                      <span className="block text-[10px] text-slate-400 font-semibold">Năm</span>
                       <input
                         type="text"
                         readOnly
-                        value={
-                          scheduleForm.dateInput
-                            ? String(
-                                new Date(scheduleForm.dateInput).getFullYear(),
-                              )
-                            : ""
-                        }
+                        value={scheduleForm.dateInput ? String(new Date(scheduleForm.dateInput).getFullYear()) : ""}
                         className="w-full text-center bg-slate-50 border-0 text-xs font-bold py-1 rounded"
                       />
                     </div>
@@ -1332,8 +1125,7 @@ export default function AdminModule({
                 <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Thời gian tiêm chủng{" "}
-                      <span className="text-red-500">*</span>
+                      Thời gian tiêm chủng <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -1352,18 +1144,13 @@ export default function AdminModule({
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.thoiGian ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
-                    {scheduleErrors.thoiGian && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {scheduleErrors.thoiGian}
-                      </p>
-                    )}
+                    {scheduleErrors.thoiGian && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.thoiGian}</p>}
                   </div>
 
                   {/* Ô Loại vắc xin đã chuyển thành Select Combobox lưu theo ID */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Loại vắc xin đợt này{" "}
-                      <span className="text-red-500">*</span>
+                      Loại vắc xin đợt này <span className="text-red-500">*</span>
                     </label>
                     <select
                       value={scheduleForm.maLoaiVacXin || 0}
@@ -1389,17 +1176,12 @@ export default function AdminModule({
                           </option>
                         ))}
                     </select>
-                    {scheduleErrors.maLoaiVacXin && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {scheduleErrors.maLoaiVacXin}
-                      </p>
-                    )}
+                    {scheduleErrors.maLoaiVacXin && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.maLoaiVacXin}</p>}
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Số lượng vắc xin (liều){" "}
-                      <span className="text-red-500">*</span>
+                      Số lượng vắc xin (liều) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
@@ -1417,16 +1199,11 @@ export default function AdminModule({
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.soLuong ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
-                    {scheduleErrors.soLuong && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {scheduleErrors.soLuong}
-                      </p>
-                    )}
+                    {scheduleErrors.soLuong && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.soLuong}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Độ tuổi khuyên dùng{" "}
-                      <span className="text-red-500">*</span>
+                      Độ tuổi khuyên dùng <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -1444,11 +1221,7 @@ export default function AdminModule({
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.doTuoi ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
-                    {scheduleErrors.doTuoi && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {scheduleErrors.doTuoi}
-                      </p>
-                    )}
+                    {scheduleErrors.doTuoi && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.doTuoi}</p>}
                   </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -1470,26 +1243,16 @@ export default function AdminModule({
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.diaDiem ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
-                    {scheduleErrors.diaDiem && (
-                      <p className="text-[10px] text-red-500 font-bold mt-1">
-                        {scheduleErrors.diaDiem}
-                      </p>
-                    )}
+                    {scheduleErrors.diaDiem && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.diaDiem}</p>}
                   </div>
                 </div>
 
                 {/* Khu vực chọn Bác Sĩ tự động quét từ danh sách Accounts */}
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Hội đồng Y tế / Bác sĩ phụ trách
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Hội đồng Y tế / Bác sĩ phụ trách</label>
                   <div className="bg-white border border-slate-200 rounded-lg p-3 max-h-32 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {accounts
-                      .filter(
-                        (a) =>
-                          a.phanQuyen?.toLowerCase().includes("y tế") ||
-                          a.maQuyen === 5,
-                      )
+                      .filter((a) => a.phanQuyen?.toLowerCase().includes("y tế") || a.maQuyen === 5)
                       .map((bs) => (
                         <label
                           key={bs.maTaiKhoan}
@@ -1497,36 +1260,23 @@ export default function AdminModule({
                         >
                           <input
                             type="checkbox"
-                            checked={scheduleForm.selectedDoctors?.includes(
-                              bs.hoTen,
-                            )}
+                            checked={scheduleForm.selectedDoctors?.includes(bs.hoTen)}
                             onChange={() => toggleDoctor(bs.hoTen)}
                             className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
                           />
                           <span className="text-xs text-slate-700 font-medium">
-                            {bs.hoTen}{" "}
-                            <span className="text-[9px] text-slate-400 font-mono">
-                              ({bs.tenDangNhap})
-                            </span>
+                            {bs.hoTen} <span className="text-[9px] text-slate-400 font-mono">({bs.tenDangNhap})</span>
                           </span>
                         </label>
                       ))}
-                    {accounts.filter(
-                      (a) =>
-                        a.phanQuyen?.toLowerCase().includes("y tế") ||
-                        a.maQuyen === 5,
-                    ).length === 0 && (
-                      <span className="text-xs text-slate-400 italic">
-                        Chưa có Nhân viên y tế nào trên hệ thống. Hãy tạo User!
-                      </span>
+                    {accounts.filter((a) => a.phanQuyen?.toLowerCase().includes("y tế") || a.maQuyen === 5).length === 0 && (
+                      <span className="text-xs text-slate-400 italic">Chưa có Nhân viên y tế nào trên hệ thống. Hãy tạo User!</span>
                     )}
                   </div>
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Ghi chú
-                  </label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Ghi chú</label>
                   <textarea
                     maxLength={1000}
                     value={scheduleForm.ghiChu}
@@ -1565,14 +1315,10 @@ export default function AdminModule({
               {/* Header của Danh sách kèm bộ lọc */}
               <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="font-bold text-xs text-slate-500 uppercase tracking-wider">
-                    Danh sách lịch tiêm
-                  </span>
+                  <span className="font-bold text-xs text-slate-500 uppercase tracking-wider">Danh sách lịch tiêm</span>
 
                   {/* BỘ ĐẾM RECORD */}
-                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    {filteredSchedules.length} record
-                  </span>
+                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredSchedules.length} record</span>
                 </div>
 
                 {/* THANH TÌM KIẾM THEO KHOẢNG THỜI GIAN */}
@@ -1584,9 +1330,7 @@ export default function AdminModule({
                       <input
                         type="date"
                         value={scheduleSearchStartDate}
-                        onChange={(e) =>
-                          setScheduleSearchStartDate(e.target.value)
-                        }
+                        onChange={(e) => setScheduleSearchStartDate(e.target.value)}
                         className="w-full pl-8 pr-1 py-1.5 border border-slate-200 rounded-md text-[11px] focus:outline-none focus:border-blue-500"
                         title="Từ ngày"
                       />
@@ -1599,9 +1343,7 @@ export default function AdminModule({
                       <input
                         type="date"
                         value={scheduleSearchEndDate}
-                        onChange={(e) =>
-                          setScheduleSearchEndDate(e.target.value)
-                        }
+                        onChange={(e) => setScheduleSearchEndDate(e.target.value)}
                         className="w-full px-2 py-1.5 border border-slate-200 rounded-md text-[11px] focus:outline-none focus:border-blue-500"
                         title="Đến ngày"
                       />
@@ -1639,9 +1381,7 @@ export default function AdminModule({
                           {s.ngay}/{s.thang}/{s.nam}
                         </span>
                       </div>
-                      <div className="font-semibold text-slate-800 text-sm mb-1">
-                        {s.loaiVacXin}
-                      </div>
+                      <div className="font-semibold text-slate-800 text-sm mb-1">{s.loaiVacXin}</div>
                       <div className="flex items-center text-slate-500 text-xs gap-1">
                         <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                         <span className="truncate">{s.diaDiem}</span>
@@ -1649,9 +1389,7 @@ export default function AdminModule({
                     </div>
                   ))
                 ) : (
-                  <div className="p-8 text-center text-xs text-slate-400">
-                    Không tìm thấy lịch tiêm nào trong thời gian này.
-                  </div>
+                  <div className="p-8 text-center text-xs text-slate-400">Không tìm thấy lịch tiêm nào trong thời gian này.</div>
                 )}
               </div>
             </div>
@@ -1669,9 +1407,7 @@ export default function AdminModule({
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() =>
-                        handleDeleteSchedule(selectedSchedule.maLichTiem)
-                      }
+                      onClick={() => handleDeleteSchedule(selectedSchedule.maLichTiem)}
                       className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-xs font-bold transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1682,74 +1418,48 @@ export default function AdminModule({
                     <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
                       MÃ ĐỢT: {selectedSchedule.maLichTiem}
                     </span>
-                    <h3 className="text-lg font-bold text-slate-800 mt-1">
-                      {selectedSchedule.loaiVacXin}
-                    </h3>
+                    <h3 className="text-lg font-bold text-slate-800 mt-1">{selectedSchedule.loaiVacXin}</h3>
                     <p className="text-sm font-bold text-blue-600 mt-1">
-                      {selectedSchedule.thoiGian} ({selectedSchedule.ngay}/
-                      {selectedSchedule.thang}/{selectedSchedule.nam})
+                      {selectedSchedule.thoiGian} ({selectedSchedule.ngay}/{selectedSchedule.thang}/{selectedSchedule.nam})
                     </p>
                   </div>
 
                   {/* Chi tiết nội dung */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-100">
-                      <span className="block font-semibold text-slate-400 mb-1">
-                        🎯 Độ tuổi khuyên dùng
-                      </span>
-                      <span className="font-medium text-slate-800 text-sm">
-                        {selectedSchedule.doTuoi}
-                      </span>
+                      <span className="block font-semibold text-slate-400 mb-1">🎯 Độ tuổi khuyên dùng</span>
+                      <span className="font-medium text-slate-800 text-sm">{selectedSchedule.doTuoi}</span>
                     </div>
                     <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-100">
-                      <span className="block font-semibold text-slate-400 mb-1">
-                        📦 Tổng cơ số vắc-xin
-                      </span>
-                      <span className="font-bold text-slate-800 text-sm">
-                        {selectedSchedule.soLuong} liều thuốc
-                      </span>
+                      <span className="block font-semibold text-slate-400 mb-1">📦 Tổng cơ số vắc-xin</span>
+                      <span className="font-bold text-slate-800 text-sm">{selectedSchedule.soLuong} liều thuốc</span>
                     </div>
                     <div className="sm:col-span-2 bg-slate-50/60 p-3 rounded-lg border border-slate-100 flex items-start gap-2">
                       <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
                       <div>
-                        <span className="block font-semibold text-slate-400">
-                          📍 Địa điểm tổ chức
-                        </span>
-                        <span className="font-medium text-slate-800">
-                          {selectedSchedule.diaDiem}
-                        </span>
+                        <span className="block font-semibold text-slate-400">📍 Địa điểm tổ chức</span>
+                        <span className="font-medium text-slate-800">{selectedSchedule.diaDiem}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Bác sĩ & Ghi Chú */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-500 uppercase">
-                      👨‍⚕️ Hội đồng Y tế tham gia
-                    </label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase">👨‍⚕️ Hội đồng Y tế tham gia</label>
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 flex flex-wrap gap-2">
-                      {selectedSchedule.danhSachBacSi &&
-                      selectedSchedule.danhSachBacSi.length > 0 ? (
+                      {selectedSchedule.danhSachBacSi && selectedSchedule.danhSachBacSi.length > 0 ? (
                         selectedSchedule.danhSachBacSi.map((doc, idx) => (
-                          <span
-                            key={idx}
-                            className="bg-white border border-slate-200 shadow-sm px-2.5 py-1 rounded-md flex items-center gap-1.5"
-                          >
-                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>{" "}
-                            {doc}
+                          <span key={idx} className="bg-white border border-slate-200 shadow-sm px-2.5 py-1 rounded-md flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span> {doc}
                           </span>
                         ))
                       ) : (
-                        <span className="text-slate-400 italic">
-                          Chưa chỉ định.
-                        </span>
+                        <span className="text-slate-400 italic">Chưa chỉ định.</span>
                       )}
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-bold text-slate-500 uppercase">
-                      📝 Nhật ký (Ghi chú)
-                    </label>
+                    <label className="block text-xs font-bold text-slate-500 uppercase">📝 Nhật ký (Ghi chú)</label>
                     <div className="bg-amber-50/50 border border-amber-200/60 p-3 rounded-lg text-xs text-slate-700 leading-relaxed whitespace-pre-line">
                       {selectedSchedule.ghiChu || "Không có ghi chú."}
                     </div>

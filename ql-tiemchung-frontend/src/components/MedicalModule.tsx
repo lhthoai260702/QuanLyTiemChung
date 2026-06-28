@@ -147,6 +147,15 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
     const newHistory = [...updateForm.history];
     newHistory[index] = { ...newHistory[index], [field]: value };
     setUpdateForm({ ...updateForm, history: newHistory });
+
+    // Tự động xóa lỗi nếu người dùng đã nhập ngày
+    if (field === "date" && value) {
+      setUpdateErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[`history_date_${index}`];
+        return newErrors;
+      });
+    }
   };
 
   // --- THÊM HÀM MỚI: XÓA LỊCH SỬ TIÊM ---
@@ -230,6 +239,14 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
     const phoneNum = updateForm.phone.replace(/\s/g, "");
     if (!phoneNum) errors.phone = "Vui lòng nhập số điện thoại";
     else if (phoneNum.length < 10) errors.phone = "Số điện thoại phải đủ 10 số";
+
+    if (updateForm.history && updateForm.history.length > 0) {
+      updateForm.history.forEach((record: any, idx: number) => {
+        if (!record.date) {
+          errors[`history_date_${idx}`] = "Vui lòng chọn thời gian tiêm/hẹn";
+        }
+      });
+    }
 
     if (Object.keys(errors).length > 0) {
       setUpdateErrors(errors);
@@ -431,7 +448,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
                 <div className="sm:col-span-2 bg-slate-50/60 p-3 rounded-lg border border-slate-100 flex items-start gap-2">
                   <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
                   <div>
-                    <span className="block font-semibold text-slate-400">📍 Địa chỉ liên lạc</span>
+                    <span className="block font-semibold text-slate-400">Địa chỉ liên lạc</span>
                     <span className="font-medium text-slate-800 text-sm">{selectedPatient.address}</span>
                   </div>
                 </div>
@@ -653,13 +670,22 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold text-slate-600 mb-1">Thời gian (Ngày tiêm / Hẹn)</label>
+                        <label className="block text-xs font-bold text-slate-600 mb-1">
+                          Thời gian (Ngày tiêm / Hẹn) <span className="text-red-500">*</span>
+                        </label>
                         <input
                           type="date"
                           value={record.date || ""}
                           onChange={(e) => handleHistoryChange(idx, "date", e.target.value)}
-                          className="w-full bg-slate-50 px-3 py-1.5 border border-slate-200 rounded text-xs outline-none focus:border-blue-500 transition-colors"
+                          className={`w-full px-3 py-1.5 border rounded text-xs outline-none transition-colors ${
+                            updateErrors[`history_date_${idx}`]
+                              ? "bg-red-50 border-red-500 focus:border-red-500"
+                              : "bg-slate-50 border-slate-200 focus:border-blue-500"
+                          }`}
                         />
+                        {updateErrors[`history_date_${idx}`] && (
+                          <p className="text-[10px] text-red-500 font-bold mt-1">{updateErrors[`history_date_${idx}`]}</p>
+                        )}
                       </div>
 
                       <div>

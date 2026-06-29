@@ -14,6 +14,8 @@ public class LichTiemChungDTO {
     private String thoiGian;
     private Long maLoaiVacXin;
     private String loaiVacXin;
+    private String tenVacXin;
+    private Long maVacXin;
     private Integer soLuong;
     private String doTuoi;
     private String diaDiem;

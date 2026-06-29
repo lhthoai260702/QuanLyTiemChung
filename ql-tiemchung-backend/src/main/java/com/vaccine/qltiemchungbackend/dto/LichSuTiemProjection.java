@@ -6,4 +6,7 @@ public interface LichSuTiemProjection {
     String getDate();
     String getSideEffect();
     String getNextDose();
+    String getPlace();
+    String getVaccineType();
+    String getDosage();
 }

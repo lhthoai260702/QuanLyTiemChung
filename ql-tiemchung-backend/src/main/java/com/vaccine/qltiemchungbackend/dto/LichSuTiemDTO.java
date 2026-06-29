@@ -9,4 +9,7 @@ public class LichSuTiemDTO {
     private String date;
     private String sideEffect;
     private String nextDose;
+    private String place;
+    private String vaccineType;
+    private String dosage;
 }

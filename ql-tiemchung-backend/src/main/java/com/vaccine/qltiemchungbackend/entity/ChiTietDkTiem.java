@@ -17,12 +17,15 @@ public class ChiTietDkTiem {
     @JoinColumn(name = "MaBenhNhan")
     private BenhNhan benhNhan;
 
-    // Trong CSDL mẫu, Chi tiết đk tiêm liên kết với LOVACXIN
     @Column(name = "MaLo")
     private Long maLo;
 
     @Column(name = "ThoiGianCanTiem")
     private LocalDate thoiGianCanTiem;
+
+    // BỔ SUNG TRƯỜNG NÀY ĐỂ MAPPING VỚI DATABASE
+    @Column(name = "MaLichTiem")
+    private Long maLichTiem;
 
     @Column(name = "flag_delete")
     private Boolean flagDelete = false;

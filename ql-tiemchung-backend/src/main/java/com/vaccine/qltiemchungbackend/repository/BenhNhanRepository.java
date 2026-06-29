@@ -23,12 +23,17 @@ public interface BenhNhanRepository extends JpaRepository<BenhNhan, Long> {
             "  TO_CHAR(COALESCE(h.ThoiGianTiem, dk.ThoiGianCanTiem), 'YYYY-MM-DD') AS date, " +
             "  COALESCE(h.PhanUngSauTiem, '') AS sideEffect, " +
             "  CASE " +
-            "    WHEN h.MaHoSoBenhAn IS NOT NULL THEN 'Đã hoàn thành mũi tiêm' " +
-            "    ELSE 'Lịch hẹn đợt tới (Chưa tiêm)' " +
-            "  END AS nextDose " +
+            "    WHEN h.MaHoSoBenhAn IS NOT NULL THEN 'Hoàn thành' " +
+            "    ELSE 'Chưa tiêm' " +
+            "  END AS nextDose, " +
+            "  COALESCE(ltc.DiaDiem, 'Chưa xác định') AS place, " + // Lấy từ Lịch trung tâm, nếu đk tự do thì gán mặc định
+            "  lv.TenLoaiVacXin AS vaccineType, " +              // Lấy từ Loại Vắc Xin
+            "  v.HamLuong AS dosage " +                          // Lấy Hàm lượng từ bảng Vắc Xin
             "FROM CHITIET_DK_TIEM dk " +
             "JOIN LOVACXIN lo ON dk.MaLo = lo.MaLo " +
             "JOIN VACXIN v ON lo.MaVacXin = v.MaVacXin " +
+            "LEFT JOIN LOAIVACXIN lv ON v.MaLoaiVacXin = lv.MaLoaiVacXin " + // JOIN lấy Loại VX
+            "LEFT JOIN LICHTIEMCHUNG ltc ON dk.MaLichTiem = ltc.MaLichTiem " + // JOIN lấy Địa điểm
             "LEFT JOIN HOSOBENHAN h ON dk.MaChiTietDKTiem = h.MaChiTietDKTiem " +
             "WHERE dk.MaBenhNhan = :maBenhNhan " +
             "  AND (dk.flag_delete = false OR dk.flag_delete IS NULL)",

@@ -27,4 +27,7 @@ public interface LoVacXinRepository extends JpaRepository<LoVacXin, Long> {
     // SỬA TẠI ĐÂY: Dùng JPQL chuẩn để tránh lỗi Entity Mapping thay vì dùng nativeQuery
     @Query("SELECT l FROM LoVacXin l WHERE l.vacXin.maVacXin = :maVacXin AND l.soLuong > 0 AND (l.flagDelete = false OR l.flagDelete IS NULL) ORDER BY l.ngayNhan ASC LIMIT 1")
     Optional<LoVacXin> findAvailableLotByVaccineId(@Param("maVacXin") Long maVacXin);
+
+    @Query("SELECT l FROM LoVacXin l WHERE l.vacXin.loaiVacXin.maLoaiVacXin = :maLoaiVacXin AND l.soLuong > 0 AND (l.flagDelete = false OR l.flagDelete IS NULL) ORDER BY l.ngayNhan ASC LIMIT 1")
+    Optional<LoVacXin> findAvailableLotByLoaiVacXinId(@Param("maLoaiVacXin") Long maLoaiVacXin);
 }

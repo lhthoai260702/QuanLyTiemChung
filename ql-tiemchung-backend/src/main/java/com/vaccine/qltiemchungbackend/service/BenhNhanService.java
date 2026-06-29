@@ -109,4 +109,35 @@ public class BenhNhanService {
             hoSoBenhAnRepository.save(hs);
         });
     }
+
+    public BenhNhanDTO getPatientById(Long id) {
+        BenhNhan bn = repository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy bệnh nhân"));
+        BenhNhanDTO dto = new BenhNhanDTO();
+        dto.setId(String.valueOf(bn.getMaBenhNhan()));
+        dto.setFullName(bn.getTenBenhNhan());
+        dto.setDob(bn.getNgaySinh() != null ? bn.getNgaySinh().toString() : "");
+        dto.setGender(bn.getGioiTinh());
+        dto.setAddress(bn.getDiaChi());
+        dto.setGuardianName(bn.getNguoiGiamHo());
+        dto.setPhone(bn.getSdt());
+        dto.setAge(bn.getNgaySinh() != null ? Period.between(bn.getNgaySinh(), LocalDate.now()).getYears() : 0);
+
+        // Lấy lịch sử tiêm
+        List<LichSuTiemProjection> projections = repository.findLichSuTiemByMaBenhNhan(bn.getMaBenhNhan());
+        List<LichSuTiemDTO> historyList = projections.stream().map(p -> {
+            LichSuTiemDTO h = new LichSuTiemDTO();
+            h.setRecordId(p.getRecordId());
+            h.setVaccineName(p.getVaccineName());
+            h.setDate(p.getDate());
+            h.setSideEffect(p.getSideEffect());
+            h.setNextDose(p.getNextDose());
+            h.setPlace(p.getPlace());
+            h.setVaccineType(p.getVaccineType());
+            h.setDosage(p.getDosage());
+            return h;
+        }).collect(Collectors.toList());
+
+        dto.setHistory(historyList);
+        return dto;
+    }
 }

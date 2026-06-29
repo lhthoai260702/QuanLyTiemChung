@@ -4,6 +4,7 @@ import com.vaccine.qltiemchungbackend.dto.LichTiemChungDTO;
 import com.vaccine.qltiemchungbackend.entity.LichTiemChung;
 import com.vaccine.qltiemchungbackend.repository.LichTiemChungRepository;
 import com.vaccine.qltiemchungbackend.repository.LoaiVacXinRepository;
+import com.vaccine.qltiemchungbackend.repository.VacXinRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +20,10 @@ public class LichTiemChungService {
     private LichTiemChungRepository lichTiemChungRepository;
 
     @Autowired
-    private LoaiVacXinRepository loaiVacXinRepository; // Bổ sung Repository này để lấy tên Vắc-xin
+    private LoaiVacXinRepository loaiVacXinRepository;
+
+    @Autowired
+    private VacXinRepository vacXinRepository;
 
     public List<LichTiemChungDTO> getAllSchedules() {
         return lichTiemChungRepository.findByFlagDeleteFalseOrFlagDeleteIsNull().stream().map(ltc -> {
@@ -42,8 +46,21 @@ public class LichTiemChungService {
             if (ltc.getMaLoaiVacXin() != null) {
                 loaiVacXinRepository.findById(ltc.getMaLoaiVacXin())
                         .ifPresent(lvx -> dto.setLoaiVacXin(lvx.getTenLoaiVacXin()));
+
+                // LẤY THÊM TÊN & MÃ VẮC-XIN CỤ THỂ THUỘC LOẠI NÀY
+                List<com.vaccine.qltiemchungbackend.entity.VacXin> dsVacXin = vacXinRepository.findByLoaiVacXinId(ltc.getMaLoaiVacXin());
+                if (!dsVacXin.isEmpty()) {
+                    String dsTen = dsVacXin.stream()
+                            .map(com.vaccine.qltiemchungbackend.entity.VacXin::getTenVacXin)
+                            .collect(Collectors.joining(", "));
+                    dto.setTenVacXin(dsTen);
+                    dto.setMaVacXin(dsVacXin.get(0).getMaVacXin()); // Gắn tạm ID đầu tiên để hỗ trợ tính năng Đăng ký
+                } else {
+                    dto.setTenVacXin("Chưa có vắc-xin cụ thể");
+                }
             } else {
                 dto.setLoaiVacXin("Chưa xác định");
+                dto.setTenVacXin("Chưa xác định");
             }
 
             dto.setSoLuong(ltc.getSoLuongNguoiTiem());

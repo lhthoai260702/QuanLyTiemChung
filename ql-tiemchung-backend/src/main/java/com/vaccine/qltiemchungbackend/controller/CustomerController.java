@@ -100,4 +100,37 @@ public class CustomerController {
             return ResponseEntity.badRequest().body("{\"error\": \"Phản hồi gửi thất bại\"}");
         }
     }
+
+    @GetMapping("/feedback/list")
+    public ResponseEntity<List<PhanHoiDTO>> getFeedbackList() {
+        // 1. Lấy dữ liệu dạng Projection từ DB
+        List<PhanHoiProjection> projections = phanHoiRepository.layDanhSachPhanHoiProjection();
+
+        // 2. Map sang DTO
+        List<PhanHoiDTO> dtoList = projections.stream().map(p -> {
+            PhanHoiDTO dto = new PhanHoiDTO();
+            dto.setId(p.getId());
+            dto.setCustomerName(p.getCustomerName());
+            dto.setComments(p.getComments());
+            dto.setEmail(p.getEmail());
+            dto.setStatus(p.getStatus());
+            dto.setResponseText(p.getResponseText());
+            dto.setTime(p.getThoiGianTiem());
+            return dto;
+        }).toList();
+
+        // 3. Trả về cho Frontend
+        return ResponseEntity.ok(dtoList);
+    }
+
+    // Cập nhật giải đáp thắc mắc
+    @PostMapping("/feedback/resolve/{id}")
+    public ResponseEntity<?> resolveFeedback(@PathVariable Long id, @RequestBody FeedbackRequestDTO request) {
+        try {
+            phanHoiRepository.capNhatPhanHoi(id, request.getNormalContent(), "Nhân viên hỗ trợ");
+            return ResponseEntity.ok().body("{\"message\": \"Giải đáp thành công\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"error\": \"Lỗi gởi email\"}");
+        }
+    }
 }

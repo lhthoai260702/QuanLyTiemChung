@@ -34,6 +34,9 @@ public class LichTiemChung {
     @Column(name = "MaLoaiVacXin")
     private Long maLoaiVacXin;
 
+    @Column(name = "MaVacXin")
+    private Long maVacXin;
+
     @Column(name = "flag_delete")
     private Boolean flagDelete;
 }

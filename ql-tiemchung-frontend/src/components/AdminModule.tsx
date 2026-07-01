@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from "react";
-import { Users, CalendarDays, Plus, Search, Save, X, Clock, MapPin, Shield, Edit, Trash2, ChevronLeft, ChevronRight, Filter } from "lucide-react";
+import {
+  Users,
+  CalendarDays,
+  Plus,
+  Search,
+  Save,
+  X,
+  Clock,
+  MapPin,
+  Shield,
+  Edit,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare,
+  Send,
+} from "lucide-react";
 
 // --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
 export interface TaiKhoan {
@@ -31,6 +47,17 @@ export interface NguoiDangKy {
   trangThaiTiem: "Chờ khám sàng lọc" | "Đủ điều kiện tiêm" | "Đã tiêm" | "Đã hủy";
 }
 
+export interface SupportTicket {
+  id: string;
+  customerName: string;
+  comments: string;
+  email: string;
+  status: "Chưa giải quyết" | "Đã giải quyết";
+  type?: string;
+  responseText?: string;
+  time?: string;
+}
+
 export interface LichTiemChungSRS {
   maLichTiem: string;
   ngay: string;
@@ -39,6 +66,8 @@ export interface LichTiemChungSRS {
   thoiGian: string;
   maLoaiVacXin: number;
   loaiVacXin: string;
+  maVacXin: number;
+  tenVacXin: string;
   soLuong: number;
   doTuoi: string;
   diaDiem: string;
@@ -53,11 +82,19 @@ interface AdminModuleProps {
 }
 
 export default function AdminModule({ triggerToast = alert }: AdminModuleProps) {
-  const [activeTab, setActiveTab] = useState<"schedules" | "accounts">("accounts");
+  // THÊM TAB MỚI: feedback
+  const [activeTab, setActiveTab] = useState<"schedules" | "accounts" | "feedback">("accounts");
   const [searchQuery, setSearchQuery] = useState("");
   const [accounts, setAccounts] = useState<TaiKhoan[]>([]);
 
-  // --- STATE TÌM KIẾM, LỌC & PHÂN TRANG ---
+  // --- STATE CHO TAB PHẢN HỒI CẤP CAO ---
+  const [ticketsList, setTicketsList] = useState<SupportTicket[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const [ticketResponse, setTicketResponse] = useState("");
+  const [ticketErrors, setTicketErrors] = useState<Record<string, string>>({});
+  const [isTicketsLoading, setIsTicketsLoading] = useState(false);
+
+  // --- STATE TÌM KIẾM, LỌC & PHÂN TRANG (Tài khoản) ---
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 20;
@@ -82,7 +119,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (activeTab === "accounts") fetchAccounts();
   }, [activeTab]);
 
-  // Xóa mock data, để state mặc định là mảng rỗng
   const [schedules, setSchedules] = useState<LichTiemChungSRS[]>([]);
 
   // HÀM CALL API LẤY DANH SÁCH LỊCH TIÊM
@@ -91,7 +127,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
       const response = await fetch("http://localhost:8080/api/admin/schedules");
       if (response.ok) {
         const data = await response.json();
-        setSchedules(data); // Đổ dữ liệu từ Backend vào state
+        setSchedules(data);
       } else {
         triggerToast("Lỗi khi tải danh sách lịch tiêm chủng!");
       }
@@ -101,10 +137,34 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     }
   };
 
-  // Tự động gọi API khi chuyển sang tab "Lịch tiêm chủng"
   useEffect(() => {
     if (activeTab === "schedules") {
       fetchSchedules();
+    }
+  }, [activeTab]);
+
+  // HÀM CALL API LẤY DANH SÁCH PHẢN HỒI CẤP CAO
+  const fetchHighLevelTickets = async () => {
+    setIsTicketsLoading(true);
+    try {
+      const res = await fetch("http://localhost:8080/api/customer/admin/feedback/high-level");
+      if (res.ok) {
+        const data = await res.json();
+        setTicketsList(data);
+      } else {
+        triggerToast("Lỗi lấy danh sách phản hồi cấp cao.");
+      }
+    } catch (err) {
+      console.error(err);
+      triggerToast("Không thể tải danh sách phản hồi cấp cao.");
+    } finally {
+      setIsTicketsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "feedback") {
+      fetchHighLevelTickets();
     }
   }, [activeTab]);
 
@@ -112,20 +172,17 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   const [scheduleSearchStartDate, setScheduleSearchStartDate] = useState<string>("");
   const [scheduleSearchEndDate, setScheduleSearchEndDate] = useState<string>("");
 
-  // --- THÊM MỚI: Logic lọc danh sách lịch tiêm theo thời gian ---
+  // Logic lọc danh sách lịch tiêm theo thời gian
   const filteredSchedules = schedules.filter((s) => {
-    if (!scheduleSearchStartDate && !scheduleSearchEndDate) return true; // Không lọc nếu không chọn ngày
+    if (!scheduleSearchStartDate && !scheduleSearchEndDate) return true;
 
-    // Tạo object Date từ chuỗi ngày của Backend để dễ so sánh
     const scheduleDate = new Date(`${s.nam}-${s.thang}-${s.ngay}`);
 
-    // Kiểm tra giới hạn "Từ ngày"
     if (scheduleSearchStartDate) {
       const startDate = new Date(scheduleSearchStartDate);
       if (scheduleDate < startDate) return false;
     }
 
-    // Kiểm tra giới hạn "Đến ngày"
     if (scheduleSearchEndDate) {
       const endDate = new Date(scheduleSearchEndDate);
       if (scheduleDate > endDate) return false;
@@ -134,7 +191,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     return true;
   });
 
-  // Tự động chọn record đầu tiên nếu danh sách thay đổi sau khi lọc
   useEffect(() => {
     if (filteredSchedules.length > 0) {
       const exists = filteredSchedules.find((s) => s.maLichTiem === selectedSchedule?.maLichTiem);
@@ -143,7 +199,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
       setSelectedSchedule(null);
     }
   }, [schedules, scheduleSearchStartDate, scheduleSearchEndDate]);
-  // -----------------------------------------------------------
 
   useEffect(() => {
     if (schedules.length > 0 && !selectedSchedule) setSelectedSchedule(schedules[0]);
@@ -153,7 +208,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   const [editingAccountId, setEditingAccountId] = useState<number | string | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
-  // --- FORM STATE ---
+  // --- FORM STATE TÀI KHOẢN ---
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [accForm, setAccForm] = useState({
     tenDangNhap: "",
@@ -174,7 +229,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const [accErrors, setAccErrors] = useState<Record<string, string>>({});
 
-  // Các hàm tiện ích Format & Chặn ký tự
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (val.length > 10) val = val.substring(0, 10);
@@ -213,7 +267,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     return "bg-gray-100 text-gray-600 border-gray-200";
   };
 
-  // --- LOGIC LỌC (FILTER) VÀ PHÂN TRANG (PAGINATION) ---
   const ROLE_TABS = [
     { id: "all", label: "Tất cả" },
     { id: "admin", label: "Admin" },
@@ -224,7 +277,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     { id: "khách", label: "Khách Hàng" },
   ];
 
-  // Hàm xác định xem string phanQuyen có chứa từ khóa lọc không
   const checkRoleMatch = (phanQuyenStr: string | undefined, filterId: string) => {
     if (!phanQuyenStr) return false;
     const str = phanQuyenStr.toLowerCase();
@@ -233,7 +285,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (filterId === "kho") return str.includes("kho");
     if (filterId === "tài chính") return str.includes("tài chính");
     if (filterId === "hỗ trợ") return str.includes("hỗ trợ");
-    // Tránh trùng chữ "Khách" của "Hỗ trợ khách hàng"
     if (filterId === "khách") return str.includes("khách") && !str.includes("hỗ trợ");
     return false;
   };
@@ -243,29 +294,27 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     return accounts.filter((a) => checkRoleMatch(a.phanQuyen, filterId)).length;
   };
 
-  // Reset trang về 1 khi người dùng đổi keyword search hoặc đổi tab lọc
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, roleFilter]);
 
-  // Thực thi Lọc
   const filteredAccounts = accounts.filter((a) => {
     const matchSearch = a.hoTen.toLowerCase().includes(searchQuery.toLowerCase()) || a.tenDangNhap.toLowerCase().includes(searchQuery.toLowerCase());
     const matchRole = roleFilter === "all" || checkRoleMatch(a.phanQuyen, roleFilter);
     return matchSearch && matchRole;
   });
 
-  // Thực thi Phân Trang
   const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE) || 1;
   const currentAccounts = filteredAccounts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  // --- END LOGIC ---
-
+  // --- FORM STATE LỊCH TIÊM ---
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     dateInput: "",
     thoiGian: "",
     maLoaiVacXin: 0,
+    loaiVacXinName: "",
+    maVacXin: 0,
     soLuong: 0,
     doTuoi: "",
     diaDiem: "",
@@ -273,8 +322,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     selectedDoctors: [] as string[],
   });
 
-  // BỔ SUNG: State và API Call để lấy Combobox Loại Vắc Xin
   const [vaccineTypes, setVaccineTypes] = useState<{ maLoaiVacXin: number; tenLoaiVacXin: string }[]>([]);
+  const [vaccinesList, setVaccinesList] = useState<any[]>([]);
 
   const fetchVaccineTypes = async () => {
     try {
@@ -285,11 +334,52 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     }
   };
 
+  const fetchVaccinesList = async () => {
+    try {
+      const res = await fetch("http://localhost:8080/api/customer/vaccines");
+      if (res.ok) setVaccinesList(await res.json());
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
-    if (activeTab === "schedules") fetchVaccineTypes();
+    if (activeTab === "schedules") {
+      fetchVaccineTypes();
+      fetchVaccinesList();
+    }
   }, [activeTab]);
 
-  // BỔ SUNG: Hàm xử lý Tick chọn Bác sĩ
+  const handleVaccineSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedMaVacXin = Number(e.target.value);
+    const selectedVac = vaccinesList.find((v) => v.maVacXin === selectedMaVacXin);
+
+    if (selectedVac) {
+      const typeObj = vaccineTypes.find((t) => t.tenLoaiVacXin === selectedVac.loaiVacXin);
+      const newMaLoaiVacXin = typeObj ? typeObj.maLoaiVacXin : 0;
+
+      setScheduleForm({
+        ...scheduleForm,
+        maVacXin: selectedMaVacXin,
+        maLoaiVacXin: newMaLoaiVacXin,
+        loaiVacXinName: selectedVac.loaiVacXin || "Chưa phân loại",
+        doTuoi: selectedVac.doTuoiTiemChung || scheduleForm.doTuoi,
+      });
+    } else {
+      setScheduleForm({
+        ...scheduleForm,
+        maVacXin: 0,
+        maLoaiVacXin: 0,
+        loaiVacXinName: "",
+      });
+    }
+
+    setScheduleErrors({
+      ...scheduleErrors,
+      maVacXin: "",
+    });
+  };
+
   const toggleDoctor = (doctorName: string) => {
     setScheduleForm((prev) => {
       const exists = prev.selectedDoctors.includes(doctorName);
@@ -309,24 +399,19 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const handleDateChange = (dateStr: string) => setScheduleForm({ ...scheduleForm, dateInput: dateStr });
 
-  // HÀM CALL API XÓA MỀM LỊCH TIÊM CHỦNG
   const handleDeleteSchedule = async (id: string) => {
     if (!window.confirm("Bạn có chắc chắn muốn hủy / xóa lịch tiêm chủng này không?")) {
       return;
     }
-
-    // Tách bỏ chữ "LTC" để lấy ID nguyên gốc
     const numericId = id.replace("LTC", "");
-
     try {
       const response = await fetch(`http://localhost:8080/api/admin/schedules/${numericId}`, {
         method: "DELETE",
       });
-
       if (response.ok) {
         triggerToast("Hủy lịch tiêm chủng thành công!");
-        setSelectedSchedule(null); // Ẩn chi tiết lịch vừa bị xóa
-        fetchSchedules(); // Refresh lại danh sách
+        setSelectedSchedule(null);
+        fetchSchedules();
       } else {
         triggerToast("Lỗi khi thực hiện xóa lịch tiêm trên máy chủ!");
       }
@@ -336,7 +421,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     }
   };
 
-  // HÀM CALL API XÓA MỀM USER
   const handleDeleteAccount = async (id: number | string) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa tài khoản người dùng này không?")) {
       return;
@@ -345,7 +429,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
       const response = await fetch(`http://localhost:8080/api/admin/accounts/${id}`, {
         method: "DELETE",
       });
-
       if (response.ok) {
         triggerToast("Xóa tài khoản người dùng thành công!");
         fetchAccounts();
@@ -358,7 +441,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     }
   };
 
-  // --- HÀM RESET FORMS ---
   const resetAccountForm = () => {
     setAccForm({
       tenDangNhap: "",
@@ -386,6 +468,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
       dateInput: "",
       thoiGian: "",
       maLoaiVacXin: 0,
+      loaiVacXinName: "",
+      maVacXin: 0,
       soLuong: 0,
       doTuoi: "",
       diaDiem: "",
@@ -397,7 +481,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     setShowAddSchedule(false);
   };
 
-  // --- XỬ LÝ NÚT CHỈNH SỬA (EDIT CLICKS) ---
   const handleEditAccount = (acc: TaiKhoan) => {
     let formattedPhone = acc.sdt ? acc.sdt.replace(/\D/g, "") : "";
     if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
@@ -432,17 +515,18 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
       dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`,
       thoiGian: sch.thoiGian,
       maLoaiVacXin: sch.maLoaiVacXin || 0,
+      loaiVacXinName: sch.loaiVacXin || "",
+      maVacXin: sch.maVacXin || 0,
       soLuong: sch.soLuong,
       doTuoi: sch.doTuoi,
       diaDiem: sch.diaDiem,
       ghiChu: sch.ghiChu,
-      selectedDoctors: sch.danhSachBacSi || [], // Nạp mảng bác sĩ cũ vào form
+      selectedDoctors: sch.danhSachBacSi || [],
     });
     setEditingScheduleId(sch.maLichTiem);
     setShowAddSchedule(true);
   };
 
-  // --- HÀM LƯU DỮ LIỆU (ADD / UPDATE) ---
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -509,11 +593,10 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 1. CHẠY VALIDATION TỰ TẠO CHO LỊCH TIÊM
     const newErrors: Record<string, string> = {};
     if (!scheduleForm.dateInput) newErrors.dateInput = "Vui lòng chọn ngày tiêm";
     if (!scheduleForm.thoiGian.trim()) newErrors.thoiGian = "Vui lòng nhập thời gian tiêm";
-    if (!scheduleForm.maLoaiVacXin) newErrors.maLoaiVacXin = "Vui lòng chọn loại vắc xin";
+    if (!scheduleForm.maVacXin) newErrors.maVacXin = "Vui lòng chọn tên vắc xin";
     if (!scheduleForm.soLuong) {
       newErrors.soLuong = "Vui lòng nhập số lượng";
     } else if (scheduleForm.soLuong <= 0) {
@@ -528,16 +611,16 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
       return;
     }
 
-    // 2. CHUẨN BỊ DỮ LIỆU & GỌI API LƯU LỊCH TIÊM
     const payload = {
       dateInput: scheduleForm.dateInput,
       thoiGian: scheduleForm.thoiGian,
       maLoaiVacXin: scheduleForm.maLoaiVacXin,
+      maVacXin: scheduleForm.maVacXin,
       soLuong: Number(scheduleForm.soLuong),
       doTuoi: scheduleForm.doTuoi,
       diaDiem: scheduleForm.diaDiem,
       ghiChu: scheduleForm.ghiChu,
-      selectedDoctors: scheduleForm.selectedDoctors, // Mảng Checkbox gửi thẳng xuống Backend
+      selectedDoctors: scheduleForm.selectedDoctors,
     };
 
     try {
@@ -553,14 +636,61 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
       if (response.ok) {
         triggerToast(editingScheduleId ? "Cập nhật lịch tiêm thành công!" : "Tạo lịch tiêm mới thành công!");
-        fetchSchedules(); // Reset lại bảng
-        resetScheduleForm(); // Đóng form
+        fetchSchedules();
+        resetScheduleForm();
       } else {
         triggerToast("Lỗi khi lưu lịch tiêm trên máy chủ!");
       }
     } catch (error) {
       console.error(error);
       triggerToast("Lỗi kết nối đến máy chủ!");
+    }
+  };
+
+  // --- HANDLERS CHO PHẢN HỒI CẤP CAO ---
+  const selectTicketForProcessing = (t: SupportTicket) => {
+    setSelectedTicket(t);
+    setTicketResponse(t.responseText || "");
+    setTicketErrors({});
+  };
+
+  const handleCancelTicket = () => {
+    setSelectedTicket(null);
+    setTicketResponse("");
+    setTicketErrors({});
+  };
+
+  const handleProcessTicket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTicket) return;
+
+    const errors: Record<string, string> = {};
+    if (!ticketResponse.trim()) {
+      errors.response = "Bắt buộc nhập nội dung trả lời";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setTicketErrors(errors);
+      return;
+    }
+
+    try {
+      const rawId = String(selectedTicket.id).replace("PHCC-", "");
+      const res = await fetch(`http://localhost:8080/api/customer/admin/feedback/high-level/resolve/${rawId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ normalContent: ticketResponse }), // Tái sử dụng field này theo API
+      });
+
+      if (res.ok) {
+        triggerToast("Đã gửi câu trả lời thành công!");
+        setSelectedTicket(null);
+        fetchHighLevelTickets();
+      } else {
+        triggerToast("Lỗi gửi phản hồi.");
+      }
+    } catch (err) {
+      triggerToast("Lỗi kết nối máy chủ.");
     }
   };
 
@@ -578,70 +708,61 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
           onClick={() => setActiveTab("accounts")}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "accounts" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
-          <Users className="w-4 h-4" />
-          Quản lý User
+          <Users className="w-4 h-4" /> Quản lý User
         </button>
         <button
           onClick={() => setActiveTab("schedules")}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "schedules" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
-          <CalendarDays className="w-4 h-4" />
-          Quản lý Lịch tiêm chủng
+          <CalendarDays className="w-4 h-4" /> Quản lý Lịch tiêm chủng
+        </button>
+        <button
+          onClick={() => setActiveTab("feedback")}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "feedback" ? "border-amber-500 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <MessageSquare className="w-4 h-4" /> Duyệt phản hồi cấp cao
         </button>
       </div>
 
       {/* ========================================= TAB: USER ACCOUNT ========================================= */}
       {activeTab === "accounts" && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm kiếm tài khoản..."
-                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-blue-100 outline-none"
-              />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
+            <div className="flex-1 flex gap-2">
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 bg-white cursor-pointer"
+              >
+                {ROLE_TABS.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.label} ({getRoleCount(tab.id)})
+                  </option>
+                ))}
+              </select>
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm nhanh tài khoản..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none"
+                />
+              </div>
             </div>
+
             <button
               onClick={() => {
                 resetAccountForm();
                 setShowAddAccount(true);
               }}
-              className="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap"
+              className="bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
             >
               <Plus className="w-4 h-4" /> Tạo User
             </button>
           </div>
 
-          {/* THANH LỌC ROLE VÀ SỐ LƯỢNG */}
-          <div className="flex flex-wrap items-center gap-2 pb-2">
-            <Filter className="w-4 h-4 text-slate-400 mr-1" />
-            {ROLE_TABS.map((tab) => {
-              const count = getRoleCount(tab.id);
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setRoleFilter(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                    roleFilter === tab.id
-                      ? "bg-slate-800 text-white border-slate-800 shadow-md"
-                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                  }`}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-[10px] ${roleFilter === tab.id ? "bg-slate-600 text-slate-100" : "bg-slate-100 text-slate-500"}`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Dùng 1 Form chung cho cả Add & Edit */}
           {showAddAccount && (
             <form
               onSubmit={handleSaveAccount}
@@ -799,7 +920,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                   </div>
                 </div>
 
-                {/* FORM RẼ NHÁNH DỰA VÀO QUYỀN */}
                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-200">
                   <div className="md:col-span-2 text-xs font-extrabold text-blue-600 uppercase">
                     Thông tin bổ sung ({accForm.maQuyen === 6 ? "Khách hàng" : "Nhân sự"})
@@ -996,7 +1116,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
               </table>
             </div>
 
-            {/* THANH PHÂN TRANG (PAGINATION) */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/50">
                 <span className="text-[11px] font-semibold text-slate-500">
@@ -1049,7 +1168,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
             </button>
           </div>
 
-          {/* Dùng 1 Form chung cho cả Add & Edit Lịch */}
           {showAddSchedule && (
             <form
               onSubmit={handleSaveSchedule}
@@ -1147,36 +1265,38 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                     {scheduleErrors.thoiGian && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.thoiGian}</p>}
                   </div>
 
-                  {/* Ô Loại vắc xin đã chuyển thành Select Combobox lưu theo ID */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Loại vắc xin đợt này <span className="text-red-500">*</span>
+                      Tên vắc xin đợt này <span className="text-red-500">*</span>
                     </label>
                     <select
-                      value={scheduleForm.maLoaiVacXin || 0}
-                      onChange={(e) => {
-                        setScheduleForm({
-                          ...scheduleForm,
-                          maLoaiVacXin: Number(e.target.value),
-                        });
-                        setScheduleErrors({
-                          ...scheduleErrors,
-                          maLoaiVacXin: "",
-                        });
-                      }}
-                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors cursor-pointer ${scheduleErrors.maLoaiVacXin ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
+                      value={scheduleForm.maVacXin || 0}
+                      onChange={handleVaccineSelect}
+                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors cursor-pointer ${
+                        scheduleErrors.maVacXin ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"
+                      }`}
                     >
                       <option value={0} disabled>
-                        -- Chọn vắc xin từ Kho --
+                        -- Chọn tên vắc xin --
                       </option>
-                      {vaccineTypes &&
-                        vaccineTypes.map((v) => (
-                          <option key={v.maLoaiVacXin} value={v.maLoaiVacXin}>
-                            {v.tenLoaiVacXin}
+                      {vaccinesList &&
+                        vaccinesList.map((v) => (
+                          <option key={v.maVacXin} value={v.maVacXin}>
+                            {v.tenVacXin}
                           </option>
                         ))}
                     </select>
-                    {scheduleErrors.maLoaiVacXin && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.maLoaiVacXin}</p>}
+                    {scheduleErrors.maVacXin && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.maVacXin}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nhóm phân loại (Tự động)</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={scheduleForm.loaiVacXinName || "---"}
+                      className="w-full bg-slate-100 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none text-slate-500 font-medium cursor-not-allowed"
+                    />
                   </div>
 
                   <div>
@@ -1247,7 +1367,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                   </div>
                 </div>
 
-                {/* Khu vực chọn Bác Sĩ tự động quét từ danh sách Accounts */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Hội đồng Y tế / Bác sĩ phụ trách</label>
                   <div className="bg-white border border-slate-200 rounded-lg p-3 max-h-32 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1310,21 +1429,15 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Lịch Tiêm - List Master */}
             <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
-              {/* Header của Danh sách kèm bộ lọc */}
               <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-xs text-slate-500 uppercase tracking-wider">Danh sách lịch tiêm</span>
-
-                  {/* BỘ ĐẾM RECORD */}
                   <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredSchedules.length} record</span>
                 </div>
 
-                {/* THANH TÌM KIẾM THEO KHOẢNG THỜI GIAN */}
                 <div className="flex items-center gap-2">
                   <div className="flex-1 flex items-center gap-1.5">
-                    {/* Input Từ ngày */}
                     <div className="relative flex-1">
                       <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-400" />
                       <input
@@ -1338,7 +1451,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
                     <span className="text-slate-400 font-bold text-xs">-</span>
 
-                    {/* Input Đến ngày */}
                     <div className="relative flex-1">
                       <input
                         type="date"
@@ -1350,7 +1462,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                     </div>
                   </div>
 
-                  {/* Nút xóa Filter ngày */}
                   {(scheduleSearchStartDate || scheduleSearchEndDate) && (
                     <button
                       onClick={() => {
@@ -1366,7 +1477,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                 </div>
               </div>
 
-              {/* Danh sách Data */}
               <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto flex-1">
                 {filteredSchedules.length > 0 ? (
                   filteredSchedules.map((s) => (
@@ -1381,7 +1491,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                           {s.ngay}/{s.thang}/{s.nam}
                         </span>
                       </div>
-                      <div className="font-semibold text-slate-800 text-sm mb-1">{s.loaiVacXin}</div>
+                      <div className="font-semibold text-slate-800 text-sm mb-1">{s.tenVacXin || s.loaiVacXin}</div>
                       <div className="flex items-center text-slate-500 text-xs gap-1">
                         <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
                         <span className="truncate">{s.diaDiem}</span>
@@ -1394,11 +1504,9 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
               </div>
             </div>
 
-            {/* Lịch Tiêm - Details View */}
             <div className="lg:col-span-2 space-y-6">
               {selectedSchedule ? (
                 <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs space-y-5 relative">
-                  {/* Cụm nút thao tác (Edit/Delete) Ngay trên Header của chi tiết */}
                   <div className="absolute top-6 right-6 flex items-center gap-2">
                     <button
                       onClick={() => handleEditSchedule(selectedSchedule)}
@@ -1418,13 +1526,12 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                     <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
                       MÃ ĐỢT: {selectedSchedule.maLichTiem}
                     </span>
-                    <h3 className="text-lg font-bold text-slate-800 mt-1">{selectedSchedule.loaiVacXin}</h3>
+                    <h3 className="text-lg font-bold text-slate-800 mt-1">{selectedSchedule.tenVacXin || selectedSchedule.loaiVacXin}</h3>
                     <p className="text-sm font-bold text-blue-600 mt-1">
                       {selectedSchedule.thoiGian} ({selectedSchedule.ngay}/{selectedSchedule.thang}/{selectedSchedule.nam})
                     </p>
                   </div>
 
-                  {/* Chi tiết nội dung */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                     <div className="bg-slate-50/60 p-3 rounded-lg border border-slate-100">
                       <span className="block font-semibold text-slate-400 mb-1">🎯 Độ tuổi khuyên dùng</span>
@@ -1443,7 +1550,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                     </div>
                   </div>
 
-                  {/* Bác sĩ & Ghi Chú */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-slate-500 uppercase">👨‍⚕️ Hội đồng Y tế tham gia</label>
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 flex flex-wrap gap-2">
@@ -1471,6 +1577,131 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================= THÊM MỚI: TAB PHẢN HỒI CẤP CAO ========================================= */}
+      {activeTab === "feedback" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px]">
+          {/* Cột trái: Danh sách phản hồi */}
+          <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full">
+            <div className="p-4 bg-amber-50/50 border-b border-slate-200">
+              <h3 className="font-bold text-slate-800 text-sm">Hòm thư Góp ý / Khiếu nại</h3>
+              <p className="text-xs text-slate-500 mt-1">Dành riêng cho Ban Giám Đốc xử lý</p>
+            </div>
+
+            <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm nhanh..."
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+              {isTicketsLoading ? (
+                <div className="p-8 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
+              ) : ticketsList.length > 0 ? (
+                ticketsList.map((t) => (
+                  <div
+                    key={t.id}
+                    onClick={() => selectTicketForProcessing(t)}
+                    className={`p-4 cursor-pointer text-sm transition-colors flex flex-col space-y-2 ${
+                      selectedTicket?.id === t.id ? "bg-amber-50/50 border-l-4 border-amber-500" : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="font-mono text-xs font-bold text-slate-400">{t.id}</span>
+                        <p className="font-bold text-slate-800 text-sm mt-0.5">{t.customerName}</p>
+                      </div>
+                      <span
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${t.status === "Đã giải quyết" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                      >
+                        {t.status}
+                      </span>
+                    </div>
+                    <div className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded inline-block w-max">
+                      Loại: {t.type || "Chưa xác định"}
+                    </div>
+                    <div className="text-xs text-slate-600 line-clamp-2">{t.comments}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-xs text-slate-400">Không có phản hồi cấp cao nào.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Cột phải: Khung xử lý */}
+          <div className="lg:col-span-7 h-full flex flex-col">
+            {!selectedTicket ? (
+              <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm h-full flex items-center justify-center">
+                Vui lòng chọn một thư bên trái để xem nội dung và trả lời.
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col h-full">
+                <div className="border-b border-slate-100 pb-4 mb-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 font-mono tracking-widest uppercase">TICKET: {selectedTicket.id}</span>
+                      <h3 className="text-lg font-bold text-slate-900 mt-1">Chi tiết thư góp ý</h3>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded">{selectedTicket.email}</span>
+                  </div>
+
+                  <div className="mt-5 space-y-3">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Nội dung khách hàng gửi:</p>
+                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">{selectedTicket.type}</span>
+                      </div>
+                      <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">"{selectedTicket.comments}"</p>
+                    </div>
+                  </div>
+                </div>
+
+                <form onSubmit={handleProcessTicket} className="flex-1 flex flex-col">
+                  <div className="flex-1 flex flex-col">
+                    <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                      Phản hồi từ Ban Quản Trị <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      required
+                      maxLength={2000}
+                      value={ticketResponse}
+                      onChange={(e) => {
+                        setTicketResponse(e.target.value);
+                        setTicketErrors({});
+                      }}
+                      placeholder="Nhập nội dung giải quyết khiếu nại, thư xin lỗi hoặc thư cảm ơn..."
+                      className={`w-full flex-1 p-3 border rounded-xl text-sm resize-none outline-none transition-colors leading-relaxed ${ticketErrors.response ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-amber-500"}`}
+                    />
+                    {ticketErrors.response && <p className="text-[10px] text-red-500 font-bold mt-1.5">{ticketErrors.response}</p>}
+                  </div>
+
+                  <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={handleCancelTicket}
+                      className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors"
+                    >
+                      Đóng
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl flex items-center gap-2 shadow-md shadow-amber-600/20 transition-all"
+                    >
+                      <Send className="w-4 h-4" /> Xác nhận & Gửi phản hồi
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       )}

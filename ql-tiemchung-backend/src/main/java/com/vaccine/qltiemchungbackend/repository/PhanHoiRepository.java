@@ -55,4 +55,14 @@ public interface PhanHoiRepository extends JpaRepository<PhanHoi, Long> {
     @Transactional
     @Query(value = "UPDATE PHANHOI SET NoiDungPhanHoi = :noiDungPhanHoi, TenNhanVienPhuTrach = :nhanVien WHERE MaPhanHoi = :id", nativeQuery = true)
     void capNhatPhanHoi(@Param("id") Long id, @Param("noiDungPhanHoi") String noiDungPhanHoi, @Param("nhanVien") String nhanVien);
+
+    @Query(value = "SELECT " +
+            "p.MaPhanHoi AS id, " +
+            "p.NoiDung AS content, " +
+            "p.NoiDungPhanHoi AS responseText, " +
+            "CAST(p.ThoiGianTiem AS VARCHAR) AS time " +
+            "FROM PHANHOI p " +
+            "WHERE p.MaBenhNhan = :maBenhNhan AND (p.flag_delete = FALSE OR p.flag_delete IS NULL) " +
+            "ORDER BY p.MaPhanHoi DESC", nativeQuery = true)
+    List<Object[]> layDanhSachPhanHoiTheoBenhNhan(@Param("maBenhNhan") Long maBenhNhan);
 }

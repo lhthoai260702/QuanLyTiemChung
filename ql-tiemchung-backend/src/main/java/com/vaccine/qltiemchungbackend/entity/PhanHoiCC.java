@@ -22,6 +22,9 @@ public class PhanHoiCC {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "NoiDungTraLoi", columnDefinition = "TEXT")
+    private String noiDungTraLoi;
+
     @Column(name = "flag_delete")
     private Boolean flagDelete = false;
 }

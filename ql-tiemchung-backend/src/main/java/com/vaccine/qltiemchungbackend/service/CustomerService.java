@@ -4,13 +4,10 @@ import com.vaccine.qltiemchungbackend.dto.BookingRequestDTO;
 import com.vaccine.qltiemchungbackend.entity.BenhNhan;
 import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
 import com.vaccine.qltiemchungbackend.entity.LoVacXin;
-import com.vaccine.qltiemchungbackend.repository.BenhNhanRepository;
-import com.vaccine.qltiemchungbackend.repository.ChiTietDkTiemRepository;
-import com.vaccine.qltiemchungbackend.repository.LoVacXinRepository;
+import com.vaccine.qltiemchungbackend.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.vaccine.qltiemchungbackend.repository.LichTiemChungRepository;
 
 @Service
 public class CustomerService {

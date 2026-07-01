@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Invoice, Vaccine, SystemLog } from "../types";
-import { CreditCard, DollarSign, Plus, Check, X, Edit, Trash2, Search, Save, TrendingUp, ShoppingCart, Truck, Tag } from "lucide-react";
+import { CreditCard, DollarSign, Plus, Check, X, Edit, Trash2, Search, Save, TrendingUp, ShoppingCart, Truck, Tag, Banknote } from "lucide-react";
 
 interface FinanceModuleProps {
   invoices: Invoice[];
@@ -405,7 +405,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Doanh thu giao dịch khách hàng</p>
             <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">{totalCustomerRevenue.toLocaleString()} VNĐ</h3>
           </div>
-          <DollarSign className="w-10 h-10 text-emerald-500 bg-emerald-50 p-2 rounded-lg" />
+          <Banknote className="w-10 h-10 text-emerald-500 bg-emerald-50 p-2 rounded-lg" />
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>

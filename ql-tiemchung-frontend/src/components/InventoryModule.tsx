@@ -566,23 +566,29 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
           {editingVacId && renderVaccineForm()}
 
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm space-y-4 shrink-0">
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="w-full sm:w-1/3 relative">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Tìm tên vắc-xin..." className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-blue-100" />
-              </div>
-
-              <div className="w-full sm:w-2/3 flex flex-wrap items-center justify-end gap-2">
-                <Filter className="w-4 h-4 text-slate-400 mr-1" />
-                {categories.map((cat) => {
-                  const count = getCategoryCount(cat);
-                  return (
-                    <button key={cat} onClick={() => setActiveCategory(cat)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${activeCategory === cat ? "bg-slate-800 text-white border-slate-800 shadow-md" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
-                      <span>{cat}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeCategory === cat ? "bg-slate-600 text-slate-100" : "bg-slate-100 text-slate-500"}`}>{count}</span>
-                    </button>
-                  );
-                })}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 flex gap-2">
+                <select
+                  value={activeCategory}
+                  onChange={(e) => setActiveCategory(e.target.value)}
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 bg-white cursor-pointer shrink-0 max-w-[200px] sm:max-w-xs"
+                >
+                  {categories.map((cat, idx) => (
+                    <option key={idx} value={cat}>
+                      {cat} ({getCategoryCount(cat)})
+                    </option>
+                  ))}
+                </select>
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm nhanh tên vắc-xin..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none"
+                  />
+                </div>
               </div>
             </div>
           </div>

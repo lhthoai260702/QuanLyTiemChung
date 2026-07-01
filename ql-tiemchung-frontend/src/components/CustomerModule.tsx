@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  HelpCircle,
+  History,
 } from "lucide-react";
 
 interface CustomerModuleProps {
@@ -31,9 +33,24 @@ export interface VaccineCatalog {
   tonKho: number;
 }
 
+export interface FaqType {
+  id: number;
+  question: string;
+  answer: string;
+}
+
+export interface MyFeedbackType {
+  id: string;
+  type: string;
+  content: string;
+  responseText: string;
+  status: string;
+  time: string;
+}
+
 export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
   // --- STATES: ĐIỀU HƯỚNG TABS ---
-  const [activeTab, setActiveTab] = useState<"profile" | "vaccines" | "schedules" | "diseases" | "feedback">("profile");
+  const [activeTab, setActiveTab] = useState<"profile" | "vaccines" | "schedules" | "diseases" | "feedback" | "faqs" | "my_feedbacks">("profile");
 
   // --- DỮ LIỆU THẬT LẤY TỪ DATABASE ---
   const [profile, setProfile] = useState({
@@ -46,9 +63,9 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
   });
   const [history, setHistory] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
-
-  // Dữ liệu mock tĩnh cho tab Dịch Bệnh (chưa có API)
   const [diseases, setDiseases] = useState<any[]>([]);
+  const [faqs, setFaqs] = useState<FaqType[]>([]);
+  const [myFeedbacks, setMyFeedbacks] = useState<MyFeedbackType[]>([]);
 
   const fetchDiseases = async () => {
     try {
@@ -63,13 +80,36 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
     }
   };
 
-  // Form states cho Profile (Đã loại bỏ khai báo trùng lặp ở phía dưới)
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ ...profile });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
-
-  // --- STATES: QUẢN LÝ DỮ LIỆU TỪ BACKEND ---
   const [vaccines, setVaccines] = useState<VaccineCatalog[]>([]);
+
+  // Fetch FAQs
+  const fetchFaqs = async () => {
+    try {
+      const res = await fetch("http://localhost:8080/api/customer/faqs");
+      if (res.ok) {
+        const data = await res.json();
+        setFaqs(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Fetch My Feedbacks (Dùng tạm ID = 1)
+  const fetchMyFeedbacks = async () => {
+    try {
+      const res = await fetch("http://localhost:8080/api/customer/my-feedbacks/1");
+      if (res.ok) {
+        const data = await res.json();
+        setMyFeedbacks(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // --- HÀM TẢI DỮ LIỆU CÁ NHÂN TỪ API ---
   const fetchProfile = async () => {
@@ -138,18 +178,12 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
 
   // Gọi API mỗi khi người dùng truy cập các tab tương ứng
   useEffect(() => {
-    if (activeTab === "profile") {
-      fetchProfile();
-    }
-    if (activeTab === "vaccines") {
-      fetchVaccines();
-    }
-    if (activeTab === "schedules") {
-      fetchSchedules();
-    }
-    if (activeTab === "diseases") {
-      fetchDiseases();
-    }
+    if (activeTab === "profile") fetchProfile();
+    if (activeTab === "vaccines") fetchVaccines();
+    if (activeTab === "schedules") fetchSchedules();
+    if (activeTab === "diseases") fetchDiseases();
+    if (activeTab === "faqs") fetchFaqs();
+    if (activeTab === "my_feedbacks") fetchMyFeedbacks();
   }, [activeTab]);
 
   // --- STATES: FORMS & VALIDATION ---
@@ -387,7 +421,9 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
             { id: "vaccines", icon: Syringe, label: "Xem thông tin Vắc-xin" },
             { id: "schedules", icon: CalendarDays, label: "Tra cứu lịch tiêm" },
             { id: "diseases", icon: Bug, label: "Tình hình dịch bệnh" },
+            { id: "faqs", icon: HelpCircle, label: "Tư vấn tiêm chủng" },
             { id: "feedback", icon: MessageSquare, label: "Gửi phản hồi" },
+            { id: "my_feedbacks", icon: History, label: "Lịch sử giải đáp" },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -891,6 +927,34 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
             </div>
           )}
 
+          {/* ======================= TAB MỚI: TƯ VẤN TIÊM CHỦNG (CHỈ XEM) ======================= */}
+          {activeTab === "faqs" && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-w-4xl mx-auto h-[600px]">
+              <div className="p-4 bg-slate-50 border-b border-slate-200">
+                <h3 className="font-bold text-slate-800 text-sm">Câu hỏi thường gặp (FAQ)</h3>
+                <p className="text-xs text-slate-500 mt-1">Tra cứu nhanh các vấn đề y khoa đã được bác sĩ giải đáp</p>
+              </div>
+              <div className="overflow-y-auto p-6 space-y-4">
+                {faqs.length > 0 ? (
+                  faqs.map((faq, idx) => (
+                    <div key={faq.id} className="border border-slate-200 rounded-xl overflow-hidden group">
+                      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex gap-3 items-start">
+                        <div className="bg-blue-100 text-blue-600 font-bold rounded px-2 py-0.5 text-xs mt-0.5 shrink-0">Hỏi</div>
+                        <h4 className="font-semibold text-slate-800 text-sm">{faq.question}</h4>
+                      </div>
+                      <div className="px-4 py-4 flex gap-3 items-start bg-white">
+                        <div className="bg-emerald-100 text-emerald-700 font-bold rounded px-2 py-0.5 text-xs mt-0.5 shrink-0">Đáp</div>
+                        <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">{faq.answer}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 text-slate-400 text-sm">Chưa có câu hỏi FAQ nào trên hệ thống.</div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ======================= TAB 5: GỬI PHẢN HỒI ======================= */}
           {activeTab === "feedback" && (
             <div className="max-w-3xl mx-auto space-y-6">
@@ -1067,6 +1131,68 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* ======================= TAB MỚI: LỊCH SỬ GIẢI ĐÁP (CỦA BẢN THÂN) ======================= */}
+          {activeTab === "my_feedbacks" && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col max-w-5xl mx-auto h-[600px]">
+              <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-slate-800 text-sm">Thắc mắc của tôi</h3>
+                  <p className="text-xs text-slate-500 mt-1">Theo dõi quá trình trung tâm giải quyết khiếu nại/thắc mắc</p>
+                </div>
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{myFeedbacks.length} thư</span>
+              </div>
+
+              <div className="overflow-y-auto p-6 space-y-4">
+                {myFeedbacks.length > 0 ? (
+                  myFeedbacks.map((fb) => (
+                    <div key={fb.id} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                      <div className="bg-slate-50 px-4 py-3 flex justify-between items-center border-b border-slate-100">
+                        <div className="flex gap-2 items-center">
+                          <span className="font-mono text-xs text-slate-500">{fb.id}</span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${fb.type === "Cấp cao" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}
+                          >
+                            {fb.type}
+                          </span>
+                        </div>
+                        <span
+                          className={`text-xs font-bold px-2.5 py-1 rounded-md border ${
+                            fb.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"
+                          }`}
+                        >
+                          {fb.status}
+                        </span>
+                      </div>
+
+                      <div className="p-4 bg-white space-y-4">
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Nội dung tôi đã gửi:</p>
+                          <p className="text-sm text-slate-800 italic bg-slate-50 p-3 rounded-lg border border-slate-100">"{fb.content}"</p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Trung tâm phản hồi:</p>
+                          {fb.status === "Đã trả lời" ? (
+                            <p className="text-sm text-blue-800 bg-blue-50 p-3 rounded-lg border border-blue-100 whitespace-pre-wrap">
+                              {fb.responseText}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-slate-400 italic">Đang chờ nhân viên hỗ trợ hoặc cấp quản lý xét duyệt phản hồi...</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-16">
+                    <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">Bạn chưa gửi thắc mắc hay khiếu nại nào.</p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

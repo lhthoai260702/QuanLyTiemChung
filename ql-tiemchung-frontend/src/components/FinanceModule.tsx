@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Invoice, Vaccine, SystemLog } from '../types';
-import { CreditCard, DollarSign, BarChart2, PieChart, Plus, Check, Sliders, ChevronDown, CheckCircle2, TrendingUp, RefreshCw, Printer } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { Invoice, Vaccine, SystemLog } from "../types";
+import { CreditCard, DollarSign, Plus, Check, X, Edit, Trash2, Search, Save, TrendingUp, ShoppingCart, Truck, Tag } from "lucide-react";
 
 interface FinanceModuleProps {
   invoices: Invoice[];
@@ -11,238 +11,617 @@ interface FinanceModuleProps {
   triggerToast: (msg: string) => void;
 }
 
-export default function FinanceModule({
-  invoices,
-  setInvoices,
-  vaccines,
-  systemLogs,
-  setSystemLogs,
-  triggerToast
-}: FinanceModuleProps) {
-  const [activeTab, setActiveTab] = useState<'billing' | 'charts' | 'pricing'>('billing');
-  const [searchInvoiceQuery, setSearchInvoiceQuery] = useState('');
+// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
+export interface CustomerTransaction {
+  id: string;
+  date: string;
+  vaccineCode: string;
+  quantity: number;
+  customerName: string;
+  price: number;
+}
 
-  // Surcharges for overhead pricing computation
-  const [preservationFee, setPreservationFee] = useState(50000);
-  const [laborFee, setLaborFee] = useState(30000);
+export interface SupplierTransaction {
+  id: string;
+  date: string;
+  vaccineCode: string;
+  quantity: number;
+  supplierName: string;
+  price: number;
+}
 
-  // Financial aggregates calculated dynamically
-  const totalRevenues = invoices
-    .filter((inv) => inv.status === 'Đã thanh toán')
-    .reduce((sum, current) => sum + current.totalAmount, 0);
+export interface VaccinePrice {
+  id: string;
+  name: string;
+  dosage: string;
+  year: string;
+  price: number;
+}
 
-  const pendingRevenues = invoices
-    .filter((inv) => inv.status === 'Chờ thanh toán')
-    .reduce((sum, current) => sum + current.totalAmount, 0);
+export default function FinanceModule({ invoices, setInvoices, vaccines, systemLogs, setSystemLogs, triggerToast }: FinanceModuleProps) {
+  const [activeTab, setActiveTab] = useState<"customer_tx" | "supplier_tx" | "pricing">("customer_tx");
 
-  const totalInvoicedCount = invoices.length;
-  const paidInvoiceCount = invoices.filter((inv) => inv.status === 'Đã thanh toán').length;
+  // ==========================================
+  // HÀM FORMAT TIỀN TỆ CHO INPUT (Tự chèn dấu phẩy)
+  // ==========================================
+  const formatCurrencyInput = (value: number) => {
+    if (!value || value === 0) return ""; // Nếu là 0 hoặc rỗng thì trả về chuỗi rỗng để xoá sạch ô
+    return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  };
 
-  const handlePayInvoice = (invId: string) => {
-    let affectedName = '';
-    let affectedTarget = '';
-    let affectedAmt = 0;
-    
-    const updated = invoices.map((inv) => {
-      if (inv.id === invId) {
-        affectedName = inv.customerName;
-        affectedTarget = inv.vaccineName;
-        affectedAmt = inv.totalAmount;
-        return { ...inv, status: 'Đã thanh toán' as const };
+  // ==========================================
+  // STATE: GIAO DỊCH VỚI KHÁCH HÀNG
+  // ==========================================
+  const [customerTxs, setCustomerTxs] = useState<CustomerTransaction[]>([]);
+  const [searchCustomerQuery, setSearchCustomerQuery] = useState("");
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [editingCustomerTxId, setEditingCustomerTxId] = useState<string | null>(null);
+
+  const [customerForm, setCustomerForm] = useState<CustomerTransaction>({
+    id: "",
+    date: "",
+    vaccineCode: "",
+    quantity: 1,
+    customerName: "",
+    price: 0,
+  });
+
+  // ==========================================
+  // STATE: GIAO DỊCH VỚI NHÀ CUNG CẤP
+  // ==========================================
+  const [supplierTxs, setSupplierTxs] = useState<SupplierTransaction[]>([]);
+  const [searchSupplierQuery, setSearchSupplierQuery] = useState("");
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [editingSupplierTxId, setEditingSupplierTxId] = useState<string | null>(null);
+
+  const [supplierForm, setSupplierForm] = useState<SupplierTransaction>({
+    id: "",
+    date: "",
+    vaccineCode: "",
+    quantity: 1,
+    supplierName: "",
+    price: 0,
+  });
+
+  // ==========================================
+  // STATE: QUẢN LÝ GIÁ VẮC XIN TỪ DATABASE
+  // ==========================================
+  const [vaccinePrices, setVaccinePrices] = useState<VaccinePrice[]>([]);
+  const [searchPriceQuery, setSearchPriceQuery] = useState("");
+  const [showPriceForm, setShowPriceForm] = useState(false);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+
+  // Hàm lấy dữ liệu nhà cung cấp từ Backend
+  const fetchSupplierTransactions = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/finance/supplier-transactions");
+      if (response.ok) {
+        const data = await response.json();
+        setSupplierTxs(data);
       }
-      return inv;
-    });
-
-    setInvoices(updated);
-    triggerToast(`Đã thu ngân và lập biên nhận số: ${invId}. Nhận thành công: ${affectedAmt.toLocaleString()} ₫ từ ${affectedName}!`);
-
-    // Record audit trade log
-    setSystemLogs([
-      {
-        id: `LOG-${Date.now()}`,
-        time: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        handler: 'Tống Khánh Linh (Tài chính)',
-        action: 'Duyệt thanh toán hóa đơn',
-        details: `Phê chuẩn hóa đơn ID ${invId} cho bệnh nhi ${affectedName} tiêm ${affectedTarget}. Số tiền thu quỹ: ${affectedAmt.toLocaleString()} VND.`,
-      },
-      ...systemLogs,
-    ]);
+    } catch (error) {
+      console.error(error);
+      triggerToast("Lỗi kết nối tải dữ liệu nhà cung cấp!");
+    }
   };
 
-  const handleApplyFees = (e: React.FormEvent) => {
+  // Cập nhật useEffect (Thêm case fetch cho supplier_tx)
+  useEffect(() => {
+    if (activeTab === 'pricing') {
+      fetchVaccinePrices();
+    } else if (activeTab === 'customer_tx') {
+      fetchCustomerTransactions();
+    } else if (activeTab === 'supplier_tx') {
+      fetchSupplierTransactions();
+    }
+  }, [activeTab]);
+
+  const [priceForm, setPriceForm] = useState<VaccinePrice>({
+    id: "",
+    name: "",
+    dosage: "",
+    year: "",
+    price: 0,
+  });
+
+  const fetchCustomerTransactions = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/finance/customer-transactions");
+      if (response.ok) {
+        const data = await response.json();
+        setCustomerTxs(data);
+      }
+    } catch (error) {
+      console.error(error);
+      triggerToast("Không thể kết nối tải thông tin giao dịch khách hàng!");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "customer_tx") {
+      fetchCustomerTransactions();
+    }
+  }, [activeTab]);
+
+  // HÀM CALL API LẤY BẢNG GIÁ TỪ DATABASE
+  const fetchVaccinePrices = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/finance/vaccine-prices");
+      if (response.ok) {
+        const data = await response.json();
+        setVaccinePrices(data);
+      }
+    } catch (error) {
+      console.error(error);
+      triggerToast("Không thể kết nối tải thông tin giá vắc-xin!");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "pricing") {
+      fetchVaccinePrices();
+    }
+  }, [activeTab]);
+
+  // ==========================================
+  // HANDLERS: KHÁCH HÀNG
+  // ==========================================
+  const resetCustomerForm = () => {
+    setCustomerForm({ id: "", date: "", vaccineCode: "", quantity: 1, customerName: "", price: 0 });
+    setEditingCustomerTxId(null);
+    setShowCustomerForm(false);
+  };
+
+  const handleEditCustomer = (tx: CustomerTransaction) => {
+    setCustomerForm(tx);
+    setEditingCustomerTxId(tx.id);
+    setShowCustomerForm(true);
+  };
+
+  const handleDeleteCustomer = async (id: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa giao dịch này?")) return;
+    try {
+      const response = await fetch(`http://localhost:8080/api/finance/customer-transactions/${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setCustomerTxs(customerTxs.filter((tx) => tx.id !== id));
+        triggerToast("Đã xóa thông tin giao dịch thành công!");
+      } else {
+        triggerToast("Tác vụ lỗi: Xóa hóa đơn thất bại!");
+      }
+    } catch (error) {
+      triggerToast("Lỗi kết nối máy chủ");
+    }
+  };
+
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    triggerToast('Đã áp dụng định mức chi phí y khoa phụ trội mới thành công!');
-    
-    setSystemLogs([
-      {
-        id: `LOG-${Date.now()}`,
-        time: new Date().toISOString().replace('T', ' ').substring(0, 19),
-        handler: 'Tống Khánh Linh (Tài chính)',
-        action: 'Sửa phí dịch vụ phụ trội',
-        details: `Cập nhật phí bảo quản âm lạnh: ${preservationFee.toLocaleString()} VND, phí khám hao tổn: ${laborFee.toLocaleString()} VND`,
-      },
-      ...systemLogs,
-    ]);
+    if (!customerForm.id || !customerForm.customerName || !customerForm.date) {
+      triggerToast("Vui lòng nhập đủ thông tin bắt buộc");
+      return;
+    }
+
+    try {
+      if (editingCustomerTxId) {
+        // GỌI API CẬP NHẬT GIÁ
+        const response = await fetch(`http://localhost:8080/api/finance/customer-transactions/${editingCustomerTxId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(customerForm),
+        });
+
+        if (response.ok) {
+          fetchCustomerTransactions();
+          triggerToast("Cập nhật kết quả lên datagridview thành công!");
+          resetCustomerForm();
+        } else {
+          triggerToast("Lỗi cập nhật hóa đơn trên máy chủ!");
+        }
+      } else {
+        // Giao dịch nên được sinh ra tự động từ Hồ sơ bệnh án thay vì tạo thủ công
+        triggerToast("Lưu ý: Hóa đơn/giao dịch mới nên được hệ thống sinh tự động từ phân hệ khám bệnh.");
+        resetCustomerForm();
+      }
+    } catch (error) {
+      triggerToast("Lỗi kết nối máy chủ!");
+    }
   };
 
-  const filteredInvoices = invoices.filter((inv) =>
-    inv.customerName.toLowerCase().includes(searchInvoiceQuery.toLowerCase()) ||
-    inv.vaccineName.toLowerCase().includes(searchInvoiceQuery.toLowerCase()) ||
-    inv.id.toLowerCase().includes(searchInvoiceQuery.toLowerCase())
+  // ==========================================
+  // HANDLERS: NHÀ CUNG CẤP
+  // ==========================================
+  const resetSupplierForm = () => {
+    setSupplierForm({ id: "", date: "", vaccineCode: "", quantity: 1, supplierName: "", price: 0 });
+    setEditingSupplierTxId(null);
+    setShowSupplierForm(false);
+  };
+
+  const handleEditSupplier = (tx: SupplierTransaction) => {
+    setSupplierForm(tx);
+    setEditingSupplierTxId(tx.id);
+    setShowSupplierForm(true);
+  };
+
+  const handleDeleteSupplier = async (id: string) => {
+    if (!window.confirm('Bạn có chắc chắn muốn xóa giao dịch nhập kho này?')) return;
+    try {
+      const response = await fetch(`http://localhost:8080/api/finance/supplier-transactions/${id}`, {
+        method: "DELETE"
+      });
+
+      if (response.ok) {
+        setSupplierTxs(supplierTxs.filter(tx => tx.id !== id));
+        triggerToast('Cập nhật datagridview'); // Thành công
+      } else {
+        triggerToast('Lỗi xóa'); // Lỗi chuẩn SRS
+      }
+    } catch (error) {
+      triggerToast('Lỗi xóa');
+    }
+  };
+
+  const handleSaveSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supplierForm.id || !supplierForm.supplierName || !supplierForm.date) {
+      triggerToast('Lỗi lưu lại'); 
+      return;
+    }
+
+    try {
+      if (editingSupplierTxId) {
+        // CẬP NHẬT
+        const response = await fetch(`http://localhost:8080/api/finance/supplier-transactions/${editingSupplierTxId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(supplierForm)
+        });
+
+        if (response.ok) {
+          fetchSupplierTransactions();
+          triggerToast('Cập nhật datagridview'); // SRS: Thành công
+          resetSupplierForm();
+        } else {
+          triggerToast('Lỗi chỉnh sửa'); // SRS: Lỗi chỉnh sửa
+        }
+      } else {
+        // THÊM MỚI
+        const response = await fetch(`http://localhost:8080/api/finance/supplier-transactions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(supplierForm)
+        });
+
+        if (response.ok) {
+          fetchSupplierTransactions();
+          triggerToast('Cập nhật datagridview'); // SRS: Thành công
+          resetSupplierForm();
+        } else {
+          triggerToast('Lỗi tạo mới'); // SRS: Lỗi tạo mới
+        }
+      }
+    } catch (error) {
+      triggerToast('Lỗi lưu lại'); // SRS: Lỗi lưu tổng quát
+    }
+  };
+
+  // ==========================================
+  // HANDLERS: QUẢN LÝ GIÁ VẮC XIN (CONNECT DB)
+  // ==========================================
+  const resetPriceForm = () => {
+    setPriceForm({ id: "", name: "", dosage: "", year: "", price: 0 });
+    setEditingPriceId(null);
+    setShowPriceForm(false);
+  };
+
+  const handleEditPrice = (priceRec: VaccinePrice) => {
+    setPriceForm(priceRec);
+    setEditingPriceId(priceRec.id);
+    setShowPriceForm(true);
+  };
+
+  const handleDeletePrice = async (id: string) => {
+    if (!window.confirm("Bạn có chắc chắn muốn ngừng kinh doanh và xóa định giá vắc-xin này không? (Dữ liệu sẽ được xóa mềm khỏi hệ thống)")) return;
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/finance/vaccine-prices/${id}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        triggerToast("Đã xóa bảng giá vắc-xin thành công!");
+        fetchVaccinePrices();
+      } else {
+        triggerToast("Lỗi khi thực hiện xóa trên máy chủ!");
+      }
+    } catch (error) {
+      console.error(error);
+      triggerToast("Lỗi kết nối đến máy chủ!");
+    }
+  };
+
+  const handleSavePrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!priceForm.id || !priceForm.price) {
+      triggerToast("Vui lòng điền đủ thông tin");
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/finance/vaccine-prices/${priceForm.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(priceForm),
+      });
+
+      if (response.ok) {
+        triggerToast("Cập nhật giá vắc-xin thành công!");
+        fetchVaccinePrices();
+        resetPriceForm();
+      } else {
+        triggerToast("Lỗi cập nhật giá trên máy chủ!");
+      }
+    } catch (error) {
+      triggerToast("Lỗi cập nhật hệ thống!");
+    }
+  };
+
+  // ==========================================
+  // LỌC DỮ LIỆU
+  // ==========================================
+  const filteredCustomerTxs = customerTxs.filter(
+    (tx) =>
+      tx.customerName.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
+      tx.id.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
+      tx.vaccineCode.toLowerCase().includes(searchCustomerQuery.toLowerCase()),
   );
+
+  const filteredSupplierTxs = supplierTxs.filter(
+    (tx) =>
+      tx.supplierName.toLowerCase().includes(searchSupplierQuery.toLowerCase()) ||
+      tx.id.toLowerCase().includes(searchSupplierQuery.toLowerCase()) ||
+      tx.vaccineCode.toLowerCase().includes(searchSupplierQuery.toLowerCase()),
+  );
+
+  const filteredPrices = vaccinePrices.filter(
+    (p) => p.id.toString().toLowerCase().includes(searchPriceQuery.toLowerCase()) || p.name.toLowerCase().includes(searchPriceQuery.toLowerCase()),
+  );
+
+  const totalCustomerRevenue = customerTxs.reduce((sum, tx) => sum + tx.price * tx.quantity, 0);
+  const totalSupplierCost = supplierTxs.reduce((sum, tx) => sum + tx.price * tx.quantity, 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Module Title */}
+      {/* Module Title & Metrics */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">💵 Phân hệ Quản Lý Kế Toán & Kế Hoạch Tài Chính (Finance)</h2>
-        <p className="text-sm text-slate-500 mt-1">Xuất hóa đơn thanh toán chương trình tiêm chủng dịch vụ, lập bảng biểu báo cáo doanh thu ngày, chỉnh sửa định phí bảo lạnh.</p>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">💵 Phân hệ Kế Toán & Quản Lý Giao Dịch</h2>
+        <p className="text-sm text-slate-500 mt-1">Quản lý thống kê các giao dịch với khách hàng, nhà cung cấp và niêm yết giá vắc-xin.</p>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Doanh thu thực tế đã thu</p>
-            <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">{totalRevenues.toLocaleString()} ₫</h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Doanh thu giao dịch khách hàng</p>
+            <h3 className="text-2xl font-extrabold text-emerald-600 mt-1">{totalCustomerRevenue.toLocaleString()} VNĐ</h3>
           </div>
           <DollarSign className="w-10 h-10 text-emerald-500 bg-emerald-50 p-2 rounded-lg" />
         </div>
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Doanh số chờ thanh toán</p>
-            <h3 className="text-2xl font-extrabold text-amber-600 mt-1">{pendingRevenues.toLocaleString()} ₫</h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Chi phí giao dịch NCC</p>
+            <h3 className="text-2xl font-extrabold text-rose-600 mt-1">{totalSupplierCost.toLocaleString()} VNĐ</h3>
           </div>
-          <TrendingUp className="w-10 h-10 text-amber-500 bg-amber-50 p-2 rounded-lg" />
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Hóa đơn đã xuất quỹ</p>
-            <h3 className="text-2xl font-extrabold text-slate-800 mt-1">{totalInvoicedCount} Hóa Đơn</h3>
-          </div>
-          <CreditCard className="w-10 h-10 text-blue-500 bg-blue-50 p-2 rounded-lg" />
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tỷ lệ thanh toán nợ</p>
-            <h3 className="text-2xl font-extrabold text-slate-800 mt-1">
-              {totalInvoicedCount > 0 ? ((paidInvoiceCount / totalInvoicedCount) * 100).toFixed(0) : 0}%
-            </h3>
-          </div>
-          <CheckCircle2 className="w-10 h-10 text-slate-500 bg-slate-50 p-2 rounded-lg" />
+          <TrendingUp className="w-10 h-10 text-rose-500 bg-rose-50 p-2 rounded-lg" />
         </div>
       </div>
 
       {/* Tabs list */}
       <div className="border-b border-slate-200 flex space-x-2">
         <button
-          onClick={() => setActiveTab('billing')}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
-            activeTab === 'billing' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+          onClick={() => setActiveTab("customer_tx")}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === "customer_tx" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
-          💳 Thu quỹ & Lập hóa đơn ({invoices.length})
+          <ShoppingCart className="w-4 h-4" /> Giao dịch Khách hàng
         </button>
         <button
-          onClick={() => setActiveTab('charts')}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
-            activeTab === 'charts' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+          onClick={() => setActiveTab("supplier_tx")}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === "supplier_tx" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
-          📊 Phân tích hiệu suất doanh thu (Charts)
+          <Truck className="w-4 h-4" /> Giao dịch Nhà cung cấp
         </button>
         <button
-          onClick={() => setActiveTab('pricing')}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors ${
-            activeTab === 'pricing' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-800'
+          onClick={() => setActiveTab("pricing")}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === "pricing" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
-          ⚙️ Cấu hình cấu trúc Đơn Giá vaccine
+          <Tag className="w-4 h-4" /> Quản lý giá vắc xin
         </button>
       </div>
 
-      {/* Tab Area */}
-      {activeTab === 'billing' && (
+      {/* ========================================================================= */}
+      {/* TAB 1: GIAO DỊCH KHÁCH HÀNG */}
+      {/* ========================================================================= */}
+      {activeTab === "customer_tx" && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
               <input
                 type="text"
-                value={searchInvoiceQuery}
-                onChange={(e) => setSearchInvoiceQuery(e.target.value)}
-                placeholder="Tìm hóa đơn nhanh theo tên cha mẹ, trẻ em, vaccine hoặc ID..."
-                className="w-full bg-white px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                value={searchCustomerQuery}
+                onChange={(e) => setSearchCustomerQuery(e.target.value)}
+                placeholder="Tìm kiếm theo Mã HĐ, Tên khách hàng, Mã vắc xin..."
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-blue-100 outline-none"
               />
             </div>
             <button
               onClick={() => {
-                triggerToast('Đang tạo báo cáo kết toán tổng hợp lên XML...');
+                resetCustomerForm();
+                setShowCustomerForm(true);
               }}
-              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center gap-1 cursor-pointer"
+              className="bg-blue-600 text-white text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap"
             >
-              <Printer className="w-4 h-4" /> Xuất chứng từ giao dịch
+              <Plus className="w-4 h-4" /> Tạo giao dịch mới
             </button>
           </div>
 
+          {/* Form Thêm/Sửa Khách Hàng */}
+          {showCustomerForm && (
+            <form onSubmit={handleSaveCustomer} className="bg-blue-50/40 p-5 rounded-xl border border-blue-200 shadow-sm animate-fade-in relative">
+              <button type="button" onClick={resetCustomerForm} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+              <h3 className="text-sm font-bold text-blue-800 mb-4 flex items-center gap-2">
+                <Edit className="w-4 h-4" /> {editingCustomerTxId ? "Chỉnh sửa Giao dịch Khách hàng" : "Thêm mới Giao dịch Khách hàng"}
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Mã hóa đơn <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    disabled={!!editingCustomerTxId}
+                    value={customerForm.id}
+                    onChange={(e) => setCustomerForm({ ...customerForm, id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Ngày tiêm chủng <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={customerForm.date}
+                    onChange={(e) => setCustomerForm({ ...customerForm, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Tên khách hàng <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customerForm.customerName}
+                    onChange={(e) => setCustomerForm({ ...customerForm, customerName: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Mã vắc xin</label>
+                  <input
+                    type="text"
+                    required
+                    value={customerForm.vaccineCode}
+                    onChange={(e) => setCustomerForm({ ...customerForm, vaccineCode: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Số lượng</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={customerForm.quantity}
+                    onChange={(e) => setCustomerForm({ ...customerForm, quantity: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Giá thành (VND)</label>
+                  <input
+                    type="text"
+                    required
+                    value={formatCurrencyInput(customerForm.price)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, ""); // Chỉ lấy số
+                      setCustomerForm({ ...customerForm, price: val ? Number(val) : 0 });
+                    }}
+                    placeholder="VD: 1,000,000"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end mt-4">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
+                >
+                  <Save className="w-4 h-4" /> Lưu thông tin
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Grid View Khách Hàng */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <h3 className="font-bold text-sm text-slate-700">Danh sách giao dịch khách hàng</h3>
+              <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-extrabold border border-blue-100">
+                Tổng số: {filteredCustomerTxs.length} bản ghi
+              </span>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider font-semibold">
-                    <th className="px-5 py-3">Mã hóa đơn</th>
-                    <th className="px-5 py-3">Người thanh toán</th>
-                    <th className="px-5 py-3">Dịch vụ thụ hưởng</th>
-                    <th className="px-5 py-3">Ngày xuất hóa đơn</th>
-                    <th className="px-5 py-3 text-right">Tổng thành tiền</th>
-                    <th className="px-5 py-3 text-center">Trạng thái quỹ</th>
-                    <th className="px-5 py-3 text-right">Hành động thu phí</th>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase font-bold tracking-wider">
+                    <th className="px-4 py-3">STT</th>
+                    <th className="px-4 py-3">Ngày</th>
+                    <th className="px-4 py-3">Mã hóa đơn</th>
+                    <th className="px-4 py-3">Tên khách hàng</th>
+                    <th className="px-4 py-3">Mã vắc xin</th>
+                    <th className="px-4 py-3 text-center">Số lượng</th>
+                    <th className="px-4 py-3 text-right">Giá</th>
+                    <th className="px-4 py-3 text-right">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700 text-sm">
-                  {filteredInvoices.length > 0 ? (
-                    filteredInvoices.map((inv) => (
-                      <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-5 py-3.5 font-mono text-xs font-bold text-slate-400">{inv.id}</td>
-                        <td className="px-5 py-3.5">
-                          <div className="font-semibold text-slate-800">{inv.customerName}</div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">SĐT: 090XXXXX</div>
-                        </td>
-                        <td className="px-5 py-3.5 font-medium text-slate-600">{inv.vaccineName}</td>
-                        <td className="px-5 py-3.5 text-xs text-slate-400 font-mono">{inv.date}</td>
-                        <td className="px-5 py-3.5 text-right font-extrabold text-blue-600 font-sans">
-                          {inv.totalAmount.toLocaleString()} ₫
-                        </td>
-                        <td className="px-5 py-3.5 text-center">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold leading-none ${
-                              inv.status === 'Đã thanh toán'
-                                ? 'bg-emerald-50 text-emerald-800 border border-emerald-100'
-                                : 'bg-red-50 text-red-800 border border-red-100 animate-pulse'
-                            }`}
+                <tbody className="divide-y divide-slate-100">
+                  {filteredCustomerTxs.length > 0 ? (
+                    filteredCustomerTxs.map((tx, idx) => (
+                      <tr key={tx.id} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3.5 text-xs text-slate-500 font-bold">{idx + 1}</td>
+                        <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">{tx.date}</td>
+                        <td className="px-4 py-3.5 text-xs font-bold text-blue-600 font-mono">{tx.id}</td>
+                        <td className="px-4 py-3.5 text-sm font-semibold text-slate-800">{tx.customerName}</td>
+                        <td className="px-4 py-3.5 text-xs text-slate-600">{tx.vaccineCode}</td>
+                        <td className="px-4 py-3.5 text-sm text-center font-bold text-slate-700">{tx.quantity}</td>
+                        <td className="px-4 py-3.5 text-sm text-right font-extrabold text-slate-800">{tx.price.toLocaleString()} VNĐ</td>
+                        <td className="px-4 py-3.5 text-right space-x-2">
+                          <button
+                            onClick={() => handleEditCustomer(tx)}
+                            className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded transition-colors"
+                            title="Edit"
                           >
-                            ● {inv.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 text-right">
-                          {inv.status === 'Chờ thanh toán' ? (
-                            <button
-                              onClick={() => handlePayInvoice(inv.id)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-emerald-700 transition-colors shadow-sm cursor-pointer"
-                            >
-                              Duyệt thanh toán
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-400 font-semibold italic flex items-center justify-end gap-1.5">
-                              <Check className="w-4 h-4 text-emerald-500" /> Đã kết sổ quỹ
-                            </span>
-                          )}
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCustomer(tx.id)}
+                            className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-5 py-10 text-center text-slate-400">
-                        Không tìm thấy hóa đơn nào trùng khớp với từ khóa tìm kiếm.
+                      <td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-xs">
+                        Không có dữ liệu giao dịch.
                       </td>
                     </tr>
                   )}
@@ -253,135 +632,349 @@ export default function FinanceModule({
         </div>
       )}
 
-      {activeTab === 'charts' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
-          {/* Revenue column chart SVG */}
-          <div className="lg:col-span-7 bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1">
-                <BarChart2 className="w-5 h-5 text-blue-600" /> Thống kê doanh thu theo tháng (2026)
-              </h3>
-              <span className="text-xs text-slate-400">Chỉ số: Triệu VND</span>
+      {/* ========================================================================= */}
+      {/* TAB 2: GIAO DỊCH NHÀ CUNG CẤP */}
+      {/* ========================================================================= */}
+      {activeTab === "supplier_tx" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchSupplierQuery}
+                onChange={(e) => setSearchSupplierQuery(e.target.value)}
+                placeholder="Tìm kiếm giao dịch kho..."
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-100 outline-none"
+              />
             </div>
-
-            <div className="pt-4">
-              {/* Custom SVG Column Chart representing revenue performance */}
-              <div className="relative h-64 w-full flex items-end justify-between px-4 pb-6 border-b border-l border-slate-200 mt-2">
-                {[
-                  { m: 'T1', key: 120, h: 'h-[40%]', val: 120 },
-                  { m: 'T2', key: 190, h: 'h-[65%]', val: 190 },
-                  { m: 'T3', key: 240, h: 'h-[80%]', val: 240 },
-                  { m: 'T4', key: 310, h: 'h-[95%]', val: 310 },
-                  { m: 'T5', key: 280, h: 'h-[88%]', val: 280 },
-                  { m: 'T6', key: 342, h: 'h-[100%]', val: 342 },
-                ].map((col, idx) => (
-                  <div key={idx} className="flex flex-col items-center flex-1 group relative">
-                    <span className="absolute -top-6 text-[10px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {col.val}M
-                    </span>
-                    <div className={`${col.h} w-10 sm:w-12 bg-gradient-to-t from-blue-600 to-indigo-500 rounded-t-lg shadow-md hover:from-blue-500 hover:to-indigo-400 transition-all cursor-all-scroll`}></div>
-                    <span className="text-xs font-semibold text-slate-500 mt-2">{col.m}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <p className="text-xs text-slate-400 italic text-center mt-2">
-              📊 Biểu đồ cột thể hiện mức tăng trưởng liên tiếp nhờ kết nối hiệu quả của phân hệ dịch vụ cao cấp.
-            </p>
+            <button
+              onClick={() => {
+                resetSupplierForm();
+                setShowSupplierForm(true);
+              }}
+              className="bg-emerald-600 text-white text-xs font-semibold px-4 py-2.5 rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-1 cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" /> Tạo giao dịch nhập mới
+            </button>
           </div>
 
-          {/* Market Share distribution vaccine */}
-          <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1">
-                <PieChart className="w-5 h-5 text-purple-600" /> Phân bổ thị phần vaccine yêu cầu
+          {/* Form Thêm/Sửa Nhà Cung Cấp */}
+          {showSupplierForm && (
+            <form
+              onSubmit={handleSaveSupplier}
+              className="bg-emerald-50/40 p-5 rounded-xl border border-emerald-200 shadow-sm animate-fade-in relative"
+            >
+              <button type="button" onClick={resetSupplierForm} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
+              </button>
+              <h3 className="text-sm font-bold text-emerald-800 mb-4 flex items-center gap-2">
+                <Edit className="w-4 h-4" /> {editingSupplierTxId ? "Chỉnh sửa Giao dịch NCC" : "Thêm mới Giao dịch NCC"}
               </h3>
-            </div>
 
-            <div className="space-y-4 pt-2">
-              {[
-                { name: 'Sởi - Sởi, Quai Bị, Rubella (MMR II)', rate: '42%', color: 'bg-blue-600' },
-                { name: 'Phế Cầu - Synflorix Bỉ', rate: '28%', color: 'bg-emerald-500' },
-                { name: 'Bạch Hầu, Ho Gà, Uốn Ván - Infanrix Hexa', rate: '20%', color: 'bg-purple-500' },
-                { name: 'Các vắc-xin dịch vụ đơn lẻ khác', rate: '10%', color: 'bg-slate-400' },
-              ].map((share, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-700 truncate max-w-xs">{share.name}</span>
-                    <span className="text-slate-900">{share.rate}</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                    <div className={`${share.color} h-full`} style={{ width: share.rate }}></div>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Mã hóa đơn nhập <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    disabled={!!editingSupplierTxId}
+                    value={supplierForm.id}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, id: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-500"
+                  />
                 </div>
-              ))}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Ngày nhập <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={supplierForm.date}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nhà cung cấp <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={supplierForm.supplierName}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, supplierName: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Mã vắc xin nhập</label>
+                  <input
+                    type="text"
+                    required
+                    value={supplierForm.vaccineCode}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, vaccineCode: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Số lượng</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={supplierForm.quantity}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, quantity: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Giá (VND)</label>
+                  <input
+                    type="text"
+                    required
+                    value={formatCurrencyInput(supplierForm.price)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "");
+                      setSupplierForm({ ...supplierForm, price: val ? Number(val) : 0 });
+                    }}
+                    placeholder="VD: 1,000,000"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end mt-4">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-emerald-700 flex items-center gap-1.5 transition-colors"
+                >
+                  <Save className="w-4 h-4" /> Lưu thông tin
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Grid View Nhà Cung Cấp */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <h3 className="font-bold text-sm text-slate-700">Danh sách giao dịch nhập vắc-xin</h3>
+              <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-extrabold border border-emerald-100">
+                Tổng số: {filteredSupplierTxs.length} bản ghi
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase font-bold tracking-wider">
+                    <th className="px-4 py-3">STT</th>
+                    <th className="px-4 py-3">Ngày</th>
+                    <th className="px-4 py-3">Mã hóa đơn</th>
+                    <th className="px-4 py-3">Nhà cung cấp</th>
+                    <th className="px-4 py-3">Mã vắc xin</th>
+                    <th className="px-4 py-3 text-center">Số lượng</th>
+                    <th className="px-4 py-3 text-right">Giá</th>
+                    <th className="px-4 py-3 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredSupplierTxs.length > 0 ? (
+                    filteredSupplierTxs.map((tx, idx) => (
+                      <tr key={tx.id} className="hover:bg-slate-50/50">
+                        <td className="px-4 py-3.5 text-xs text-slate-500 font-bold">{idx + 1}</td>
+                        <td className="px-4 py-3.5 text-xs text-slate-600 font-mono">{tx.date}</td>
+                        <td className="px-4 py-3.5 text-xs font-bold text-emerald-600 font-mono">{tx.id}</td>
+                        <td className="px-4 py-3.5 text-sm font-semibold text-slate-800">{tx.supplierName}</td>
+                        <td className="px-4 py-3.5 text-xs text-slate-600">{tx.vaccineCode}</td>
+                        <td className="px-4 py-3.5 text-sm text-center font-bold text-slate-700">{tx.quantity}</td>
+                        <td className="px-4 py-3.5 text-sm text-right font-extrabold text-slate-800">{tx.price.toLocaleString()} VNĐ</td>
+                        <td className="px-4 py-3.5 text-right space-x-2">
+                          <button
+                            onClick={() => handleEditSupplier(tx)}
+                            className="text-emerald-600 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSupplier(tx.id)}
+                            className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-slate-400 text-xs">
+                        Không có dữ liệu giao dịch nhập kho.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'pricing' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6 animate-fade-in">
-          <div className="border-b border-slate-100 pb-3">
-            <h3 className="text-base font-bold text-slate-800">Cấu hình tham số phụ tội dịch vụ tiêm</h3>
-            <p className="text-xs text-slate-500 mt-1">Định chất bán lẻ dịch vụ bằng thuốc nhập cộng thêm chi phí bảo dông lạnh nghiêm ngặt GSP và công khám.</p>
+      {/* ========================================================================= */}
+      {/* TAB 3: QUẢN LÝ GIÁ VẮC XIN TỪ DB - Responsive table-fixed */}
+      {/* ========================================================================= */}
+      {activeTab === "pricing" && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchPriceQuery}
+                onChange={(e) => setSearchPriceQuery(e.target.value)}
+                placeholder="Tìm kiếm theo Mã vắc xin, Tên vắc-xin..."
+                className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-amber-100 outline-none"
+              />
+            </div>
           </div>
 
-          <form onSubmit={handleApplyFees} className="grid grid-cols-1 md:grid-cols-3 gap-4 border-b border-slate-100 pb-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Phí bảo quản âm lạnh GSP (VND)</label>
-              <input
-                type="number"
-                value={preservationFee}
-                onChange={(e) => setPreservationFee(Number(e.target.value))}
-                className="w-full border border-slate-200 rounded-lg p-2 text-sm outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Công bác sĩ khám lâm sàng (VND)</label>
-              <input
-                type="number"
-                value={laborFee}
-                onChange={(e) => setLaborFee(Number(e.target.value))}
-                className="w-full border border-slate-200 rounded-lg p-2 text-sm outline-none"
-              />
-            </div>
-            <div className="flex items-end shadow-none">
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-4 py-2 rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
-              >
-                <Sliders className="w-4 h-4" /> Đồng bộ định giá
+          {/* Form Chỉnh Sửa Giá Vắc Xin */}
+          {showPriceForm && (
+            <form onSubmit={handleSavePrice} className="bg-amber-50/40 p-5 rounded-xl border border-amber-200 shadow-sm animate-fade-in relative">
+              <button type="button" onClick={resetPriceForm} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1">
+                <X className="w-5 h-5" />
               </button>
-            </div>
-          </form>
+              <h3 className="text-sm font-bold text-amber-800 mb-4 flex items-center gap-2">
+                <Tag className="w-4 h-4" /> Chỉnh sửa Thiết lập Giá Vắc xin
+              </h3>
 
-          <div>
-            <h4 className="text-sm font-bold text-slate-800 mb-2.5">Simulate: Giả lập đối chiếu bảng giá bán lẻ chính chức</h4>
-            <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
-              <table className="w-full text-left text-sm border-collapse">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Mã vắc xin <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={`VX${String(priceForm.id).padStart(3, "0")}`}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono outline-none bg-slate-100 text-slate-500 cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Tên vắc xin</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={priceForm.name}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none bg-slate-100 text-slate-600 cursor-not-allowed"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Đơn vị (Hàm lượng) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={priceForm.dosage}
+                    onChange={(e) => setPriceForm({ ...priceForm, dosage: e.target.value })}
+                    placeholder="VD: 0.5 ml"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Đơn giá (VND) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={formatCurrencyInput(priceForm.price)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, ""); // Xóa chữ cái
+                      setPriceForm({ ...priceForm, price: val ? Number(val) : 0 });
+                    }}
+                    placeholder="VD: 1,000,000"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-amber-500 font-bold text-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end mt-4">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-amber-700 flex items-center gap-1.5 transition-colors"
+                >
+                  <Save className="w-4 h-4" /> Cập nhật lên CSDL
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Grid View Quản lý Giá (Responsive 12-inch friendly) */}
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            {/* ĐÃ THÊM HEADER VÀ TỔNG SỐ BẢN GHI CHO TAB 3 */}
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <h3 className="font-bold text-sm text-slate-700">Danh sách vắc xin</h3>
+              <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-xs font-extrabold border border-amber-100">
+                Tổng số: {filteredPrices.length} bản ghi
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse table-fixed">
                 <thead>
-                  <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-500 text-xs font-semibold">
-                    <th className="px-4 py-2.5">Vaccine</th>
-                    <th className="px-4 py-2.5">Giá gốc (Pháp/Bỉ)</th>
-                    <th className="px-4 py-2.5">Hào tổn GSP (+{preservationFee.toLocaleString()}₫)</th>
-                    <th className="px-4 py-2.5">Khám định kỳ (+{laborFee.toLocaleString()}₫)</th>
-                    <th className="px-4 py-2.5 text-right font-bold text-blue-700">Retail Giá Bán Lẻ (VND)</th>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase font-bold tracking-wider">
+                    <th className="px-2 sm:px-3 py-3 w-[5%] text-center">STT</th>
+                    <th className="px-2 sm:px-3 py-3 w-[12%]">Mã vắc xin</th>
+                    <th className="px-2 sm:px-3 py-3 w-[30%]">Tên vắc xin</th>
+                    <th className="px-2 sm:px-3 py-3 w-[15%] text-center">Hàm lượng</th>
+                    <th className="px-2 sm:px-3 py-3 w-[12%] text-center">Hạn SD</th>
+                    <th className="px-2 sm:px-3 py-3 w-[15%] text-right">Đơn giá (VND)</th>
+                    <th className="px-2 sm:px-3 py-3 w-[11%] text-center">Thao tác</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-xs">
-                  {vaccines.map((v) => (
-                    <tr key={v.id}>
-                      <td className="px-4 py-3 font-semibold text-slate-800">{v.name}</td>
-                      <td className="px-4 py-3 font-mono">{(v.sellingPrice - preservationFee - laborFee).toLocaleString()} ₫</td>
-                      <td className="px-4 py-3 font-mono text-cyan-700">{preservationFee.toLocaleString()} ₫</td>
-                      <td className="px-4 py-3 font-mono text-slate-500">{laborFee.toLocaleString()} ₫</td>
-                      <td className="px-4 py-3 text-right font-extrabold text-blue-600 font-mono italic text-sm">
-                        {v.sellingPrice.toLocaleString()} ₫
+                <tbody className="divide-y divide-slate-100">
+                  {filteredPrices.length > 0 ? (
+                    filteredPrices.map((p, idx) => (
+                      <tr key={p.id} className="hover:bg-slate-50/50">
+                        <td className="px-2 sm:px-3 py-3.5 text-xs text-slate-500 font-bold text-center break-words">{idx + 1}</td>
+                        <td className="px-2 sm:px-3 py-3.5 text-xs font-bold text-amber-600 font-mono break-words">
+                          VX{String(p.id).padStart(3, "0")}
+                        </td>
+                        <td className="px-2 sm:px-3 py-3.5 text-sm font-bold text-slate-800 break-words">{p.name}</td>
+                        <td className="px-2 sm:px-3 py-3.5 text-sm text-center font-semibold text-slate-700 break-words">{p.dosage}</td>
+                        <td className="px-2 sm:px-3 py-3.5 text-sm text-center text-slate-600 font-mono break-words">{p.year}</td>
+                        <td className="px-2 sm:px-3 py-3.5 text-sm text-right font-extrabold text-emerald-700 break-words">
+                          {p.price.toLocaleString()} VNĐ
+                        </td>
+                        <td className="px-2 sm:px-3 py-3.5 text-center flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleEditPrice(p)}
+                            className="text-amber-600 bg-amber-50 hover:bg-amber-100 p-1.5 rounded transition-colors"
+                            title="Edit"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePrice(p.id)}
+                            className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-xs">
+                        Không có dữ liệu định giá vắc xin.
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

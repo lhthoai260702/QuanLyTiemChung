@@ -12,11 +12,10 @@ import java.util.List;
 @Repository
 public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
-    // Áp dụng Query của bạn và chuyển đổi sang chuẩn 문 PostgreSQL, kết hợp điều kiện flag_delete (chưa xóa mềm)
     @Query(value = "SELECT " +
             "CAST(hd.MaHoaDon AS VARCHAR) AS id, " +
             "CAST(hsba.ThoiGianTiem AS VARCHAR) AS date, " +
-            "CAST(lvx.MaVacXin AS VARCHAR) AS vaccineCode, " +
+            "v.TenVacXin AS vaccineCode, " +
             "1 AS quantity, " +
             "bn.TenBenhNhan AS customerName, " +
             "hd.TongTien AS price " +
@@ -24,6 +23,7 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
             "JOIN HOADON hd ON hsba.MaHoaDon = hd.MaHoaDon " +
             "JOIN CHITIET_DK_TIEM ctdkt ON hsba.MaChiTietDKTiem = ctdkt.MaChiTietDKTiem " +
             "JOIN LOVACXIN lvx ON ctdkt.MaLo = lvx.MaLo " +
+            "JOIN VACXIN v ON lvx.MaVacXin = v.MaVacXin " +
             "JOIN BENHNHAN bn ON ctdkt.MaBenhNhan = bn.MaBenhNhan " +
             "WHERE hd.flag_delete = FALSE OR hd.flag_delete IS NULL " +
             "ORDER BY hsba.ThoiGianTiem DESC", nativeQuery = true)

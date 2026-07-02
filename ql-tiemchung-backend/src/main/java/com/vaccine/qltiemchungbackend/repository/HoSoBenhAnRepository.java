@@ -12,4 +12,7 @@ import java.util.Optional;
 public interface HoSoBenhAnRepository extends JpaRepository<HoSoBenhAn, Long> {
     @Query("SELECT h FROM HoSoBenhAn h WHERE h.chiTietDkTiem.maChiTietDkTiem = :maChiTiet")
     Optional<HoSoBenhAn> findByMaChiTietDkTiem(@Param("maChiTiet") Long maChiTiet);
+
+    @Query("SELECT h FROM HoSoBenhAn h WHERE h.maHoaDon = :maHoaDon")
+    Optional<HoSoBenhAn> findByMaHoaDon(@Param("maHoaDon") Long maHoaDon);
 }

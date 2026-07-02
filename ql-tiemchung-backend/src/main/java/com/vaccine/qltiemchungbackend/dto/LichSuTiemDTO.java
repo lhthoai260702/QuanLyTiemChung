@@ -4,11 +4,12 @@ import lombok.Data;
 
 @Data
 public class LichSuTiemDTO {
-    private Long recordId; // Thêm ID để biết đang sửa record nào
+    private Long recordId;
     private String vaccineName;
     private String date;
     private String sideEffect;
-    private String nextDose;
+    private String thoiGianTacDung;
+    private String status;
     private String place;
     private String vaccineType;
     private String dosage;

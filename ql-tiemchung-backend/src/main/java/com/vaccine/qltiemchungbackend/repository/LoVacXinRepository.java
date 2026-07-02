@@ -14,14 +14,16 @@ import java.util.Optional;
 public interface LoVacXinRepository extends JpaRepository<LoVacXin, Long> {
 
     @Query("SELECT new com.vaccine.qltiemchungbackend.dto.KhoVacXinDTO(" +
-            "l.maLo, v.tenVacXin, lv.tenLoaiVacXin, l.ngayNhan, l.giayPhep, " +
-            "l.nuocSanXuat, v.hamLuong, v.hanSuDung, v.dieuKienBaoQuan, " +
-            "v.doTuoiTiemChung, l.tinhTrang, l.soLuong) " +
+            "l.maLo, l.ngayNhan, l.giayPhep, l.nuocSanXuat, l.soLuong, l.tinhTrang, " +
+            "v.maVacXin, v.tenVacXin, lv.tenLoaiVacXin, v.hamLuong, v.hanSuDung, v.dieuKienBaoQuan, v.doTuoiTiemChung, v.donGia, " +
+            "l.maNhaCungCap, ncc.tenNhaCungCap, hd.tongTien) " +
             "FROM LoVacXin l " +
             "JOIN l.vacXin v " +
-            "JOIN v.loaiVacXin lv " +
+            "LEFT JOIN v.loaiVacXin lv " +
+            "LEFT JOIN NhaCungCap ncc ON l.maNhaCungCap = ncc.maNhaCungCap " +
+            "LEFT JOIN HoaDon hd ON l.maHoaDon = hd.maHoaDon " +
             "WHERE l.flagDelete = false AND v.flagDelete = false " +
-            "ORDER BY LOWER(v.tenVacXin) ASC")
+            "ORDER BY l.ngayNhan DESC")
     List<KhoVacXinDTO> findAllKhoVacXin();
 
     // SỬA TẠI ĐÂY: Dùng JPQL chuẩn để tránh lỗi Entity Mapping thay vì dùng nativeQuery

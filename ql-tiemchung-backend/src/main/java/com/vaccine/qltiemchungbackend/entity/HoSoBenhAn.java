@@ -17,6 +17,9 @@ public class HoSoBenhAn {
     @JoinColumn(name = "MaChiTietDKTiem")
     private ChiTietDkTiem chiTietDkTiem;
 
+    @Column(name = "MaHoaDon")
+    private Long maHoaDon;
+
     @Column(name = "PhanUngSauTiem")
     private String phanUngSauTiem;
 

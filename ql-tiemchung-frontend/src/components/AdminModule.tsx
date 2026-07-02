@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Users,
   CalendarDays,
@@ -15,6 +16,7 @@ import {
   ChevronRight,
   MessageSquare,
   Send,
+  AlertCircle,
 } from "lucide-react";
 
 // --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
@@ -82,10 +84,12 @@ interface AdminModuleProps {
 }
 
 export default function AdminModule({ triggerToast = alert }: AdminModuleProps) {
-  // THÊM TAB MỚI: feedback
   const [activeTab, setActiveTab] = useState<"schedules" | "accounts" | "feedback">("accounts");
   const [searchQuery, setSearchQuery] = useState("");
   const [accounts, setAccounts] = useState<TaiKhoan[]>([]);
+
+  // --- STATE CHO POPUP XÓA ---
+  const [itemToDelete, setItemToDelete] = useState<{ id: string | number; type: "account" | "schedule"; name?: string } | null>(null);
 
   // --- STATE CHO TAB PHẢN HỒI CẤP CAO ---
   const [ticketsList, setTicketsList] = useState<SupportTicket[]>([]);
@@ -172,7 +176,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   const [scheduleSearchStartDate, setScheduleSearchStartDate] = useState<string>("");
   const [scheduleSearchEndDate, setScheduleSearchEndDate] = useState<string>("");
 
-  // Logic lọc danh sách lịch tiêm theo thời gian
   const filteredSchedules = schedules.filter((s) => {
     if (!scheduleSearchStartDate && !scheduleSearchEndDate) return true;
 
@@ -204,29 +207,14 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (schedules.length > 0 && !selectedSchedule) setSelectedSchedule(schedules[0]);
   }, [schedules, selectedSchedule]);
 
-  // --- STATE QUẢN LÝ CHẾ ĐỘ EDIT ---
   const [editingAccountId, setEditingAccountId] = useState<number | string | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
-  // --- FORM STATE TÀI KHOẢN ---
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [accForm, setAccForm] = useState({
-    tenDangNhap: "",
-    matKhau: "",
-    maQuyen: 5,
-    hoTen: "",
-    cmnd: "",
-    noiO: "",
-    moTa: "",
-    email: "",
-    namSinh: "",
-    sdt: "",
-    ngaySinh: "",
-    diaChi: "",
-    nguoiGiamHo: "",
-    gioiTinh: "Nam",
+    tenDangNhap: "", matKhau: "", maQuyen: 5, hoTen: "", cmnd: "", noiO: "", moTa: "",
+    email: "", namSinh: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
   });
-
   const [accErrors, setAccErrors] = useState<Record<string, string>>({});
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -263,18 +251,13 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (name.includes("hỗ trợ")) return "bg-violet-50 text-violet-700 border-violet-200";
     if (name.includes("y tế")) return "bg-blue-50 text-blue-700 border-blue-200";
     if (name.includes("khách")) return "bg-slate-100 text-slate-700 border-slate-300";
-    if (name.includes(",")) return "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200";
     return "bg-gray-100 text-gray-600 border-gray-200";
   };
 
   const ROLE_TABS = [
-    { id: "all", label: "Tất cả" },
-    { id: "admin", label: "Admin" },
-    { id: "y tế", label: "Y Tế" },
-    { id: "kho", label: "Thủ Kho" },
-    { id: "tài chính", label: "Tài Chính" },
-    { id: "hỗ trợ", label: "Hỗ Trợ" },
-    { id: "khách", label: "Khách Hàng" },
+    { id: "all", label: "Tất cả" }, { id: "admin", label: "Admin" }, { id: "y tế", label: "Y Tế" },
+    { id: "kho", label: "Thủ Kho" }, { id: "tài chính", label: "Tài Chính" },
+    { id: "hỗ trợ", label: "Hỗ Trợ" }, { id: "khách", label: "Khách Hàng" },
   ];
 
   const checkRoleMatch = (phanQuyenStr: string | undefined, filterId: string) => {
@@ -307,19 +290,10 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE) || 1;
   const currentAccounts = filteredAccounts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-  // --- FORM STATE LỊCH TIÊM ---
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
-    dateInput: "",
-    thoiGian: "",
-    maLoaiVacXin: 0,
-    loaiVacXinName: "",
-    maVacXin: 0,
-    soLuong: 0,
-    doTuoi: "",
-    diaDiem: "",
-    ghiChu: "",
-    selectedDoctors: [] as string[],
+    dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
+    soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [] as string[],
   });
 
   const [vaccineTypes, setVaccineTypes] = useState<{ maLoaiVacXin: number; tenLoaiVacXin: string }[]>([]);
@@ -329,24 +303,19 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     try {
       const res = await fetch("http://localhost:8080/api/admin/vaccine-types");
       if (res.ok) setVaccineTypes(await res.json());
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const fetchVaccinesList = async () => {
     try {
       const res = await fetch("http://localhost:8080/api/customer/vaccines");
       if (res.ok) setVaccinesList(await res.json());
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   useEffect(() => {
     if (activeTab === "schedules") {
-      fetchVaccineTypes();
-      fetchVaccinesList();
+      fetchVaccineTypes(); fetchVaccinesList();
     }
   }, [activeTab]);
 
@@ -357,7 +326,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (selectedVac) {
       const typeObj = vaccineTypes.find((t) => t.tenLoaiVacXin === selectedVac.loaiVacXin);
       const newMaLoaiVacXin = typeObj ? typeObj.maLoaiVacXin : 0;
-
       setScheduleForm({
         ...scheduleForm,
         maVacXin: selectedMaVacXin,
@@ -366,97 +334,83 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         doTuoi: selectedVac.doTuoiTiemChung || scheduleForm.doTuoi,
       });
     } else {
-      setScheduleForm({
-        ...scheduleForm,
-        maVacXin: 0,
-        maLoaiVacXin: 0,
-        loaiVacXinName: "",
-      });
+      setScheduleForm({ ...scheduleForm, maVacXin: 0, maLoaiVacXin: 0, loaiVacXinName: "" });
     }
-
-    setScheduleErrors({
-      ...scheduleErrors,
-      maVacXin: "",
-    });
+    setScheduleErrors({ ...scheduleErrors, maVacXin: "" });
   };
 
   const toggleDoctor = (doctorName: string) => {
     setScheduleForm((prev) => {
       const exists = prev.selectedDoctors.includes(doctorName);
-      if (exists)
-        return {
-          ...prev,
-          selectedDoctors: prev.selectedDoctors.filter((d) => d !== doctorName),
-        };
-      return {
-        ...prev,
-        selectedDoctors: [...prev.selectedDoctors, doctorName],
-      };
+      if (exists) return { ...prev, selectedDoctors: prev.selectedDoctors.filter((d) => d !== doctorName) };
+      return { ...prev, selectedDoctors: [...prev.selectedDoctors, doctorName] };
     });
   };
 
   const [scheduleErrors, setScheduleErrors] = useState<Record<string, string>>({});
-
   const handleDateChange = (dateStr: string) => setScheduleForm({ ...scheduleForm, dateInput: dateStr });
 
-  const handleDeleteSchedule = async (id: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn hủy / xóa lịch tiêm chủng này không?")) {
-      return;
-    }
-    const numericId = id.replace("LTC", "");
-    try {
-      const response = await fetch(`http://localhost:8080/api/admin/schedules/${numericId}`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        triggerToast("Hủy lịch tiêm chủng thành công!");
-        setSelectedSchedule(null);
-        fetchSchedules();
-      } else {
-        triggerToast("Lỗi khi thực hiện xóa lịch tiêm trên máy chủ!");
-      }
-    } catch (error) {
-      console.error("Error deleting schedule:", error);
-      triggerToast("Không thể kết nối đến máy chủ!");
-    }
+  // --- LOGIC XỬ LÝ CLICK XÓA MỞ POPUP ---
+  const handleDeleteScheduleClick = (sch: LichTiemChungSRS) => {
+    setItemToDelete({
+      id: sch.maLichTiem,
+      type: "schedule",
+      name: sch.tenVacXin || sch.loaiVacXin || sch.maLichTiem
+    });
   };
 
-  const handleDeleteAccount = async (id: number | string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa tài khoản người dùng này không?")) {
-      return;
-    }
-    try {
-      const response = await fetch(`http://localhost:8080/api/admin/accounts/${id}`, {
-        method: "DELETE",
-      });
-      if (response.ok) {
-        triggerToast("Xóa tài khoản người dùng thành công!");
-        fetchAccounts();
-      } else {
-        triggerToast("Lỗi khi thực hiện xóa tài khoản trên máy chủ!");
+  const handleDeleteAccountClick = (acc: TaiKhoan) => {
+    setItemToDelete({
+      id: acc.maTaiKhoan,
+      type: "account",
+      name: acc.tenDangNhap
+    });
+  };
+
+  const confirmDelete = async () => {
+    if (!itemToDelete) return;
+
+    if (itemToDelete.type === "schedule") {
+      const numericId = String(itemToDelete.id).replace("LTC", "");
+      try {
+        const response = await fetch(`http://localhost:8080/api/admin/schedules/${numericId}`, {
+          method: "DELETE",
+        });
+        if (response.ok) {
+          triggerToast("Hủy lịch tiêm chủng thành công!");
+          setSelectedSchedule(null);
+          fetchSchedules();
+        } else {
+          triggerToast("Lỗi khi thực hiện xóa lịch tiêm trên máy chủ!");
+        }
+      } catch (error) {
+        console.error("Error deleting schedule:", error);
+        triggerToast("Không thể kết nối đến máy chủ!");
       }
-    } catch (error) {
-      console.error("Error deleting account:", error);
-      triggerToast("Không thể kết nối đến máy chủ!");
+    } else if (itemToDelete.type === "account") {
+      try {
+        const response = await fetch(`http://localhost:8080/api/admin/accounts/${itemToDelete.id}`, {
+          method: "DELETE",
+        });
+        if (response.ok) {
+          triggerToast("Xóa tài khoản người dùng thành công!");
+          fetchAccounts();
+        } else {
+          triggerToast("Lỗi khi thực hiện xóa tài khoản trên máy chủ!");
+        }
+      } catch (error) {
+        console.error("Error deleting account:", error);
+        triggerToast("Không thể kết nối đến máy chủ!");
+      }
     }
+    
+    setItemToDelete(null); // Đóng popup dù thành công hay thất bại
   };
 
   const resetAccountForm = () => {
     setAccForm({
-      tenDangNhap: "",
-      matKhau: "",
-      maQuyen: 5,
-      hoTen: "",
-      cmnd: "",
-      noiO: "",
-      moTa: "",
-      email: "",
-      namSinh: "",
-      sdt: "",
-      ngaySinh: "",
-      diaChi: "",
-      nguoiGiamHo: "",
-      gioiTinh: "Nam",
+      tenDangNhap: "", matKhau: "", maQuyen: 5, hoTen: "", cmnd: "", noiO: "", moTa: "",
+      email: "", namSinh: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
     });
     setAccErrors({});
     setEditingAccountId(null);
@@ -465,16 +419,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const resetScheduleForm = () => {
     setScheduleForm({
-      dateInput: "",
-      thoiGian: "",
-      maLoaiVacXin: 0,
-      loaiVacXinName: "",
-      maVacXin: 0,
-      soLuong: 0,
-      doTuoi: "",
-      diaDiem: "",
-      ghiChu: "",
-      selectedDoctors: [],
+      dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
+      soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [],
     });
     setScheduleErrors({});
     setEditingScheduleId(null);
@@ -490,20 +436,10 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     }
 
     setAccForm({
-      tenDangNhap: acc.tenDangNhap,
-      matKhau: "",
-      maQuyen: acc.maQuyen || 5,
-      hoTen: acc.hoTen,
-      cmnd: acc.cmnd,
-      noiO: acc.noiO,
-      moTa: acc.moTa,
-      email: acc.email || "",
-      namSinh: acc.namSinh?.toString() || "",
-      sdt: formattedPhone,
-      ngaySinh: acc.ngaySinh || "",
-      diaChi: acc.diaChi || "",
-      nguoiGiamHo: acc.nguoiGiamHo || "",
-      gioiTinh: acc.gioiTinh || "Nam",
+      tenDangNhap: acc.tenDangNhap, matKhau: "", maQuyen: acc.maQuyen || 5, hoTen: acc.hoTen,
+      cmnd: acc.cmnd, noiO: acc.noiO, moTa: acc.moTa, email: acc.email || "",
+      namSinh: acc.namSinh?.toString() || "", sdt: formattedPhone, ngaySinh: acc.ngaySinh || "",
+      diaChi: acc.diaChi || "", nguoiGiamHo: acc.nguoiGiamHo || "", gioiTinh: acc.gioiTinh || "Nam",
     });
 
     setEditingAccountId(acc.maTaiKhoan);
@@ -512,16 +448,9 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const handleEditSchedule = (sch: LichTiemChungSRS) => {
     setScheduleForm({
-      dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`,
-      thoiGian: sch.thoiGian,
-      maLoaiVacXin: sch.maLoaiVacXin || 0,
-      loaiVacXinName: sch.loaiVacXin || "",
-      maVacXin: sch.maVacXin || 0,
-      soLuong: sch.soLuong,
-      doTuoi: sch.doTuoi,
-      diaDiem: sch.diaDiem,
-      ghiChu: sch.ghiChu,
-      selectedDoctors: sch.danhSachBacSi || [],
+      dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`, thoiGian: sch.thoiGian, maLoaiVacXin: sch.maLoaiVacXin || 0,
+      loaiVacXinName: sch.loaiVacXin || "", maVacXin: sch.maVacXin || 0, soLuong: sch.soLuong,
+      doTuoi: sch.doTuoi, diaDiem: sch.diaDiem, ghiChu: sch.ghiChu, selectedDoctors: sch.danhSachBacSi || [],
     });
     setEditingScheduleId(sch.maLichTiem);
     setShowAddSchedule(true);
@@ -529,16 +458,13 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const newErrors: Record<string, string> = {};
 
     if (!accForm.tenDangNhap.trim()) {
       newErrors.tenDangNhap = "Vui lòng nhập tên đăng nhập";
     } else if (!editingAccountId) {
       const isDuplicate = accounts.some((a) => a.tenDangNhap.toLowerCase() === accForm.tenDangNhap.trim().toLowerCase());
-      if (isDuplicate) {
-        newErrors.tenDangNhap = "Tài khoản không được trùng";
-      }
+      if (isDuplicate) newErrors.tenDangNhap = "Tài khoản không được trùng";
     }
 
     if (!editingAccountId && !accForm.matKhau) newErrors.matKhau = "Vui lòng nhập mật khẩu";
@@ -570,7 +496,6 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
     try {
       const url = editingAccountId ? `http://localhost:8080/api/admin/accounts/${editingAccountId}` : "http://localhost:8080/api/admin/accounts";
-
       const response = await fetch(url, {
         method: editingAccountId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -585,42 +510,29 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         triggerToast("Lỗi khi lưu tài khoản trên máy chủ!");
       }
     } catch (error) {
-      console.error(error);
-      triggerToast("Lỗi kết nối đến máy chủ!");
+      console.error(error); triggerToast("Lỗi kết nối đến máy chủ!");
     }
   };
 
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const newErrors: Record<string, string> = {};
     if (!scheduleForm.dateInput) newErrors.dateInput = "Vui lòng chọn ngày tiêm";
     if (!scheduleForm.thoiGian.trim()) newErrors.thoiGian = "Vui lòng nhập thời gian tiêm";
     if (!scheduleForm.maVacXin) newErrors.maVacXin = "Vui lòng chọn tên vắc xin";
-    if (!scheduleForm.soLuong) {
-      newErrors.soLuong = "Vui lòng nhập số lượng";
-    } else if (scheduleForm.soLuong <= 0) {
-      newErrors.soLuong = "Số lượng phải lớn hơn 0";
-    }
+    if (!scheduleForm.soLuong) { newErrors.soLuong = "Vui lòng nhập số lượng"; } 
+    else if (scheduleForm.soLuong <= 0) { newErrors.soLuong = "Số lượng phải lớn hơn 0"; }
     if (!scheduleForm.doTuoi.trim()) newErrors.doTuoi = "Vui lòng nhập độ tuổi khuyên dùng";
     if (!scheduleForm.diaDiem.trim()) newErrors.diaDiem = "Vui lòng nhập địa điểm tổ chức";
 
     if (Object.keys(newErrors).length > 0) {
-      setScheduleErrors(newErrors);
-      triggerToast("Vui lòng kiểm tra lại các trường bị lỗi viền đỏ.");
-      return;
+      setScheduleErrors(newErrors); triggerToast("Vui lòng kiểm tra lại các trường bị lỗi viền đỏ."); return;
     }
 
     const payload = {
-      dateInput: scheduleForm.dateInput,
-      thoiGian: scheduleForm.thoiGian,
-      maLoaiVacXin: scheduleForm.maLoaiVacXin,
-      maVacXin: scheduleForm.maVacXin,
-      soLuong: Number(scheduleForm.soLuong),
-      doTuoi: scheduleForm.doTuoi,
-      diaDiem: scheduleForm.diaDiem,
-      ghiChu: scheduleForm.ghiChu,
-      selectedDoctors: scheduleForm.selectedDoctors,
+      dateInput: scheduleForm.dateInput, thoiGian: scheduleForm.thoiGian, maLoaiVacXin: scheduleForm.maLoaiVacXin,
+      maVacXin: scheduleForm.maVacXin, soLuong: Number(scheduleForm.soLuong), doTuoi: scheduleForm.doTuoi,
+      diaDiem: scheduleForm.diaDiem, ghiChu: scheduleForm.ghiChu, selectedDoctors: scheduleForm.selectedDoctors,
     };
 
     try {
@@ -636,28 +548,19 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
       if (response.ok) {
         triggerToast(editingScheduleId ? "Cập nhật lịch tiêm thành công!" : "Tạo lịch tiêm mới thành công!");
-        fetchSchedules();
-        resetScheduleForm();
-      } else {
-        triggerToast("Lỗi khi lưu lịch tiêm trên máy chủ!");
-      }
+        fetchSchedules(); resetScheduleForm();
+      } else { triggerToast("Lỗi khi lưu lịch tiêm trên máy chủ!"); }
     } catch (error) {
-      console.error(error);
-      triggerToast("Lỗi kết nối đến máy chủ!");
+      console.error(error); triggerToast("Lỗi kết nối đến máy chủ!");
     }
   };
 
-  // --- HANDLERS CHO PHẢN HỒI CẤP CAO ---
   const selectTicketForProcessing = (t: SupportTicket) => {
-    setSelectedTicket(t);
-    setTicketResponse(t.responseText || "");
-    setTicketErrors({});
+    setSelectedTicket(t); setTicketResponse(t.responseText || ""); setTicketErrors({});
   };
 
   const handleCancelTicket = () => {
-    setSelectedTicket(null);
-    setTicketResponse("");
-    setTicketErrors({});
+    setSelectedTicket(null); setTicketResponse(""); setTicketErrors({});
   };
 
   const handleProcessTicket = async (e: React.FormEvent) => {
@@ -665,45 +568,33 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (!selectedTicket) return;
 
     const errors: Record<string, string> = {};
-    if (!ticketResponse.trim()) {
-      errors.response = "Bắt buộc nhập nội dung trả lời";
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setTicketErrors(errors);
-      return;
-    }
+    if (!ticketResponse.trim()) { errors.response = "Bắt buộc nhập nội dung trả lời"; }
+    if (Object.keys(errors).length > 0) { setTicketErrors(errors); return; }
 
     try {
       const rawId = String(selectedTicket.id).replace("PHCC-", "");
       const res = await fetch(`http://localhost:8080/api/customer/admin/feedback/high-level/resolve/${rawId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ normalContent: ticketResponse }), // Tái sử dụng field này theo API
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ normalContent: ticketResponse }),
       });
 
       if (res.ok) {
         triggerToast("Đã gửi câu trả lời thành công!");
-        setSelectedTicket(null);
-        fetchHighLevelTickets();
-      } else {
-        triggerToast("Lỗi gửi phản hồi.");
-      }
-    } catch (err) {
-      triggerToast("Lỗi kết nối máy chủ.");
-    }
+        setSelectedTicket(null); fetchHighLevelTickets();
+      } else { triggerToast("Lỗi gửi phản hồi."); }
+    } catch (err) { triggerToast("Lỗi kết nối máy chủ."); }
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in relative h-full flex flex-col">
       {/* Header Module */}
-      <div>
+      <div className="shrink-0">
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">👑 Phân hệ Ban Quản Trị Hệ Thống (Admin)</h2>
         <p className="text-sm text-slate-500 mt-1">Quản lý và điều chỉnh định mức danh mục hệ thống theo SRS V3.0.</p>
       </div>
 
       {/* Tabs Menu */}
-      <div className="border-b border-slate-200 flex space-x-2">
+      <div className="border-b border-slate-200 flex space-x-2 shrink-0">
         <button
           onClick={() => setActiveTab("accounts")}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "accounts" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
@@ -726,8 +617,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
       {/* ========================================= TAB: USER ACCOUNT ========================================= */}
       {activeTab === "accounts" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2">
+        <div className="space-y-4 flex-1 flex flex-col min-h-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 shrink-0">
             <div className="flex-1 flex gap-2">
               <select
                 value={roleFilter}
@@ -767,7 +658,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
             <form
               onSubmit={handleSaveAccount}
               noValidate
-              className="bg-slate-50 p-6 rounded-xl border border-blue-200 space-y-4 shadow-sm animate-fade-in ring-1 ring-blue-50"
+              className="bg-slate-50 p-6 rounded-xl border border-blue-200 space-y-4 shadow-sm animate-fade-in ring-1 ring-blue-50 shrink-0"
             >
               <div className="flex justify-between items-center border-b border-slate-200 pb-2">
                 <div className="flex items-center gap-2">
@@ -793,14 +684,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       disabled={!!editingAccountId}
                       value={accForm.tenDangNhap}
                       onChange={(e) => {
-                        setAccForm({
-                          ...accForm,
-                          tenDangNhap: e.target.value,
-                        });
-                        setAccErrors({
-                          ...accErrors,
-                          tenDangNhap: "",
-                        });
+                        setAccForm({ ...accForm, tenDangNhap: e.target.value });
+                        setAccErrors({ ...accErrors, tenDangNhap: "" });
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.tenDangNhap ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"} disabled:bg-slate-100 disabled:border-slate-200`}
                     />
@@ -815,14 +700,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       maxLength={20}
                       value={accForm.matKhau}
                       onChange={(e) => {
-                        setAccForm({
-                          ...accForm,
-                          matKhau: e.target.value,
-                        });
-                        setAccErrors({
-                          ...accErrors,
-                          matKhau: "",
-                        });
+                        setAccForm({ ...accForm, matKhau: e.target.value });
+                        setAccErrors({ ...accErrors, matKhau: "" });
                       }}
                       placeholder={editingAccountId ? "Bỏ trống nếu không đổi mật khẩu" : "Nhập mật khẩu..."}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.matKhau ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
@@ -835,12 +714,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                     </label>
                     <select
                       value={accForm.maQuyen}
-                      onChange={(e) =>
-                        setAccForm({
-                          ...accForm,
-                          maQuyen: Number(e.target.value),
-                        })
-                      }
+                      onChange={(e) => setAccForm({ ...accForm, maQuyen: Number(e.target.value) })}
                       className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 cursor-pointer"
                     >
                       <option value={1}>Administrator</option>
@@ -857,12 +731,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       type="email"
                       maxLength={255}
                       value={accForm.email}
-                      onChange={(e) =>
-                        setAccForm({
-                          ...accForm,
-                          email: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setAccForm({ ...accForm, email: e.target.value })}
                       className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                     />
                   </div>
@@ -877,14 +746,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       maxLength={50}
                       value={accForm.hoTen}
                       onChange={(e) => {
-                        setAccForm({
-                          ...accForm,
-                          hoTen: e.target.value,
-                        });
-                        setAccErrors({
-                          ...accErrors,
-                          hoTen: "",
-                        });
+                        setAccForm({ ...accForm, hoTen: e.target.value });
+                        setAccErrors({ ...accErrors, hoTen: "" });
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.hoTen ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
@@ -909,12 +772,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       type="text"
                       maxLength={255}
                       value={accForm.noiO}
-                      onChange={(e) =>
-                        setAccForm({
-                          ...accForm,
-                          noiO: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setAccForm({ ...accForm, noiO: e.target.value })}
                       className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                     />
                   </div>
@@ -949,14 +807,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                           type="date"
                           value={accForm.ngaySinh}
                           onChange={(e) => {
-                            setAccForm({
-                              ...accForm,
-                              ngaySinh: e.target.value,
-                            });
-                            setAccErrors({
-                              ...accErrors,
-                              ngaySinh: "",
-                            });
+                            setAccForm({ ...accForm, ngaySinh: e.target.value });
+                            setAccErrors({ ...accErrors, ngaySinh: "" });
                           }}
                           className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.ngaySinh ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                         />
@@ -968,12 +820,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                         </label>
                         <select
                           value={accForm.gioiTinh}
-                          onChange={(e) =>
-                            setAccForm({
-                              ...accForm,
-                              gioiTinh: e.target.value,
-                            })
-                          }
+                          onChange={(e) => setAccForm({ ...accForm, gioiTinh: e.target.value })}
                           className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500 cursor-pointer"
                         >
                           <option value="Nam">Nam</option>
@@ -986,12 +833,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                           type="text"
                           maxLength={255}
                           value={accForm.nguoiGiamHo}
-                          onChange={(e) =>
-                            setAccForm({
-                              ...accForm,
-                              nguoiGiamHo: e.target.value,
-                            })
-                          }
+                          onChange={(e) => setAccForm({ ...accForm, nguoiGiamHo: e.target.value })}
                           className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                         />
                       </div>
@@ -1001,12 +843,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                           type="text"
                           maxLength={255}
                           value={accForm.diaChi}
-                          onChange={(e) =>
-                            setAccForm({
-                              ...accForm,
-                              diaChi: e.target.value,
-                            })
-                          }
+                          onChange={(e) => setAccForm({ ...accForm, diaChi: e.target.value })}
                           className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
                         />
                       </div>
@@ -1032,12 +869,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                   <label className="block text-xs font-bold text-slate-600 mb-1">Mô tả (Notes)</label>
                   <textarea
                     value={accForm.moTa}
-                    onChange={(e) =>
-                      setAccForm({
-                        ...accForm,
-                        moTa: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setAccForm({ ...accForm, moTa: e.target.value })}
                     className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none h-16 text-slate-700 font-sans resize-none focus:border-blue-500"
                   ></textarea>
                 </div>
@@ -1061,53 +893,53 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
             </form>
           )}
 
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs mt-4 flex flex-col">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse table-fixed min-w-[600px]">
-                <thead>
-                  <tr className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider">
-                    <th className="px-3 py-3 w-[15%]">Tài khoản</th>
-                    <th className="px-3 py-3 w-[30%]">Họ và Tên</th>
-                    <th className="px-3 py-3 w-[25%]">Phân Quyền</th>
-                    <th className="px-3 py-3 w-[15%]">Điện thoại</th>
-                    <th className="px-3 py-3 w-[15%] text-right">Thao tác</th>
+          <div className="bg-white rounded-xl border border-slate-200 shadow-xs flex flex-col flex-1 overflow-hidden">
+            <div className="overflow-y-auto overflow-x-auto flex-1">
+              <table className="w-full text-left text-xs border-collapse table-fixed min-w-[800px]">
+                <thead className="sticky top-0 bg-slate-50 z-10 shadow-sm">
+                  <tr className="text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider">
+                    <th className="px-4 py-3.5 w-[20%]">Tài khoản</th>
+                    <th className="px-4 py-3.5 w-[30%]">Họ và Tên</th>
+                    <th className="px-4 py-3.5 w-[20%]">Phân Quyền</th>
+                    <th className="px-4 py-3.5 w-[15%]">Điện thoại</th>
+                    <th className="px-4 py-3.5 w-[15%] text-right">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {currentAccounts.length > 0 ? (
                     currentAccounts.map((a) => (
                       <tr key={a.maTaiKhoan} className="hover:bg-slate-50/50">
-                        <td className="px-3 py-3 font-semibold text-blue-600 truncate" title={a.tenDangNhap}>
+                        <td className="px-4 py-4 font-semibold text-blue-600 truncate" title={a.tenDangNhap}>
                           {a.tenDangNhap}
                         </td>
-                        <td className="px-3 py-3 font-bold text-slate-800 break-words">{a.hoTen}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-4 py-4 font-bold text-slate-800 break-words">{a.hoTen}</td>
+                        <td className="px-4 py-4">
                           <span
-                            className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold border leading-tight ${getRoleBadgeStyle(a.phanQuyen)}`}
+                            className={`inline-block px-2 py-1 rounded text-[10px] font-bold border leading-tight ${getRoleBadgeStyle(a.phanQuyen)}`}
                           >
                             {a.phanQuyen || "Thành viên"}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-slate-500 font-mono truncate">{a.sdt ? formatDisplayPhone(a.sdt) : "Chưa cập nhật"}</td>
-                        <td className="px-3 py-3 text-right space-x-1 whitespace-nowrap">
+                        <td className="px-4 py-4 text-slate-500 font-mono truncate">{a.sdt ? formatDisplayPhone(a.sdt) : "Chưa cập nhật"}</td>
+                        <td className="px-4 py-4 text-right space-x-2 whitespace-nowrap">
                           <button
                             onClick={() => handleEditAccount(a)}
                             className="text-blue-600 bg-blue-50 hover:bg-blue-100 p-1.5 rounded inline-flex items-center gap-1 font-semibold transition-colors"
                           >
-                            <Edit className="w-3.5 h-3.5" />
+                            <Edit className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDeleteAccount(a.maTaiKhoan)}
+                            onClick={() => handleDeleteAccountClick(a)}
                             className="text-red-600 bg-red-50 hover:bg-red-100 p-1.5 rounded inline-flex items-center gap-1 font-semibold transition-colors"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-slate-400 font-medium">
+                      <td colSpan={5} className="px-4 py-8 text-center text-slate-400 font-medium">
                         Không tìm thấy dữ liệu.
                       </td>
                     </tr>
@@ -1117,7 +949,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/50">
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/50 shrink-0">
                 <span className="text-[11px] font-semibold text-slate-500">
                   Đang hiển thị{" "}
                   <span className="text-slate-800">
@@ -1152,7 +984,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
       {/* ========================================= TAB: LỊCH TIÊM CHỦNG ========================================= */}
       {activeTab === "schedules" && (
-        <div className="space-y-6">
+        <div className="space-y-6 flex-1 overflow-y-auto pr-2 pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
               <Clock className="w-5 h-5 text-blue-600" /> Điều chỉnh thiết lập lịch tiêm trung tâm
@@ -1200,10 +1032,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                     value={scheduleForm.dateInput}
                     onChange={(e) => {
                       handleDateChange(e.target.value);
-                      setScheduleErrors({
-                        ...scheduleErrors,
-                        dateInput: "",
-                      });
+                      setScheduleErrors({ ...scheduleErrors, dateInput: "" });
                     }}
                     className={`w-full px-2.5 py-1.5 border rounded-md text-xs outline-none transition-colors ${scheduleErrors.dateInput ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                   />
@@ -1251,14 +1080,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       placeholder="VD: 07:30 - 11:30"
                       value={scheduleForm.thoiGian}
                       onChange={(e) => {
-                        setScheduleForm({
-                          ...scheduleForm,
-                          thoiGian: e.target.value,
-                        });
-                        setScheduleErrors({
-                          ...scheduleErrors,
-                          thoiGian: "",
-                        });
+                        setScheduleForm({ ...scheduleForm, thoiGian: e.target.value });
+                        setScheduleErrors({ ...scheduleErrors, thoiGian: "" });
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.thoiGian ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
@@ -1308,14 +1131,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       min="1"
                       value={scheduleForm.soLuong || ""}
                       onChange={(e) => {
-                        setScheduleForm({
-                          ...scheduleForm,
-                          soLuong: Number(e.target.value),
-                        });
-                        setScheduleErrors({
-                          ...scheduleErrors,
-                          soLuong: "",
-                        });
+                        setScheduleForm({ ...scheduleForm, soLuong: Number(e.target.value) });
+                        setScheduleErrors({ ...scheduleErrors, soLuong: "" });
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.soLuong ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
@@ -1330,14 +1147,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       maxLength={100}
                       value={scheduleForm.doTuoi}
                       onChange={(e) => {
-                        setScheduleForm({
-                          ...scheduleForm,
-                          doTuoi: e.target.value,
-                        });
-                        setScheduleErrors({
-                          ...scheduleErrors,
-                          doTuoi: "",
-                        });
+                        setScheduleForm({ ...scheduleForm, doTuoi: e.target.value });
+                        setScheduleErrors({ ...scheduleErrors, doTuoi: "" });
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.doTuoi ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
@@ -1352,14 +1163,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       maxLength={255}
                       value={scheduleForm.diaDiem}
                       onChange={(e) => {
-                        setScheduleForm({
-                          ...scheduleForm,
-                          diaDiem: e.target.value,
-                        });
-                        setScheduleErrors({
-                          ...scheduleErrors,
-                          diaDiem: "",
-                        });
+                        setScheduleForm({ ...scheduleForm, diaDiem: e.target.value });
+                        setScheduleErrors({ ...scheduleErrors, diaDiem: "" });
                       }}
                       className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.diaDiem ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
@@ -1399,12 +1204,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                   <textarea
                     maxLength={1000}
                     value={scheduleForm.ghiChu}
-                    onChange={(e) =>
-                      setScheduleForm({
-                        ...scheduleForm,
-                        ghiChu: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, ghiChu: e.target.value })}
                     className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs h-16 resize-none focus:border-blue-500 outline-none transition-colors"
                   ></textarea>
                 </div>
@@ -1515,7 +1315,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDeleteSchedule(selectedSchedule.maLichTiem)}
+                      onClick={() => handleDeleteScheduleClick(selectedSchedule)}
                       className="text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 text-xs font-bold transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1581,9 +1381,9 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         </div>
       )}
 
-      {/* ========================================= THÊM MỚI: TAB PHẢN HỒI CẤP CAO ========================================= */}
+      {/* ========================================= TAB PHẢN HỒI CẤP CAO ========================================= */}
       {activeTab === "feedback" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px]">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px] pb-4">
           {/* Cột trái: Danh sách phản hồi */}
           <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full">
             <div className="p-4 bg-amber-50/50 border-b border-slate-200">
@@ -1705,6 +1505,38 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
           </div>
         </div>
       )}
+
+      {/* --- CUSTOM CONFIRM DELETE POPUP DÙNG PORTAL CHUNG --- */}
+      {itemToDelete !== null &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-[90%] max-w-md p-6 space-y-4">
+              <div className="flex items-center gap-3 text-red-600 border-b border-slate-100 pb-3">
+                <AlertCircle className="w-6 h-6" />
+                <h3 className="text-lg font-bold">Xác nhận xóa dữ liệu</h3>
+              </div>
+              <p className="text-sm text-slate-600">
+                Bạn có chắc chắn muốn xóa {itemToDelete.type === "account" ? "tài khoản người dùng" : "lịch tiêm chủng"}{" "}
+                <span className="font-bold text-red-600">{itemToDelete.name}</span> khỏi hệ thống không? Dữ liệu này sẽ không thể khôi phục.
+              </p>
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  onClick={() => setItemToDelete(null)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> Xác nhận Xóa
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -3,26 +3,28 @@ package com.vaccine.qltiemchungbackend.service;
 import com.vaccine.qltiemchungbackend.dto.BenhNhanDTO;
 import com.vaccine.qltiemchungbackend.dto.LichSuTiemDTO;
 import com.vaccine.qltiemchungbackend.dto.LichSuTiemProjection;
-import com.vaccine.qltiemchungbackend.entity.BenhNhan;
-import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
-import com.vaccine.qltiemchungbackend.entity.HoSoBenhAn;
-import com.vaccine.qltiemchungbackend.repository.BenhNhanRepository;
-import com.vaccine.qltiemchungbackend.repository.ChiTietDkTiemRepository;
-import com.vaccine.qltiemchungbackend.repository.HoSoBenhAnRepository;
+import com.vaccine.qltiemchungbackend.entity.*;
+import com.vaccine.qltiemchungbackend.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.Period;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 public class BenhNhanService {
-    @Autowired private BenhNhanRepository repository;
-    @Autowired private ChiTietDkTiemRepository chiTietDkTiemRepository;
-    @Autowired private HoSoBenhAnRepository hoSoBenhAnRepository;
+    @Autowired
+    private BenhNhanRepository repository;
+    @Autowired
+    private ChiTietDkTiemRepository chiTietDkTiemRepository;
+    @Autowired
+    private HoSoBenhAnRepository hoSoBenhAnRepository;
+    @Autowired
+    private HoaDonRepository hoaDonRepository;
+    @Autowired
+    private LoVacXinRepository loVacXinRepository;
 
     public List<BenhNhanDTO> getAllPatients() {
         return repository.findByFlagDeleteFalseOrFlagDeleteIsNull().stream().map(bn -> {
@@ -36,7 +38,6 @@ public class BenhNhanService {
             dto.setPhone(bn.getSdt());
             dto.setAge(bn.getNgaySinh() != null ? Period.between(bn.getNgaySinh(), LocalDate.now()).getYears() : 0);
 
-            // Mapping từ Projection sang DTO cho Lịch sử tiêm
             List<LichSuTiemProjection> projections = repository.findLichSuTiemByMaBenhNhan(bn.getMaBenhNhan());
             List<LichSuTiemDTO> historyList = projections.stream().map(p -> {
                 LichSuTiemDTO h = new LichSuTiemDTO();
@@ -44,7 +45,8 @@ public class BenhNhanService {
                 h.setVaccineName(p.getVaccineName());
                 h.setDate(p.getDate());
                 h.setSideEffect(p.getSideEffect());
-                h.setNextDose(p.getNextDose());
+                h.setThoiGianTacDung(p.getThoiGianTacDung());
+                h.setStatus(p.getStatus());
                 return h;
             }).collect(Collectors.toList());
 
@@ -54,7 +56,6 @@ public class BenhNhanService {
     }
 
     public void updatePatient(Long id, BenhNhanDTO dto) {
-        // 1. Cập nhật thông tin cá nhân (Bảng BENHNHAN)
         BenhNhan bn = repository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy bệnh nhân"));
         bn.setTenBenhNhan(dto.getFullName());
         bn.setGioiTinh(dto.getGender());
@@ -68,23 +69,37 @@ public class BenhNhanService {
         }
         repository.save(bn);
 
-        // 2. Cập nhật thông tin Lịch sử tiêm (Bảng CHITIET_DK_TIEM & HOSOBENHAN)
         if (dto.getHistory() != null && !dto.getHistory().isEmpty()) {
             for (LichSuTiemDTO hist : dto.getHistory()) {
                 if (hist.getRecordId() != null) {
                     chiTietDkTiemRepository.findById(hist.getRecordId()).ifPresent(ct -> {
-                        // Cập nhật Ngày Tiêm / Lịch Hẹn
                         if (hist.getDate() != null && !hist.getDate().isEmpty()) {
                             ct.setThoiGianCanTiem(LocalDate.parse(hist.getDate()));
                             chiTietDkTiemRepository.save(ct);
                         }
 
-                        // Cập nhật Phản ứng sau tiêm (Nếu có nhập thì tạo hoặc update HoSoBenhAn)
-                        if (hist.getSideEffect() != null && !hist.getSideEffect().trim().isEmpty()) {
+                        if ("Đã tiêm".equals(hist.getStatus())) {
                             HoSoBenhAn hs = hoSoBenhAnRepository.findByMaChiTietDkTiem(ct.getMaChiTietDkTiem())
-                                    .orElse(new HoSoBenhAn()); // Nếu chưa có thì tạo mới
+                                    .orElse(new HoSoBenhAn());
+
+                            if (hs.getMaHoSoBenhAn() == null) {
+                                LoVacXin lo = loVacXinRepository.findById(ct.getMaLo()).orElse(null);
+                                double price = 0.0;
+                                if (lo != null && lo.getVacXin() != null && lo.getVacXin().getDonGia() != null) {
+                                    price = lo.getVacXin().getDonGia();
+                                }
+
+                                HoaDon hd = new HoaDon();
+                                hd.setTongTien(price);
+                                hd.setFlagDelete(false);
+                                hd = hoaDonRepository.save(hd);
+
+                                hs.setMaHoaDon(hd.getMaHoaDon());
+                            }
+
                             hs.setChiTietDkTiem(ct);
                             hs.setPhanUngSauTiem(hist.getSideEffect());
+                            hs.setThoiGianTacDung(hist.getThoiGianTacDung());
                             if (hist.getDate() != null && !hist.getDate().isEmpty()) {
                                 hs.setThoiGianTiem(LocalDate.parse(hist.getDate()));
                             }
@@ -97,13 +112,11 @@ public class BenhNhanService {
     }
 
     public void deleteHistoryRecord(Long recordId) {
-        // 1. Xóa mềm bên bảng ChiTietDkTiem
         ChiTietDkTiem ct = chiTietDkTiemRepository.findById(recordId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bản ghi lịch sử với ID: " + recordId));
         ct.setFlagDelete(true);
         chiTietDkTiemRepository.save(ct);
 
-        // 2. Xóa mềm bên bảng HoSoBenhAn (Nếu đã có)
         hoSoBenhAnRepository.findByMaChiTietDkTiem(recordId).ifPresent(hs -> {
             hs.setFlagDelete(true);
             hoSoBenhAnRepository.save(hs);
@@ -122,7 +135,6 @@ public class BenhNhanService {
         dto.setPhone(bn.getSdt());
         dto.setAge(bn.getNgaySinh() != null ? Period.between(bn.getNgaySinh(), LocalDate.now()).getYears() : 0);
 
-        // Lấy lịch sử tiêm
         List<LichSuTiemProjection> projections = repository.findLichSuTiemByMaBenhNhan(bn.getMaBenhNhan());
         List<LichSuTiemDTO> historyList = projections.stream().map(p -> {
             LichSuTiemDTO h = new LichSuTiemDTO();
@@ -130,7 +142,8 @@ public class BenhNhanService {
             h.setVaccineName(p.getVaccineName());
             h.setDate(p.getDate());
             h.setSideEffect(p.getSideEffect());
-            h.setNextDose(p.getNextDose());
+            h.setThoiGianTacDung(p.getThoiGianTacDung());
+            h.setStatus(p.getStatus());
             h.setPlace(p.getPlace());
             h.setVaccineType(p.getVaccineType());
             h.setDosage(p.getDosage());

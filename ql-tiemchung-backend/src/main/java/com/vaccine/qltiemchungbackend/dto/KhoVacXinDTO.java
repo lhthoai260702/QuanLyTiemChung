@@ -7,18 +7,30 @@ import java.time.LocalDate;
 
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
+@AllArgsConstructor // Lombok sẽ TỰ ĐỘNG tạo ra constructor 17 tham số tương ứng với thứ tự khai báo dưới đây
 public class KhoVacXinDTO {
-    private Long soLo; // Lấy từ MaLo của LOVACXIN
-    private String tenVacXin; // Lấy từ VACXIN
-    private String loaiVacXin; // Lấy từ LOAIVACXIN
-    private LocalDate ngayNhan; // Lấy từ LOVACXIN
-    private String giayPhep; // Lấy từ LOVACXIN
-    private String nuocSanXuat; // Lấy từ LOVACXIN
-    private String hamLuong; // Lấy từ VACXIN
-    private LocalDate hanSuDung; // Lấy từ VACXIN
-    private String dieuKienBaoQuan; // Lấy từ VACXIN
-    private String doTuoiTiemChung; // Lấy từ VACXIN
-    private String tinhTrang; // Lấy từ LOVACXIN
-    private Integer soLuong; // Lấy từ LOVACXIN
+    // Thông tin Lô Vắc xin
+    private Long soLo;
+    private LocalDate ngayNhan;
+    private String giayPhep;
+    private String nuocSanXuat;
+    private Integer soLuong;
+    private String tinhTrang;
+
+    // Thông tin Vắc xin
+    private Long maVacXin;
+    private String tenVacXin;
+    private String loaiVacXin;
+    private String hamLuong;
+    private LocalDate hanSuDung;
+    private String dieuKienBaoQuan;
+    private String doTuoiTiemChung;
+    private Double donGia;
+
+    // Thông tin Nhà Cung Cấp
+    private Long maNhaCungCap;
+    private String tenNhaCungCap;
+
+    // Hóa đơn
+    private Double tongTien;
 }

@@ -2,6 +2,10 @@ package com.vaccine.qltiemchungbackend.controller;
 
 import com.vaccine.qltiemchungbackend.dto.KhoVacXinDTO;
 import com.vaccine.qltiemchungbackend.entity.LoaiVacXin;
+import com.vaccine.qltiemchungbackend.entity.NhaCungCap;
+import com.vaccine.qltiemchungbackend.entity.VacXin;
+import com.vaccine.qltiemchungbackend.repository.NhaCungCapRepository;
+import com.vaccine.qltiemchungbackend.repository.VacXinRepository;
 import com.vaccine.qltiemchungbackend.service.InventoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -14,17 +18,15 @@ import java.util.List;
 @CrossOrigin(origins = "http://localhost:3000")
 public class InventoryController {
 
-    @Autowired
-    private InventoryService inventoryService;
+    @Autowired private InventoryService inventoryService;
+    @Autowired private VacXinRepository vacXinRepository;
+    @Autowired private NhaCungCapRepository nhaCungCapRepository;
 
-    // API Lấy danh sách
     @GetMapping("/vaccines")
     public ResponseEntity<List<KhoVacXinDTO>> getInventoryStatus() {
-        List<KhoVacXinDTO> danhSachKho = inventoryService.getAllKhoVacXin();
-        return ResponseEntity.ok(danhSachKho);
+        return ResponseEntity.ok(inventoryService.getAllKhoVacXin());
     }
 
-    // API Thêm mới hoặc Cập nhật (Save/Update)
     @PostMapping("/vaccines")
     public ResponseEntity<KhoVacXinDTO> saveOrUpdateVaccine(@RequestBody KhoVacXinDTO khoVacXinDTO) {
         try {
@@ -35,13 +37,23 @@ public class InventoryController {
         }
     }
 
+    // --- API CHO COMBOBOX ---
     @GetMapping("/vaccine-types")
     public ResponseEntity<List<LoaiVacXin>> getVaccineTypes() {
-        List<LoaiVacXin> list = inventoryService.getAllLoaiVacXin();
-        return ResponseEntity.ok(list);
+        return ResponseEntity.ok(inventoryService.getAllLoaiVacXin());
     }
 
-    // API Xuất Kho
+    @GetMapping("/vaccine-list")
+    public ResponseEntity<List<VacXin>> getVaccinesList() {
+        return ResponseEntity.ok(vacXinRepository.findAllAvailable());
+    }
+
+    @GetMapping("/suppliers")
+    public ResponseEntity<List<NhaCungCap>> getSuppliers() {
+        return ResponseEntity.ok(nhaCungCapRepository.findByFlagDeleteFalseOrFlagDeleteIsNull());
+    }
+
+    // --- API XUẤT KHO & XÓA ---
     @PostMapping("/vaccines/{id}/export")
     public ResponseEntity<?> exportVaccine(@PathVariable("id") Long id, @RequestParam int quantity) {
         try {
@@ -52,7 +64,6 @@ public class InventoryController {
         }
     }
 
-    // API Xóa Mềm Lô Vắc Xin
     @DeleteMapping("/vaccines/{id}")
     public ResponseEntity<?> deleteVaccine(@PathVariable("id") Long id) {
         try {

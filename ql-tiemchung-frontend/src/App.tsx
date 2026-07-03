@@ -97,6 +97,7 @@ export default function App() {
   const navigate = useNavigate();
   const handleLogout = () => {
     localStorage.removeItem('user'); // Xóa thông tin đã lưu
+    localStorage.removeItem('token'); // Xóa token
     navigate('/login'); // Chuyển hướng về trang đăng nhập
   };
 
@@ -104,6 +105,10 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<RoleType>('Admin');
   const [viewMode, setViewMode] = useState<'hub' | 'module'>('hub');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // STATE LƯU THÔNG TIN NGƯỜI DÙNG ĐĂNG NHẬP VÀ PHÂN QUYỀN
+  const [loggedInName, setLoggedInName] = useState<string>("Người dùng");
+  const [userRole, setUserRole] = useState<number>(1);
 
   // 3. Persist hooks
   useEffect(() => {
@@ -142,6 +147,40 @@ export default function App() {
     localStorage.setItem('mediflow_stock_logs', JSON.stringify(stockLogs));
   }, [stockLogs]);
 
+  // LẤY HỌ TÊN VÀ QUYỀN TỪ LOCAL STORAGE KHI COMPONENT MOUNT
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        // Lấy tên
+        if (userData && userData.hoTen) {
+          setLoggedInName(userData.hoTen);
+        } else if (userData && userData.name) {
+          setLoggedInName(userData.name);
+        }
+
+        // --- LOGIC PHÂN QUYỀN (RBAC) ---
+        if (userData && userData.maQuyen) {
+          setUserRole(userData.maQuyen);
+          
+          // NẾU KHÔNG PHẢI ADMIN -> CHUYỂN THẲNG VÀO MODULE VÀ BỎ QUA HUB
+          if (userData.maQuyen !== 1) {
+            setViewMode('module');
+            if (userData.maQuyen === 2) setActiveRole('Inventory');
+            else if (userData.maQuyen === 3) setActiveRole('Finance');
+            else if (userData.maQuyen === 4) setActiveRole('Support');
+            else if (userData.maQuyen === 5) setActiveRole('Medical');
+            else if (userData.maQuyen === 6) setActiveRole('Customer');
+          }
+        }
+      } catch (e) {
+        // Nếu userStr không phải chuỗi JSON mà là plain text thì lấy trực tiếp
+        setLoggedInName(userStr);
+      }
+    }
+  }, []);
+
   // Toast trigger utility
   const triggerToast = (message: string) => {
     setToastMessage(message);
@@ -150,47 +189,6 @@ export default function App() {
     }, 4500);
   };
 
-  // Safe reset utility to purge localStorage and restart
-  const resetDatabaseToDefault = () => {
-    if (confirm('Bạn có thực sự muốn reset lại toàn bộ dữ liệu mẫu đã nhập về trạng thái ban đầu?')) {
-      localStorage.removeItem('mediflow_users');
-      localStorage.removeItem('mediflow_vaccines');
-      localStorage.removeItem('mediflow_patients');
-      localStorage.removeItem('mediflow_appointments');
-      localStorage.removeItem('mediflow_tickets');
-      localStorage.removeItem('mediflow_faqs');
-      localStorage.removeItem('mediflow_invoices');
-      localStorage.removeItem('mediflow_system_logs');
-      localStorage.removeItem('mediflow_stock_logs');
-      
-      setUsers(initialUsers);
-      setVaccines(initialVaccines);
-      setPatients(initialPatients);
-      setAppointments(initialAppointments);
-      setTickets(initialTickets);
-      setFaqs(initialFAQs);
-      setInvoices(initialInvoices);
-      setSystemLogs(initialSystemLogs);
-      setStockLogs(initialStockLogs);
-      
-      triggerToast('Đã xóa dữ liệu cục bộ và khôi phục thành công Cơ sở dữ liệu mẫu GSP!');
-    }
-  };
-
-  // Get active role user detail
-  const getActiveUserDetail = () => {
-    switch (activeRole) {
-      case 'Admin': return { name: 'Phạm Hải Đăng', mail: 'dang.ph@mediflow.com' };
-      case 'Inventory': return { name: 'Trần Thị Mỹ Linh', mail: 'linh.ttm@mediflow.com' };
-      case 'Medical': return { name: 'Dr. Hoàng Quốc Việt', mail: 'viet.hq@mediflow.com' };
-      case 'Customer': return { name: 'Nguyễn Thị A', mail: 'parent.a@gmail.com' };
-      case 'Support': return { name: 'Lê Văn Thanh', mail: 'thanh.lv@mediflow.com' };
-      case 'Finance': return { name: 'Tống Khánh Linh', mail: 'linh.tk@mediflow.com' };
-    }
-  };
-
-  const userDetail = getActiveUserDetail();
-
   return (
     <div className="min-h-screen bg-sky-50 flex flex-col font-sans select-none antialiased overflow-x-hidden">
       
@@ -198,11 +196,11 @@ export default function App() {
       {/* 1. UNIFIED NAVBAR CỐ ĐỊNH CHUNG CHO CẢ 2 TRẠNG THÁI (HUB & MODULE) */}
       {/* ========================================================= */}
       <nav className="h-16 bg-white border-b border-sky-100 flex items-center justify-between px-6 sm:px-8 shrink-0 shadow-sm z-10 relative">
-        {/* Nút bấm để quay về trang chủ (Hub) */}
+        {/* Nút bấm để quay về trang chủ (Hub) - CHỈ ADMIN ĐƯỢC PHÉP QUAY LẠI HUB */}
         <div 
-          onClick={() => setViewMode('hub')}
-          className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
-          title="Về Trang chủ"
+          onClick={() => { if (userRole === 1) setViewMode('hub') }}
+          className={`flex items-center gap-3 transition-opacity ${userRole === 1 ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+          title={userRole === 1 ? "Về Trang chủ" : "VaccineFlow Pro"}
         >
           <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-sky-500 rounded-xl flex items-center justify-center text-white font-extrabold text-xl shadow-md shadow-blue-500/20">
             <Syringe className="w-5 h-5" />
@@ -214,7 +212,8 @@ export default function App() {
         
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
-            <span className="text-sm font-bold text-slate-800 hidden sm:block">Xin chào, {userDetail?.name}</span>
+            {/* HIỂN THỊ TÊN NGƯỜI DÙNG Ở ĐÂY */}
+            <span className="text-sm font-bold text-slate-800 hidden sm:block">Xin chào, {loggedInName}</span>
             {/* Nút Đăng xuất màu đỏ */}
             <button
               onClick={handleLogout}
@@ -241,70 +240,82 @@ export default function App() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
               {/* Card 1: Admin */}
-              <button onClick={() => { setActiveRole('Admin'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-blue-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 text-white relative z-10"><Shield className="w-7 h-7" /></div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-blue-700 transition-colors">Administrator</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có toàn quyền đối với hệ thống, như sửa, thêm, xóa dữ liệu, phân quyền cho các user khác.</p>
-                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-blue-600">
-                  <span>Quản trị toàn quyền hệ thống</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </button>
+              {userRole === 1 && (
+                <button onClick={() => { setActiveRole('Admin'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-blue-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
+                  <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 text-white relative z-10"><Shield className="w-7 h-7" /></div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-blue-700 transition-colors">Administrator</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có toàn quyền đối với hệ thống, như sửa, thêm, xóa dữ liệu, phân quyền cho các user khác.</p>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-blue-600">
+                    <span>Quản trị toàn quyền hệ thống</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+              )}
 
               {/* Card 2: Inventory */}
-              <button onClick={() => { setActiveRole('Inventory'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-emerald-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-200 text-white relative z-10"><Archive className="w-7 h-7" /></div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">Quản lí kho</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng quản lí các thông tin về kho thuốc của trung tâm.</p>
-                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-emerald-600">
-                  <span>Quản lý danh mục vắc-xin</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </button>
+              {(userRole === 1 || userRole === 2) && (
+                <button onClick={() => { setActiveRole('Inventory'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-emerald-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
+                  <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-200 text-white relative z-10"><Archive className="w-7 h-7" /></div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">Quản lí kho</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng quản lí các thông tin về kho thuốc của trung tâm.</p>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-emerald-600">
+                    <span>Quản lý danh mục vắc-xin</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+              )}
 
               {/* Card 3: Finance */}
-              <button onClick={() => { setActiveRole('Finance'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-cyan-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                <div className="w-14 h-14 bg-cyan-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-cyan-200 text-white relative z-10"><DollarSign className="w-7 h-7" /></div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-cyan-700 transition-colors">Tài chính</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng quản lí các thông tin về tài chính của trung tâm.</p>
-                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-cyan-600">
-                  <span>Quản lý giao dịch và giá</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </button>
+              {(userRole === 1 || userRole === 3) && (
+                <button onClick={() => { setActiveRole('Finance'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-cyan-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
+                  <div className="w-14 h-14 bg-cyan-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-cyan-200 text-white relative z-10"><DollarSign className="w-7 h-7" /></div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-cyan-700 transition-colors">Tài chính</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng quản lí các thông tin về tài chính của trung tâm.</p>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-cyan-600">
+                    <span>Quản lý giao dịch và giá</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+              )}
 
               {/* Card 4: Support */}
-              <button onClick={() => { setActiveRole('Support'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-purple-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                <div className="w-14 h-14 bg-purple-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-purple-200 text-white relative z-10"><MessageSquare className="w-7 h-7" /></div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-purple-700 transition-colors">Hỗ trợ khách hàng</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng nắm bắt thông tin, hỗ trợ và phản hồi các thông tin từ khách hàng.</p>
-                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-purple-600">
-                  <span>Giải đáp và Nhắc nhở tiêm</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </button>
+              {(userRole === 1 || userRole === 4) && (
+                <button onClick={() => { setActiveRole('Support'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-purple-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
+                  <div className="w-14 h-14 bg-purple-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-purple-200 text-white relative z-10"><MessageSquare className="w-7 h-7" /></div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-purple-700 transition-colors">Hỗ trợ khách hàng</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng nắm bắt thông tin, hỗ trợ và phản hồi các thông tin từ khách hàng.</p>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-purple-600">
+                    <span>Giải đáp và Nhắc nhở tiêm</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+              )}
 
               {/* Card 5: Medical */}
-              <button onClick={() => { setActiveRole('Medical'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-rose-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                <div className="w-14 h-14 bg-rose-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-rose-200 text-white relative z-10"><Activity className="w-7 h-7" /></div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-rose-700 transition-colors">Nhân viên y tế</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Là người trực tiếp khám chữa bệnh cho bệnh nhân, có chức năng cập nhật thông tình trạng của bệnh nhân, kê đơn thuốc.</p>
-                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-rose-600">
-                  <span>Quản lý hồ sơ bệnh án</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </button>
+              {(userRole === 1 || userRole === 5) && (
+                <button onClick={() => { setActiveRole('Medical'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-rose-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
+                  <div className="w-14 h-14 bg-rose-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-rose-200 text-white relative z-10"><Activity className="w-7 h-7" /></div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-rose-700 transition-colors">Nhân viên y tế</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Là người trực tiếp khám chữa bệnh cho bệnh nhân, có chức năng cập nhật thông tình trạng của bệnh nhân, kê đơn thuốc.</p>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-rose-600">
+                    <span>Quản lý hồ sơ bệnh án</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+              )}
 
               {/* Card 6: Customer */}
-              <button onClick={() => { setActiveRole('Customer'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-amber-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-amber-200 text-white relative z-10"><Users className="w-7 h-7" /></div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-amber-700 transition-colors">Normal User Account</h3>
-                <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có quyền xem thông tin từng loại vắc xin, đăng kí tiêm phòng; xem lịch tiêm phòng; xem hồ sơ tiêm phòng cá nhân; yêu cầu hỗ trợ từ trung tâm; xem tình hình dịch bệnh; feedback cho quản lý.</p>
-                <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-amber-600">
-                  <span>Tra cứu và Đăng ký lịch</span>
-                  <ArrowRight className="w-4 h-4" />
-                </div>
-              </button>
+              {(userRole === 1 || userRole === 6) && (
+                <button onClick={() => { setActiveRole('Customer'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-amber-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
+                  <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-amber-200 text-white relative z-10"><Users className="w-7 h-7" /></div>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-amber-700 transition-colors">Khách hàng</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có quyền xem thông tin từng loại vắc xin, đăng kí tiêm phòng; xem lịch tiêm phòng; xem hồ sơ tiêm phòng cá nhân; yêu cầu hỗ trợ từ trung tâm; xem tình hình dịch bệnh; feedback cho quản lý.</p>
+                  <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-amber-600">
+                    <span>Tra cứu và Đăng ký lịch</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </div>
+                </button>
+              )}
             </div>
           </main>
         </div>
@@ -315,22 +326,12 @@ export default function App() {
             <div className="max-w-7xl mx-auto">
               {activeRole === 'Admin' && (
                 <AdminModule
-                  users={users}
-                  setUsers={setUsers}
-                  systemLogs={systemLogs}
-                  setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
                 />
               )}
 
               {activeRole === 'Inventory' && (
                 <InventoryModule
-                  vaccines={vaccines}
-                  setVaccines={setVaccines}
-                  stockLogs={stockLogs}
-                  setStockLogs={setStockLogs}
-                  systemLogs={systemLogs}
-                  setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
                 />
               )}
@@ -340,24 +341,12 @@ export default function App() {
                   patients={patients}
                   setPatients={setPatients}
                   vaccines={vaccines}
-                  setVaccines={setVaccines}
-                  stockLogs={stockLogs}
-                  setStockLogs={setStockLogs}
-                  systemLogs={systemLogs}
-                  setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
                 />
               )}
 
               {activeRole === 'Customer' && (
                 <CustomerModule
-                  appointments={appointments}
-                  setAppointments={setAppointments}
-                  vaccines={vaccines}
-                  tickets={tickets}
-                  setTickets={setTickets}
-                  systemLogs={systemLogs}
-                  setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
                 />
               )}
@@ -366,8 +355,6 @@ export default function App() {
                 <SupportModule
                   faqs={faqs}
                   setFaqs={setFaqs}
-                  tickets={tickets}
-                  setTickets={setTickets}
                   systemLogs={systemLogs}
                   setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}

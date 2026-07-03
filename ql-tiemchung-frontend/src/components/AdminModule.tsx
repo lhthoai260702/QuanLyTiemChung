@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Users,
   CalendarDays,
@@ -86,6 +87,7 @@ interface AdminModuleProps {
 export default function AdminModule({ triggerToast = alert }: AdminModuleProps) {
   const [activeTab, setActiveTab] = useState<"schedules" | "accounts" | "feedback">("accounts");
   const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
   const [accounts, setAccounts] = useState<TaiKhoan[]>([]);
 
   // --- STATE CHO POPUP XÓA ---
@@ -103,10 +105,47 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 20;
 
+  // =========================================================================
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // =========================================================================
+
+  // 1. Chặn người dùng nếu chưa đăng nhập (Không có token)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
+      navigate("/"); // Đẩy về trang Login
+    }
+  }, [navigate, triggerToast]);
+
+  // 2. Hàm Fetch đính kèm Token tự động cho mọi Request
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token");
+
+    // Gộp headers cũ với Authorization header mới
+    const headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+
+    const response = await fetch(url, { ...options, headers });
+
+    // Nếu Backend báo lỗi 401 (Unauthorized) hoặc 403 (Forbidden) -> Token hết hạn/Sai quyền
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      navigate("/");
+      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      return Promise.reject("Unauthorized");
+    }
+
+    return response;
+  };
+
   // HÀM CALL API LẤY DANH SÁCH USER
   const fetchAccounts = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/admin/accounts");
+      const response = await fetchWithAuth("http://localhost:8080/api/admin/accounts");
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);
@@ -114,7 +153,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         triggerToast("Lỗi khi tải danh sách người dùng từ máy chủ!");
       }
     } catch (error) {
-      console.error("Error fetching accounts:", error);
+      if (error !== "Unauthorized") console.error("Error fetching accounts:", error);
       triggerToast("Không thể kết nối đến Backend Server!");
     }
   };
@@ -128,7 +167,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   // HÀM CALL API LẤY DANH SÁCH LỊCH TIÊM
   const fetchSchedules = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/admin/schedules");
+      const response = await fetchWithAuth("http://localhost:8080/api/admin/schedules");
       if (response.ok) {
         const data = await response.json();
         setSchedules(data);
@@ -136,7 +175,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         triggerToast("Lỗi khi tải danh sách lịch tiêm chủng!");
       }
     } catch (error) {
-      console.error("Error fetching schedules:", error);
+      if (error !== "Unauthorized") console.error("Error fetching schedules:", error);
       triggerToast("Không thể kết nối đến Backend Server!");
     }
   };
@@ -151,7 +190,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   const fetchHighLevelTickets = async () => {
     setIsTicketsLoading(true);
     try {
-      const res = await fetch("http://localhost:8080/api/customer/admin/feedback/high-level");
+      const res = await fetchWithAuth("http://localhost:8080/api/customer/admin/feedback/high-level");
       if (res.ok) {
         const data = await res.json();
         setTicketsList(data);
@@ -159,7 +198,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         triggerToast("Lỗi lấy danh sách phản hồi cấp cao.");
       }
     } catch (err) {
-      console.error(err);
+      if (err !== "Unauthorized") console.error(err);
       triggerToast("Không thể tải danh sách phản hồi cấp cao.");
     } finally {
       setIsTicketsLoading(false);
@@ -212,8 +251,20 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [accForm, setAccForm] = useState({
-    tenDangNhap: "", matKhau: "", maQuyen: 5, hoTen: "", cmnd: "", noiO: "", moTa: "",
-    email: "", namSinh: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
+    tenDangNhap: "",
+    matKhau: "",
+    maQuyen: 5,
+    hoTen: "",
+    cmnd: "",
+    noiO: "",
+    moTa: "",
+    email: "",
+    namSinh: "",
+    sdt: "",
+    ngaySinh: "",
+    diaChi: "",
+    nguoiGiamHo: "",
+    gioiTinh: "Nam",
   });
   const [accErrors, setAccErrors] = useState<Record<string, string>>({});
 
@@ -255,9 +306,13 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
   };
 
   const ROLE_TABS = [
-    { id: "all", label: "Tất cả" }, { id: "admin", label: "Admin" }, { id: "y tế", label: "Y Tế" },
-    { id: "kho", label: "Thủ Kho" }, { id: "tài chính", label: "Tài Chính" },
-    { id: "hỗ trợ", label: "Hỗ Trợ" }, { id: "khách", label: "Khách Hàng" },
+    { id: "all", label: "Tất cả" },
+    { id: "admin", label: "Admin" },
+    { id: "y tế", label: "Y Tế" },
+    { id: "kho", label: "Thủ Kho" },
+    { id: "tài chính", label: "Tài Chính" },
+    { id: "hỗ trợ", label: "Hỗ Trợ" },
+    { id: "khách", label: "Khách Hàng" },
   ];
 
   const checkRoleMatch = (phanQuyenStr: string | undefined, filterId: string) => {
@@ -292,8 +347,16 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
-    dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
-    soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [] as string[],
+    dateInput: "",
+    thoiGian: "",
+    maLoaiVacXin: 0,
+    loaiVacXinName: "",
+    maVacXin: 0,
+    soLuong: 0,
+    doTuoi: "",
+    diaDiem: "",
+    ghiChu: "",
+    selectedDoctors: [] as string[],
   });
 
   const [vaccineTypes, setVaccineTypes] = useState<{ maLoaiVacXin: number; tenLoaiVacXin: string }[]>([]);
@@ -301,21 +364,26 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const fetchVaccineTypes = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/admin/vaccine-types");
+      const res = await fetchWithAuth("http://localhost:8080/api/admin/vaccine-types");
       if (res.ok) setVaccineTypes(await res.json());
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (err !== "Unauthorized") console.error(err);
+    }
   };
 
   const fetchVaccinesList = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/customer/vaccines");
+      const res = await fetchWithAuth("http://localhost:8080/api/customer/vaccines");
       if (res.ok) setVaccinesList(await res.json());
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (err !== "Unauthorized") console.error(err);
+    }
   };
 
   useEffect(() => {
     if (activeTab === "schedules") {
-      fetchVaccineTypes(); fetchVaccinesList();
+      fetchVaccineTypes();
+      fetchVaccinesList();
     }
   }, [activeTab]);
 
@@ -355,7 +423,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     setItemToDelete({
       id: sch.maLichTiem,
       type: "schedule",
-      name: sch.tenVacXin || sch.loaiVacXin || sch.maLichTiem
+      name: sch.tenVacXin || sch.loaiVacXin || sch.maLichTiem,
     });
   };
 
@@ -363,7 +431,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     setItemToDelete({
       id: acc.maTaiKhoan,
       type: "account",
-      name: acc.tenDangNhap
+      name: acc.tenDangNhap,
     });
   };
 
@@ -373,7 +441,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (itemToDelete.type === "schedule") {
       const numericId = String(itemToDelete.id).replace("LTC", "");
       try {
-        const response = await fetch(`http://localhost:8080/api/admin/schedules/${numericId}`, {
+        const response = await fetchWithAuth(`http://localhost:8080/api/admin/schedules/${numericId}`, {
           method: "DELETE",
         });
         if (response.ok) {
@@ -384,12 +452,12 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
           triggerToast("Lỗi khi thực hiện xóa lịch tiêm trên máy chủ!");
         }
       } catch (error) {
-        console.error("Error deleting schedule:", error);
+        if (error !== "Unauthorized") console.error("Error deleting schedule:", error);
         triggerToast("Không thể kết nối đến máy chủ!");
       }
     } else if (itemToDelete.type === "account") {
       try {
-        const response = await fetch(`http://localhost:8080/api/admin/accounts/${itemToDelete.id}`, {
+        const response = await fetchWithAuth(`http://localhost:8080/api/admin/accounts/${itemToDelete.id}`, {
           method: "DELETE",
         });
         if (response.ok) {
@@ -399,18 +467,30 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
           triggerToast("Lỗi khi thực hiện xóa tài khoản trên máy chủ!");
         }
       } catch (error) {
-        console.error("Error deleting account:", error);
+        if (error !== "Unauthorized") console.error("Error deleting account:", error);
         triggerToast("Không thể kết nối đến máy chủ!");
       }
     }
-    
+
     setItemToDelete(null); // Đóng popup dù thành công hay thất bại
   };
 
   const resetAccountForm = () => {
     setAccForm({
-      tenDangNhap: "", matKhau: "", maQuyen: 5, hoTen: "", cmnd: "", noiO: "", moTa: "",
-      email: "", namSinh: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
+      tenDangNhap: "",
+      matKhau: "",
+      maQuyen: 5,
+      hoTen: "",
+      cmnd: "",
+      noiO: "",
+      moTa: "",
+      email: "",
+      namSinh: "",
+      sdt: "",
+      ngaySinh: "",
+      diaChi: "",
+      nguoiGiamHo: "",
+      gioiTinh: "Nam",
     });
     setAccErrors({});
     setEditingAccountId(null);
@@ -419,8 +499,16 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const resetScheduleForm = () => {
     setScheduleForm({
-      dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
-      soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [],
+      dateInput: "",
+      thoiGian: "",
+      maLoaiVacXin: 0,
+      loaiVacXinName: "",
+      maVacXin: 0,
+      soLuong: 0,
+      doTuoi: "",
+      diaDiem: "",
+      ghiChu: "",
+      selectedDoctors: [],
     });
     setScheduleErrors({});
     setEditingScheduleId(null);
@@ -436,10 +524,20 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     }
 
     setAccForm({
-      tenDangNhap: acc.tenDangNhap, matKhau: "", maQuyen: acc.maQuyen || 5, hoTen: acc.hoTen,
-      cmnd: acc.cmnd, noiO: acc.noiO, moTa: acc.moTa, email: acc.email || "",
-      namSinh: acc.namSinh?.toString() || "", sdt: formattedPhone, ngaySinh: acc.ngaySinh || "",
-      diaChi: acc.diaChi || "", nguoiGiamHo: acc.nguoiGiamHo || "", gioiTinh: acc.gioiTinh || "Nam",
+      tenDangNhap: acc.tenDangNhap,
+      matKhau: "",
+      maQuyen: acc.maQuyen || 5,
+      hoTen: acc.hoTen,
+      cmnd: acc.cmnd,
+      noiO: acc.noiO,
+      moTa: acc.moTa,
+      email: acc.email || "",
+      namSinh: acc.namSinh?.toString() || "",
+      sdt: formattedPhone,
+      ngaySinh: acc.ngaySinh || "",
+      diaChi: acc.diaChi || "",
+      nguoiGiamHo: acc.nguoiGiamHo || "",
+      gioiTinh: acc.gioiTinh || "Nam",
     });
 
     setEditingAccountId(acc.maTaiKhoan);
@@ -448,9 +546,16 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
   const handleEditSchedule = (sch: LichTiemChungSRS) => {
     setScheduleForm({
-      dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`, thoiGian: sch.thoiGian, maLoaiVacXin: sch.maLoaiVacXin || 0,
-      loaiVacXinName: sch.loaiVacXin || "", maVacXin: sch.maVacXin || 0, soLuong: sch.soLuong,
-      doTuoi: sch.doTuoi, diaDiem: sch.diaDiem, ghiChu: sch.ghiChu, selectedDoctors: sch.danhSachBacSi || [],
+      dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`,
+      thoiGian: sch.thoiGian,
+      maLoaiVacXin: sch.maLoaiVacXin || 0,
+      loaiVacXinName: sch.loaiVacXin || "",
+      maVacXin: sch.maVacXin || 0,
+      soLuong: sch.soLuong,
+      doTuoi: sch.doTuoi,
+      diaDiem: sch.diaDiem,
+      ghiChu: sch.ghiChu,
+      selectedDoctors: sch.danhSachBacSi || [],
     });
     setEditingScheduleId(sch.maLichTiem);
     setShowAddSchedule(true);
@@ -496,7 +601,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
     try {
       const url = editingAccountId ? `http://localhost:8080/api/admin/accounts/${editingAccountId}` : "http://localhost:8080/api/admin/accounts";
-      const response = await fetch(url, {
+      const response = await fetchWithAuth(url, {
         method: editingAccountId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -510,7 +615,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         triggerToast("Lỗi khi lưu tài khoản trên máy chủ!");
       }
     } catch (error) {
-      console.error(error); triggerToast("Lỗi kết nối đến máy chủ!");
+      if (error !== "Unauthorized") console.error(error);
+      triggerToast("Lỗi kết nối đến máy chủ!");
     }
   };
 
@@ -520,19 +626,30 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (!scheduleForm.dateInput) newErrors.dateInput = "Vui lòng chọn ngày tiêm";
     if (!scheduleForm.thoiGian.trim()) newErrors.thoiGian = "Vui lòng nhập thời gian tiêm";
     if (!scheduleForm.maVacXin) newErrors.maVacXin = "Vui lòng chọn tên vắc xin";
-    if (!scheduleForm.soLuong) { newErrors.soLuong = "Vui lòng nhập số lượng"; } 
-    else if (scheduleForm.soLuong <= 0) { newErrors.soLuong = "Số lượng phải lớn hơn 0"; }
+    if (!scheduleForm.soLuong) {
+      newErrors.soLuong = "Vui lòng nhập số lượng";
+    } else if (scheduleForm.soLuong <= 0) {
+      newErrors.soLuong = "Số lượng phải lớn hơn 0";
+    }
     if (!scheduleForm.doTuoi.trim()) newErrors.doTuoi = "Vui lòng nhập độ tuổi khuyên dùng";
     if (!scheduleForm.diaDiem.trim()) newErrors.diaDiem = "Vui lòng nhập địa điểm tổ chức";
 
     if (Object.keys(newErrors).length > 0) {
-      setScheduleErrors(newErrors); triggerToast("Vui lòng kiểm tra lại các trường bị lỗi viền đỏ."); return;
+      setScheduleErrors(newErrors);
+      triggerToast("Vui lòng kiểm tra lại các trường bị lỗi viền đỏ.");
+      return;
     }
 
     const payload = {
-      dateInput: scheduleForm.dateInput, thoiGian: scheduleForm.thoiGian, maLoaiVacXin: scheduleForm.maLoaiVacXin,
-      maVacXin: scheduleForm.maVacXin, soLuong: Number(scheduleForm.soLuong), doTuoi: scheduleForm.doTuoi,
-      diaDiem: scheduleForm.diaDiem, ghiChu: scheduleForm.ghiChu, selectedDoctors: scheduleForm.selectedDoctors,
+      dateInput: scheduleForm.dateInput,
+      thoiGian: scheduleForm.thoiGian,
+      maLoaiVacXin: scheduleForm.maLoaiVacXin,
+      maVacXin: scheduleForm.maVacXin,
+      soLuong: Number(scheduleForm.soLuong),
+      doTuoi: scheduleForm.doTuoi,
+      diaDiem: scheduleForm.diaDiem,
+      ghiChu: scheduleForm.ghiChu,
+      selectedDoctors: scheduleForm.selectedDoctors,
     };
 
     try {
@@ -540,7 +657,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
         ? `http://localhost:8080/api/admin/schedules/${editingScheduleId.replace("LTC", "")}`
         : "http://localhost:8080/api/admin/schedules";
 
-      const response = await fetch(url, {
+      const response = await fetchWithAuth(url, {
         method: editingScheduleId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -548,19 +665,27 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
       if (response.ok) {
         triggerToast(editingScheduleId ? "Cập nhật lịch tiêm thành công!" : "Tạo lịch tiêm mới thành công!");
-        fetchSchedules(); resetScheduleForm();
-      } else { triggerToast("Lỗi khi lưu lịch tiêm trên máy chủ!"); }
+        fetchSchedules();
+        resetScheduleForm();
+      } else {
+        triggerToast("Lỗi khi lưu lịch tiêm trên máy chủ!");
+      }
     } catch (error) {
-      console.error(error); triggerToast("Lỗi kết nối đến máy chủ!");
+      if (error !== "Unauthorized") console.error(error);
+      triggerToast("Lỗi kết nối đến máy chủ!");
     }
   };
 
   const selectTicketForProcessing = (t: SupportTicket) => {
-    setSelectedTicket(t); setTicketResponse(t.responseText || ""); setTicketErrors({});
+    setSelectedTicket(t);
+    setTicketResponse(t.responseText || "");
+    setTicketErrors({});
   };
 
   const handleCancelTicket = () => {
-    setSelectedTicket(null); setTicketResponse(""); setTicketErrors({});
+    setSelectedTicket(null);
+    setTicketResponse("");
+    setTicketErrors({});
   };
 
   const handleProcessTicket = async (e: React.FormEvent) => {
@@ -568,21 +693,32 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     if (!selectedTicket) return;
 
     const errors: Record<string, string> = {};
-    if (!ticketResponse.trim()) { errors.response = "Bắt buộc nhập nội dung trả lời"; }
-    if (Object.keys(errors).length > 0) { setTicketErrors(errors); return; }
+    if (!ticketResponse.trim()) {
+      errors.response = "Bắt buộc nhập nội dung trả lời";
+    }
+    if (Object.keys(errors).length > 0) {
+      setTicketErrors(errors);
+      return;
+    }
 
     try {
       const rawId = String(selectedTicket.id).replace("PHCC-", "");
-      const res = await fetch(`http://localhost:8080/api/customer/admin/feedback/high-level/resolve/${rawId}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      const res = await fetchWithAuth(`http://localhost:8080/api/customer/admin/feedback/high-level/resolve/${rawId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ normalContent: ticketResponse }),
       });
 
       if (res.ok) {
         triggerToast("Đã gửi câu trả lời thành công!");
-        setSelectedTicket(null); fetchHighLevelTickets();
-      } else { triggerToast("Lỗi gửi phản hồi."); }
-    } catch (err) { triggerToast("Lỗi kết nối máy chủ."); }
+        setSelectedTicket(null);
+        fetchHighLevelTickets();
+      } else {
+        triggerToast("Lỗi gửi phản hồi.");
+      }
+    } catch (err) {
+      if (err !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ.");
+    }
   };
 
   return (
@@ -1535,7 +1671,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

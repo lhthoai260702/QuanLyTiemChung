@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // Bổ sung import useNavigate
 import { FAQ, SystemLog } from "../types";
 import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail } from "lucide-react";
 
@@ -40,6 +41,44 @@ interface SupportModuleProps {
 
 export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs, triggerToast }: SupportModuleProps) {
   const [activeTab, setActiveTab] = useState<"reminder" | "faq" | "tickets">("tickets");
+  const navigate = useNavigate(); // Hook điều hướng
+
+  // =========================================================================
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // =========================================================================
+
+  // 1. Chặn người dùng nếu chưa đăng nhập (Không có token)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
+      navigate("/"); // Đẩy về trang Login
+    }
+  }, [navigate, triggerToast]);
+
+  // 2. Hàm Fetch đính kèm Token tự động cho mọi Request
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token");
+
+    // Gộp headers cũ với Authorization header mới
+    const headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+
+    const response = await fetch(url, { ...options, headers });
+
+    // Nếu Backend báo lỗi 401 (Unauthorized) hoặc 403 (Forbidden) -> Token hết hạn/Sai quyền
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      navigate("/");
+      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      return Promise.reject("Unauthorized");
+    }
+
+    return response;
+  };
 
   // ==========================================
   // STATE: MÀN HÌNH 1 - NHẮC NHỞ TIÊM CHỦNG
@@ -53,7 +92,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchReminders = async () => {
     setIsLoadingReminders(true);
     try {
-      const response = await fetch("http://localhost:8080/api/support/reminders");
+      const response = await fetchWithAuth("http://localhost:8080/api/support/reminders");
       if (response.ok) {
         const data = await response.json();
         const today = new Date();
@@ -75,7 +114,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
         setReminders(mappedData);
       }
     } catch (error) {
-      console.error("Lỗi kết nối:", error);
+      if (error !== "Unauthorized") console.error("Lỗi kết nối:", error);
     } finally {
       setIsLoadingReminders(false);
     }
@@ -94,7 +133,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchFaqs = async () => {
     setIsLoadingFaqs(true);
     try {
-      const response = await fetch("http://localhost:8080/api/support/faqs");
+      const response = await fetchWithAuth("http://localhost:8080/api/support/faqs");
       if (response.ok) {
         const data = await response.json();
         setFaqsList(data);
@@ -102,7 +141,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
         triggerToast("Lỗi lấy danh sách FAQ!");
       }
     } catch (error) {
-      console.error("Lỗi kết nối:", error);
+      if (error !== "Unauthorized") console.error("Lỗi kết nối:", error);
     } finally {
       setIsLoadingFaqs(false);
     }
@@ -122,7 +161,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchTickets = async () => {
     setIsLoadingTickets(true);
     try {
-      const res = await fetch("http://localhost:8080/api/customer/feedback/list");
+      const res = await fetchWithAuth("http://localhost:8080/api/customer/feedback/list");
       if (res.ok) {
         const data = await res.json();
         const mapped = data.map((t: any) => ({
@@ -140,7 +179,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
         setTicketsList(mapped);
       }
     } catch (err) {
-      console.error(err);
+      if (err !== "Unauthorized") console.error(err);
     } finally {
       setIsLoadingTickets(false);
     }
@@ -221,7 +260,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
 
       const method = isEditing ? "PUT" : "POST";
 
-      const response = await fetch(url, {
+      const response = await fetchWithAuth(url, {
         method: method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: faqQuestion, answer: faqAnswer }),
@@ -235,7 +274,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
         triggerToast("Lỗi khi lưu dữ liệu vào hệ thống!");
       }
     } catch (error) {
-      triggerToast("Lỗi kết nối tới máy chủ!");
+      if (error !== "Unauthorized") triggerToast("Lỗi kết nối tới máy chủ!");
     }
   };
 
@@ -279,7 +318,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     try {
       // Bỏ phần chữ "PH-" để lấy ID gốc truyền cho Endpoint
       const rawId = String(selectedTicket.id).replace("PH-", "");
-      const res = await fetch(`http://localhost:8080/api/customer/feedback/resolve/${rawId}`, {
+      const res = await fetchWithAuth(`http://localhost:8080/api/customer/feedback/resolve/${rawId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ normalContent: ticketResponse }),
@@ -293,7 +332,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
         triggerToast("Lỗi gởi email");
       }
     } catch (err) {
-      triggerToast("Lỗi gởi email");
+      if (err !== "Unauthorized") triggerToast("Lỗi gởi email");
     }
   };
 

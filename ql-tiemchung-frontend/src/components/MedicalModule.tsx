@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // Bổ sung import useNavigate
 import { Patient, Vaccine } from "../types";
 import { Search, Edit, Trash2, Save, MapPin, Calendar, Syringe, Pill, X, ArrowLeft } from "lucide-react";
 
@@ -14,33 +15,75 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [vaccineOptions, setVaccineOptions] = useState<{ id: number; name: string }[]>([]);
   const [rightPaneMode, setRightPaneMode] = useState<"detail" | "edit" | "prescribe">("detail");
+  const navigate = useNavigate(); // Hook điều hướng
+
+  // =========================================================================
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // =========================================================================
+
+  // Chặn người dùng nếu chưa đăng nhập (Không có token)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
+      navigate("/"); // Đẩy về trang Login
+    }
+  }, [navigate, triggerToast]);
+
+  // Hàm Fetch đính kèm Token tự động cho mọi Request
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token");
+
+    // Gộp headers cũ với Authorization header mới
+    const headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+
+    const response = await fetch(url, { ...options, headers });
+
+    // Nếu Backend báo lỗi 401 (Unauthorized) hoặc 403 (Forbidden) -> Token hết hạn/Sai quyền
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      navigate("/");
+      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      return Promise.reject("Unauthorized");
+    }
+
+    return response;
+  };
 
   const fetchPatients = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/medical/patients");
+      const response = await fetchWithAuth("http://localhost:8080/api/medical/patients");
       if (response.ok) {
         const data = await response.json();
-        setPatients(data); 
+        setPatients(data);
         return data;
       } else {
         triggerToast("Lỗi: Không thể lấy dữ liệu hồ sơ bệnh án!");
       }
     } catch (error) {
-      console.error("Lỗi kết nối Backend:", error);
-      triggerToast("Không thể kết nối đến Máy chủ Backend!");
+      if (error !== "Unauthorized") {
+        console.error("Lỗi kết nối Backend:", error);
+        triggerToast("Không thể kết nối đến Máy chủ Backend!");
+      }
     }
     return null;
   };
 
   const fetchVaccinesForCombobox = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/medical/vaccines");
+      const response = await fetchWithAuth("http://localhost:8080/api/medical/vaccines");
       if (response.ok) {
         const data = await response.json();
         setVaccineOptions(data);
       }
     } catch (error) {
-      console.error("Lỗi lấy danh sách vắc xin:", error);
+      if (error !== "Unauthorized") {
+        console.error("Lỗi lấy danh sách vắc xin:", error);
+      }
     }
   };
 
@@ -137,7 +180,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
   const handleDeleteHistoryRecord = async (recordId: number, index: number) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa bản ghi lịch sử tiêm này không?")) return;
     try {
-      const response = await fetch(`http://localhost:8080/api/medical/history/${recordId}`, {
+      const response = await fetchWithAuth(`http://localhost:8080/api/medical/history/${recordId}`, {
         method: "DELETE",
       });
       if (response.ok) {
@@ -155,8 +198,10 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
         triggerToast(`Lỗi xóa lịch sử: ${errorText}`);
       }
     } catch (error) {
-      console.error("Lỗi xóa lịch sử:", error);
-      triggerToast("Không thể kết nối đến máy chủ để xóa!");
+      if (error !== "Unauthorized") {
+        console.error("Lỗi xóa lịch sử:", error);
+        triggerToast("Không thể kết nối đến máy chủ để xóa!");
+      }
     }
   };
 
@@ -198,7 +243,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
     }
 
     try {
-      const response = await fetch(`http://localhost:8080/api/medical/patients/${selectedPatient?.id}`, {
+      const response = await fetchWithAuth(`http://localhost:8080/api/medical/patients/${selectedPatient?.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -229,8 +274,10 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
         triggerToast(`Lỗi từ server: ${errorText}`);
       }
     } catch (error) {
-      console.error("Lỗi cập nhật:", error);
-      triggerToast("Không thể kết nối đến máy chủ để cập nhật!");
+      if (error !== "Unauthorized") {
+        console.error("Lỗi cập nhật:", error);
+        triggerToast("Không thể kết nối đến máy chủ để cập nhật!");
+      }
     }
   };
 
@@ -248,7 +295,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
     }
 
     try {
-      const response = await fetch("http://localhost:8080/api/medical/prescribe", {
+      const response = await fetchWithAuth("http://localhost:8080/api/medical/prescribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -271,8 +318,10 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
         triggerToast(`Lỗi kê đơn: ${errorText}`);
       }
     } catch (error) {
-      console.error("Lỗi khi kê đơn:", error);
-      triggerToast("Không thể kết nối với máy chủ!");
+      if (error !== "Unauthorized") {
+        console.error("Lỗi khi kê đơn:", error);
+        triggerToast("Không thể kết nối với máy chủ!");
+      }
     }
   };
 
@@ -402,7 +451,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
                         </div>
                         <div className="text-xs text-slate-600">
                           <span className="font-semibold text-slate-500">Trạng thái:</span>{" "}
-                          <span className={`font-bold ${record.status === 'Đã tiêm' ? 'text-emerald-600' : 'text-amber-600'}`}>{record.status}</span>
+                          <span className={`font-bold ${record.status === "Đã tiêm" ? "text-emerald-600" : "text-amber-600"}`}>{record.status}</span>
                         </div>
                       </div>
                     ))}
@@ -709,9 +758,13 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
                       prescribeErrors.vaccineId ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-300 focus:border-emerald-500"
                     }`}
                   >
-                    <option value="" disabled>-- Chọn Vắc-xin --</option>
+                    <option value="" disabled>
+                      -- Chọn Vắc-xin --
+                    </option>
                     {vaccineOptions.map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
+                      <option key={v.id} value={v.id}>
+                        {v.name}
+                      </option>
                     ))}
                   </select>
                   {prescribeErrors.vaccineId && <p className="text-[10px] text-red-500 font-bold mt-1">{prescribeErrors.vaccineId}</p>}

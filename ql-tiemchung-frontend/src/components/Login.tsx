@@ -20,15 +20,24 @@ const Login: React.FC = () => {
             const data = await response.json();
 
             if (data.success) {
-                // Lưu trạng thái đăng nhập vào localStorage
-                localStorage.setItem('user', JSON.stringify({ hoTen: data.hoTen }));
-                // Chuyển hướng sang trang App (Dashboard)
+                // 1. Lưu thông tin người dùng vào localStorage để hiển thị Tên trên Header và xử lý phân quyền
+                localStorage.setItem('user', JSON.stringify({ 
+                    hoTen: data.hoTen,
+                    maQuyen: data.maQuyen // Đã bổ sung maQuyen từ Backend trả về
+                }));
+                
+                // 2. LƯU JWT TOKEN ĐỂ XUẤT TRÌNH KHI GỌI CÁC API KHÁC
+                if (data.token) {
+                    localStorage.setItem('token', data.token);
+                }
+
+                // 3. Chuyển hướng sang trang App (Dashboard)
                 navigate('/app');
             } else {
                 setError(data.message || 'Tên đăng nhập hoặc mật khẩu không chính xác.');
             }
         } catch (err) {
-            setError('Lỗi kết nối đến server! Vui lòng thử lại sau.');
+            setError('Lỗi kết nối đến server! Vui lòng kiểm tra lại Backend.');
         }
     };
 

@@ -52,6 +52,24 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
   // --- STATES: ĐIỀU HƯỚNG TABS ---
   const [activeTab, setActiveTab] = useState<"profile" | "vaccines" | "schedules" | "diseases" | "feedback" | "faqs" | "my_feedbacks">("profile");
 
+  // =========================================================================
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // =========================================================================
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token");
+    const headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+    const response = await fetch(url, { ...options, headers });
+    
+    if (response.status === 401 || response.status === 403) {
+      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      return Promise.reject("Unauthorized");
+    }
+    return response;
+  };
+
   // --- DỮ LIỆU THẬT LẤY TỪ DATABASE ---
   const [profile, setProfile] = useState({
     id: "1", // Tạm thời hardcode người dùng đang đăng nhập có id = 1
@@ -69,13 +87,13 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
 
   const fetchDiseases = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/customer/diseases");
+      const response = await fetchWithAuth("http://localhost:8080/api/customer/diseases");
       if (response.ok) {
         const data = await response.json();
         setDiseases(data);
       }
     } catch (error) {
-      console.error("Lỗi lấy thông tin dịch bệnh:", error);
+      if (error !== "Unauthorized") console.error("Lỗi lấy thông tin dịch bệnh:", error);
       triggerToast("Không thể kết nối tải thông tin dịch bệnh!");
     }
   };
@@ -88,33 +106,33 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
   // Fetch FAQs
   const fetchFaqs = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/customer/faqs");
+      const res = await fetchWithAuth("http://localhost:8080/api/customer/faqs");
       if (res.ok) {
         const data = await res.json();
         setFaqs(data);
       }
     } catch (e) {
-      console.error(e);
+      if (e !== "Unauthorized") console.error(e);
     }
   };
 
   // Fetch My Feedbacks (Dùng tạm ID = 1)
   const fetchMyFeedbacks = async () => {
     try {
-      const res = await fetch("http://localhost:8080/api/customer/my-feedbacks/1");
+      const res = await fetchWithAuth("http://localhost:8080/api/customer/my-feedbacks/1");
       if (res.ok) {
         const data = await res.json();
         setMyFeedbacks(data);
       }
     } catch (e) {
-      console.error(e);
+      if (e !== "Unauthorized") console.error(e);
     }
   };
 
   // --- HÀM TẢI DỮ LIỆU CÁ NHÂN TỪ API ---
   const fetchProfile = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/customer/profile/1");
+      const response = await fetchWithAuth("http://localhost:8080/api/customer/profile/1");
       if (response.ok) {
         const data = await response.json();
         const profileData = {
@@ -141,14 +159,14 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         setHistory(formattedHistory);
       }
     } catch (error) {
-      console.error("Lỗi lấy thông tin:", error);
+      if (error !== "Unauthorized") console.error("Lỗi lấy thông tin:", error);
       triggerToast("Không thể tải thông tin hồ sơ từ máy chủ!");
     }
   };
 
   const fetchVaccines = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/customer/vaccines");
+      const response = await fetchWithAuth("http://localhost:8080/api/customer/vaccines");
       if (response.ok) {
         const data = await response.json();
         setVaccines(data);
@@ -156,14 +174,14 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         triggerToast("Lỗi tải danh mục vắc-xin từ máy chủ!");
       }
     } catch (error) {
-      console.error(error);
+      if (error !== "Unauthorized") console.error(error);
       triggerToast("Không thể kết nối đến Backend Server!");
     }
   };
 
   const fetchSchedules = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/admin/schedules");
+      const response = await fetchWithAuth("http://localhost:8080/api/admin/schedules");
       if (response.ok) {
         const data = await response.json();
         setSchedules(data);
@@ -171,7 +189,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         triggerToast("Lỗi: Không thể lấy dữ liệu lịch tiêm chủng!");
       }
     } catch (error) {
-      console.error("Lỗi kết nối Backend:", error);
+      if (error !== "Unauthorized") console.error("Lỗi kết nối Backend:", error);
       triggerToast("Không thể kết nối đến Máy chủ Backend!");
     }
   };
@@ -252,7 +270,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         address: profileForm.address,
       };
 
-      const res = await fetch(`http://localhost:8080/api/customer/profile/1`, {
+      const res = await fetchWithAuth(`http://localhost:8080/api/customer/profile/1`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -267,7 +285,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       setIsEditingProfile(false);
       triggerToast("Cập nhật thông tin cá nhân lên hệ thống thành công!");
     } catch (error: any) {
-      triggerToast("Lỗi cập nhật: " + error.message);
+      if (error !== "Unauthorized") triggerToast("Lỗi cập nhật: " + error.message);
     }
   };
 
@@ -313,7 +331,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         highLevelContent: feedbackForm.highLevelContent,
       };
 
-      const res = await fetch(`http://localhost:8080${endpoint}`, {
+      const res = await fetchWithAuth(`http://localhost:8080${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -327,7 +345,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       triggerToast(feedbackType === "after_vaccine" ? "Gửi thành công" : "Phản hồi gửi đi thành công.");
       handleCancelFeedback(); // Reset form sau khi gửi
     } catch (error) {
-      triggerToast(feedbackType === "after_vaccine" ? "Gửi thất bại" : "Phản hồi gửi thất bại");
+      if (error !== "Unauthorized") triggerToast(feedbackType === "after_vaccine" ? "Gửi thất bại" : "Phản hồi gửi thất bại");
     }
   };
 
@@ -360,7 +378,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         }
       }
 
-      const res = await fetch("http://localhost:8080/api/customer/book", {
+      const res = await fetchWithAuth("http://localhost:8080/api/customer/book", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -375,7 +393,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       setBookModal({ isOpen: false, type: "vaccine", data: null });
       setBookingDate("");
     } catch (err: any) {
-      triggerToast("Lỗi: " + err.message);
+      if (err !== "Unauthorized") triggerToast("Lỗi: " + err.message);
     }
   };
 

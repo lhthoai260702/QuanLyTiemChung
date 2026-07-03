@@ -5,6 +5,7 @@ import com.vaccine.qltiemchungbackend.dto.AccountDTO;
 import com.vaccine.qltiemchungbackend.entity.TaiKhoan;
 import com.vaccine.qltiemchungbackend.repository.TaiKhoanRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,9 @@ public class TaiKhoanService {
 
     @Autowired
     private TaiKhoanRepository taiKhoanRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     public List<AccountDTO> getAllAccounts() {
         // Lấy danh sách từ Native Query đã có sẵn dữ liệu Join
@@ -45,12 +49,15 @@ public class TaiKhoanService {
                 }).collect(Collectors.toList());
     }
 
-    // Hàm Tạo Mới đã nâng cấp
+    // Hàm Tạo Mới đã nâng cấp (Tích hợp Mã hoá mật khẩu BCrypt)
     @Transactional
     public void createAccount(AccountCreationDTO dto) {
         TaiKhoan tk = new TaiKhoan();
         tk.setTenDangNhap(dto.getTenDangNhap());
-        tk.setMatKhau(dto.getMatKhau());
+
+        // MÃ HOÁ MẬT KHẨU TRƯỚC KHI LƯU VÀO DB
+        tk.setMatKhau(passwordEncoder.encode(dto.getMatKhau()));
+
         tk.setHoTen(dto.getHoTen());
         tk.setCmnd(dto.getCmnd());
         tk.setNoiO(dto.getNoiO());
@@ -70,7 +77,7 @@ public class TaiKhoanService {
         }
     }
 
-    // Hàm Update mới
+    // Hàm Update mới (Tích hợp kiểm tra và Mã hoá mật khẩu BCrypt nếu có đổi)
     @Transactional
     public void updateAccount(Long id, AccountCreationDTO dto) {
         TaiKhoan tk = taiKhoanRepository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản"));
@@ -79,9 +86,12 @@ public class TaiKhoanService {
         tk.setNoiO(dto.getNoiO());
         tk.setMoTa(dto.getMoTa());
         tk.setEmail(dto.getEmail());
-        if (dto.getMatKhau() != null && !dto.getMatKhau().isEmpty()) {
-            tk.setMatKhau(dto.getMatKhau());
+
+        // NẾU FRONTEND TRUYỀN MẬT KHẨU MỚI THÌ SẼ MÃ HOÁ LẠI
+        if (dto.getMatKhau() != null && !dto.getMatKhau().trim().isEmpty()) {
+            tk.setMatKhau(passwordEncoder.encode(dto.getMatKhau()));
         }
+
         taiKhoanRepository.save(tk);
 
         taiKhoanRepository.updateChiTietPhanQuyen(id, dto.getMaQuyen());
@@ -89,10 +99,12 @@ public class TaiKhoanService {
         // Kiểm tra nếu Update trả về 0 (nghĩa là user chưa có trong bảng con), thì Insert vào
         if (dto.getMaQuyen() == 6L) {
             int rows = taiKhoanRepository.updateBenhNhan(id, dto.getHoTen(), dto.getNgaySinh(), dto.getDiaChi(), dto.getNguoiGiamHo(), dto.getSdt(), dto.getGioiTinh());
-            if (rows == 0) taiKhoanRepository.insertBenhNhan(id, dto.getHoTen(), dto.getNgaySinh(), dto.getDiaChi(), dto.getNguoiGiamHo(), dto.getSdt(), dto.getGioiTinh());
+            if (rows == 0)
+                taiKhoanRepository.insertBenhNhan(id, dto.getHoTen(), dto.getNgaySinh(), dto.getDiaChi(), dto.getNguoiGiamHo(), dto.getSdt(), dto.getGioiTinh());
         } else {
             int rows = taiKhoanRepository.updateNhanVien(id, dto.getHoTen(), dto.getNamSinh(), dto.getSdt());
-            if (rows == 0) taiKhoanRepository.insertNhanVien(id, dto.getHoTen(), dto.getNamSinh(), dto.getSdt());
+            if (rows == 0)
+                taiKhoanRepository.insertNhanVien(id, dto.getHoTen(), dto.getNamSinh(), dto.getSdt());
         }
     }
 

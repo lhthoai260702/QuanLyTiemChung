@@ -34,6 +34,24 @@ interface InventoryModuleProps { triggerToast: (msg: string) => void; }
 export default function InventoryModule({ triggerToast }: InventoryModuleProps) {
   const [activeTab, setActiveTab] = useState<'view' | 'import' | 'export'>('view');
   
+  // =========================================================================
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // =========================================================================
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token");
+    const headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+    const response = await fetch(url, { ...options, headers });
+    
+    if (response.status === 401 || response.status === 403) {
+      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      return Promise.reject("Unauthorized");
+    }
+    return response;
+  };
+
   // States
   const [vaccines, setVaccines] = useState<KhoVacXin[]>([]);
   const [loaiVacXinList, setLoaiVacXinList] = useState<ItemDB[]>([]);
@@ -51,21 +69,21 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const fetchInventoryData = async () => {
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:8080/api/inventory/vaccines");
+      const res = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines");
       if (!res.ok) throw new Error("Lỗi kết nối");
       setVaccines(await res.json());
       setError(null);
     } catch (err: any) {
-      setError(err.message);
+      if (err !== "Unauthorized") setError(err.message);
     } finally { setLoading(false); }
   };
 
   const fetchMetadata = async () => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetch("http://localhost:8080/api/inventory/vaccine-types"),
-        fetch("http://localhost:8080/api/inventory/vaccine-list"),
-        fetch("http://localhost:8080/api/inventory/suppliers")
+        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-types"),
+        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-list"),
+        fetchWithAuth("http://localhost:8080/api/inventory/suppliers")
       ]);
       if (resType.ok) {
         const data = await resType.json();
@@ -82,7 +100,9 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         const data = await resSup.json();
         setSupplierList(data.map((d: any) => ({ id: d.maNhaCungCap, name: d.tenNhaCungCap })));
       }
-    } catch (e) { console.error("Lỗi lấy siêu dữ liệu", e); }
+    } catch (e) { 
+      if (e !== "Unauthorized") console.error("Lỗi lấy siêu dữ liệu", e); 
+    }
   };
 
   // Lọc & Phân trang
@@ -226,7 +246,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         maNhaCungCap: isNewSupplier ? null : importForm.maNhaCungCap,
       };
       
-      const res = await fetch("http://localhost:8080/api/inventory/vaccines", {
+      const res = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error("Lưu thất bại");
@@ -235,7 +255,9 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       fetchInventoryData();
       fetchMetadata(); 
       setActiveTab('view');
-    } catch (error) { triggerToast('Lỗi khi lưu Database'); }
+    } catch (error) { 
+      if (error !== "Unauthorized") triggerToast('Lỗi khi lưu Database'); 
+    }
   };
 
   const handleExportSubmit = async (e: React.FormEvent) => {
@@ -258,23 +280,27 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       }
 
       try {
-        const res = await fetch(`http://localhost:8080/api/inventory/vaccines/${targetVac.soLo}/export?quantity=${exportForm.soLuongXuat}`, { method: "POST" });
+        const res = await fetchWithAuth(`http://localhost:8080/api/inventory/vaccines/${targetVac.soLo}/export?quantity=${exportForm.soLuongXuat}`, { method: "POST" });
         if (!res.ok) throw new Error("Lỗi khi xuất kho");
         triggerToast("Xuất kho thành công");
         setExportForm({ soLoId: '', soLuongXuat: '' });
         setExportErrors({});
         fetchInventoryData(); setActiveTab('view');
-      } catch (err: any) { triggerToast(err.message); }
+      } catch (err: any) { 
+        if (err !== "Unauthorized") triggerToast(err.message); 
+      }
     }
   };
 
   const confirmDelete = async () => {
     if (itemToDelete === null) return;
     try {
-      await fetch(`http://localhost:8080/api/inventory/vaccines/${itemToDelete}`, { method: "DELETE" });
+      await fetchWithAuth(`http://localhost:8080/api/inventory/vaccines/${itemToDelete}`, { method: "DELETE" });
       triggerToast('Hủy Lô Vắc-xin thành công!');
       fetchInventoryData();
-    } catch (err: any) { triggerToast('Lỗi xóa lô'); } finally { setItemToDelete(null); }
+    } catch (err: any) { 
+      if (err !== "Unauthorized") triggerToast('Lỗi xóa lô'); 
+    } finally { setItemToDelete(null); }
   };
 
   const renderImportForm = () => (

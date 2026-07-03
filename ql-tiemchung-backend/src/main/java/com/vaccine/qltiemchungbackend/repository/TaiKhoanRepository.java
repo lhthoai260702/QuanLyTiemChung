@@ -71,4 +71,10 @@ public interface TaiKhoanRepository extends JpaRepository<TaiKhoan, Long> {
     @Transactional
     @Query(value = "UPDATE TAIKHOAN SET flag_delete = TRUE WHERE MaTaiKhoan = :maTaiKhoan", nativeQuery = true)
     void softDeleteAccount(@Param("maTaiKhoan") Long maTaiKhoan);
+
+    // THÊM HÀM MỚI: Chỉ tìm bằng Tên Đăng Nhập
+    Optional<TaiKhoan> findByTenDangNhapAndFlagDeleteFalseOrFlagDeleteIsNull(String tenDangNhap);
+
+    @Query(value = "SELECT MAX(MaQuyen) FROM CHITIETPHANQUYEN WHERE MaTaiKhoan = :maTaiKhoan", nativeQuery = true)
+    Long findMaQuyenByMaTaiKhoan(@Param("maTaiKhoan") Long maTaiKhoan);
 }

@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom"; // Bổ sung import createPortal
+import { useNavigate } from "react-router-dom"; // Bổ sung import useNavigate
 import { Invoice, Vaccine, SystemLog } from "../types";
 import {
   CreditCard,
@@ -17,6 +19,7 @@ import {
   Banknote,
   Package,
   Activity,
+  AlertCircle, // Bổ sung icon AlertCircle cho Popup Delete
 } from "lucide-react";
 
 interface FinanceModuleProps {
@@ -81,6 +84,7 @@ interface VacXinDB extends ItemDB {
 
 export default function FinanceModule({ invoices, setInvoices, vaccines, systemLogs, setSystemLogs, triggerToast }: FinanceModuleProps) {
   const [activeTab, setActiveTab] = useState<"customer_tx" | "supplier_tx" | "pricing">("customer_tx");
+  const navigate = useNavigate(); // Hook điều hướng
 
   const formatCurrencyInput = (value: number | undefined) => {
     if (!value || value === 0) return "";
@@ -93,6 +97,23 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   const [loaiVacXinList, setLoaiVacXinList] = useState<ItemDB[]>([]);
   const [vacXinCatalog, setVacXinCatalog] = useState<VacXinDB[]>([]);
   const [supplierList, setSupplierList] = useState<ItemDB[]>([]);
+
+  // ==========================================
+  // STATE: POPUP XÁC NHẬN XÓA (MODAL)
+  // ==========================================
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    type: "customer" | "supplier" | "price" | null;
+    id: string | number | null;
+    message: string;
+    actionTitle: string;
+  }>({
+    isOpen: false,
+    type: null,
+    id: null,
+    message: "",
+    actionTitle: "",
+  });
 
   // ==========================================
   // STATE: GIAO DỊCH VỚI KHÁCH HÀNG
@@ -145,15 +166,52 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     price: 0,
   });
 
+  // =========================================================================
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // =========================================================================
+
+  // Chặn người dùng nếu chưa đăng nhập (Không có token)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
+      navigate("/"); // Đẩy về trang Login
+    }
+  }, [navigate, triggerToast]);
+
+  // Hàm Fetch đính kèm Token tự động cho mọi Request
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const token = localStorage.getItem("token");
+
+    // Gộp headers cũ với Authorization header mới
+    const headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+
+    const response = await fetch(url, { ...options, headers });
+
+    // Nếu Backend báo lỗi 401 (Unauthorized) hoặc 403 (Forbidden) -> Token hết hạn/Sai quyền
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      navigate("/");
+      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      return Promise.reject("Unauthorized");
+    }
+
+    return response;
+  };
+
   // ==========================================
   // CALL API
   // ==========================================
   const fetchMetadata = async () => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetch("http://localhost:8080/api/inventory/vaccine-types"),
-        fetch("http://localhost:8080/api/inventory/vaccine-list"),
-        fetch("http://localhost:8080/api/inventory/suppliers"),
+        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-types"),
+        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-list"),
+        fetchWithAuth("http://localhost:8080/api/inventory/suppliers"),
       ]);
       if (resType.ok) {
         const data = await resType.json();
@@ -179,34 +237,34 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         setSupplierList(data.map((d: any) => ({ id: d.maNhaCungCap, name: d.tenNhaCungCap })));
       }
     } catch (e) {
-      console.error("Lỗi lấy siêu dữ liệu", e);
+      if (e !== "Unauthorized") console.error("Lỗi lấy siêu dữ liệu", e);
     }
   };
 
   const fetchCustomerTransactions = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/finance/customer-transactions");
+      const response = await fetchWithAuth("http://localhost:8080/api/finance/customer-transactions");
       if (response.ok) setCustomerTxs(await response.json());
     } catch (error) {
-      triggerToast("Không thể kết nối tải thông tin khách hàng!");
+      if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin khách hàng!");
     }
   };
 
   const fetchSupplierTransactions = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/inventory/vaccines");
+      const response = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines");
       if (response.ok) setSupplierTxs(await response.json());
     } catch (error) {
-      triggerToast("Lỗi kết nối tải dữ liệu nhà cung cấp!");
+      if (error !== "Unauthorized") triggerToast("Lỗi kết nối tải dữ liệu nhà cung cấp!");
     }
   };
 
   const fetchVaccinePrices = async () => {
     try {
-      const response = await fetch("http://localhost:8080/api/finance/vaccine-prices");
+      const response = await fetchWithAuth("http://localhost:8080/api/finance/vaccine-prices");
       if (response.ok) setVaccinePrices(await response.json());
     } catch (error) {
-      triggerToast("Không thể kết nối tải thông tin giá vắc-xin!");
+      if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin giá vắc-xin!");
     }
   };
 
@@ -218,6 +276,47 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       fetchMetadata();
     }
   }, [activeTab]);
+
+  // ==========================================
+  // HANDLER POPUP XÓA CHUNG
+  // ==========================================
+  const confirmDelete = async () => {
+    if (!deleteModal.id || !deleteModal.type) return;
+    const { id, type } = deleteModal;
+
+    try {
+      if (type === "customer") {
+        const response = await fetchWithAuth(`http://localhost:8080/api/finance/customer-transactions/${id}`, { method: "DELETE" });
+        if (response.ok) {
+          setCustomerTxs(customerTxs.filter((tx) => tx.id !== id));
+          triggerToast("Đã hủy và xóa mềm hóa đơn thành công!");
+        } else {
+          triggerToast("Tác vụ lỗi: Hủy hóa đơn thất bại!");
+        }
+      } else if (type === "supplier") {
+        const response = await fetchWithAuth(`http://localhost:8080/api/inventory/vaccines/${id}`, { method: "DELETE" });
+        if (response.ok) {
+          setSupplierTxs(supplierTxs.filter((tx) => tx.soLo !== id));
+          triggerToast("Hủy hóa đơn nhập lô thành công!");
+        } else {
+          triggerToast("Lỗi xóa giao dịch");
+        }
+      } else if (type === "price") {
+        const response = await fetchWithAuth(`http://localhost:8080/api/finance/vaccine-prices/${id}`, { method: "DELETE" });
+        if (response.ok) {
+          triggerToast("Đã xóa bảng giá vắc-xin thành công!");
+          fetchVaccinePrices();
+        } else {
+          triggerToast("Lỗi khi thực hiện xóa trên máy chủ!");
+        }
+      }
+    } catch (error) {
+      if (error !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ");
+    } finally {
+      // Đóng modal sau khi xóa (thành công hoặc lỗi)
+      setDeleteModal({ isOpen: false, type: null, id: null, message: "", actionTitle: "" });
+    }
+  };
 
   // ==========================================
   // HANDLERS: KHÁCH HÀNG
@@ -234,19 +333,14 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     setShowCustomerForm(true);
   };
 
-  const handleDeleteCustomer = async (id: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn hủy giao dịch (hóa đơn) này? Thao tác này có thể ảnh hưởng đến kết quả kinh doanh.")) return;
-    try {
-      const response = await fetch(`http://localhost:8080/api/finance/customer-transactions/${id}`, { method: "DELETE" });
-      if (response.ok) {
-        setCustomerTxs(customerTxs.filter((tx) => tx.id !== id));
-        triggerToast("Đã hủy và xóa mềm hóa đơn thành công!");
-      } else {
-        triggerToast("Tác vụ lỗi: Hủy hóa đơn thất bại!");
-      }
-    } catch (error) {
-      triggerToast("Lỗi kết nối máy chủ");
-    }
+  const handleDeleteCustomer = (id: string) => {
+    setDeleteModal({
+      isOpen: true,
+      type: "customer",
+      id,
+      message: "Bạn có chắc chắn muốn hủy giao dịch (hóa đơn) này? Thao tác này có thể ảnh hưởng đến kết quả kinh doanh.",
+      actionTitle: "Xác nhận Hủy hóa đơn",
+    });
   };
 
   const handleSaveCustomer = async (e: React.FormEvent) => {
@@ -258,7 +352,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     try {
       if (editingCustomerTxId) {
         // Gọi API PUT Update để đồng bộ lại HoSoBenhAn và Các bảng liên quan
-        const response = await fetch(`http://localhost:8080/api/finance/customer-transactions/${editingCustomerTxId}`, {
+        const response = await fetchWithAuth(`http://localhost:8080/api/finance/customer-transactions/${editingCustomerTxId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(customerForm),
@@ -272,7 +366,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         }
       }
     } catch (error) {
-      triggerToast("Lỗi kết nối máy chủ!");
+      if (error !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ!");
     }
   };
 
@@ -296,19 +390,14 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     setShowSupplierForm(true);
   };
 
-  const handleDeleteSupplier = async (soLo: number) => {
-    if (!window.confirm("Bạn có chắc chắn muốn xóa giao dịch nhập lô này khỏi hệ thống?")) return;
-    try {
-      const response = await fetch(`http://localhost:8080/api/inventory/vaccines/${soLo}`, { method: "DELETE" });
-      if (response.ok) {
-        setSupplierTxs(supplierTxs.filter((tx) => tx.soLo !== soLo));
-        triggerToast("Hủy hóa đơn nhập lô thành công!");
-      } else {
-        triggerToast("Lỗi xóa giao dịch");
-      }
-    } catch (error) {
-      triggerToast("Lỗi kết nối xóa lô");
-    }
+  const handleDeleteSupplier = (soLo: number) => {
+    setDeleteModal({
+      isOpen: true,
+      type: "supplier",
+      id: soLo,
+      message: "Bạn có chắc chắn muốn xóa giao dịch nhập lô này khỏi hệ thống?",
+      actionTitle: "Xác nhận Xóa giao dịch",
+    });
   };
 
   const handleDonGiaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -443,7 +532,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         maNhaCungCap: isNewSupplier ? null : supplierForm.maNhaCungCap,
       };
 
-      const res = await fetch("http://localhost:8080/api/inventory/vaccines", {
+      const res = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -455,7 +544,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       fetchMetadata();
       resetSupplierForm();
     } catch (error) {
-      triggerToast("Lỗi khi lưu Database");
+      if (error !== "Unauthorized") triggerToast("Lỗi khi lưu Database");
     }
   };
 
@@ -474,19 +563,14 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     setShowPriceForm(true);
   };
 
-  const handleDeletePrice = async (id: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn ngừng kinh doanh và xóa định giá vắc-xin này không?")) return;
-    try {
-      const response = await fetch(`http://localhost:8080/api/finance/vaccine-prices/${id}`, { method: "DELETE" });
-      if (response.ok) {
-        triggerToast("Đã xóa bảng giá vắc-xin thành công!");
-        fetchVaccinePrices();
-      } else {
-        triggerToast("Lỗi khi thực hiện xóa trên máy chủ!");
-      }
-    } catch (error) {
-      triggerToast("Lỗi kết nối đến máy chủ!");
-    }
+  const handleDeletePrice = (id: string) => {
+    setDeleteModal({
+      isOpen: true,
+      type: "price",
+      id,
+      message: "Bạn có chắc chắn muốn ngừng kinh doanh và xóa định giá vắc-xin này không?",
+      actionTitle: "Xác nhận Xóa định giá",
+    });
   };
 
   const handleSavePrice = async (e: React.FormEvent) => {
@@ -496,7 +580,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       return;
     }
     try {
-      const response = await fetch(`http://localhost:8080/api/finance/vaccine-prices/${priceForm.id}`, {
+      const response = await fetchWithAuth(`http://localhost:8080/api/finance/vaccine-prices/${priceForm.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(priceForm),
@@ -509,7 +593,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         triggerToast("Lỗi cập nhật giá trên máy chủ!");
       }
     } catch (error) {
-      triggerToast("Lỗi cập nhật hệ thống!");
+      if (error !== "Unauthorized") triggerToast("Lỗi cập nhật hệ thống!");
     }
   };
 
@@ -586,7 +670,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
                 className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-blue-100 outline-none"
               />
             </div>
-            {/* LƯU Ý: ĐÃ XÓA BUTTON TẠO GIAO DỊCH MỚI CỦA KHÁCH THEO YÊU CẦU */}
           </div>
 
           {showCustomerForm && (
@@ -905,7 +988,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
                     </select>
                     {supplierErrors.maVacXin && <p className="text-[10px] text-red-500 font-bold mt-1.5">{supplierErrors.maVacXin}</p>}
                     <p className="text-[11px] text-indigo-600 mt-1.5 italic">
-                      * Chọn vắc xin đã có để tự động điền thông tin. Bạn có thể chỉnh sửa các ô bên dưới nếu giá trị thay đổi để lưu đè lại vào CSDL.
+                      * Chọn vắc xin đã có để tự động điền thông tự. Bạn có thể chỉnh sửa các ô bên dưới nếu giá trị thay đổi để lưu đè lại vào CSDL.
                     </p>
                   </div>
 
@@ -1301,6 +1384,35 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
           </div>
         </div>
       )}
+
+      {/* Modal Xóa chung */}
+      {deleteModal.isOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-xl shadow-xl w-[90%] max-w-md p-6 space-y-4">
+              <div className="flex items-center gap-3 text-red-600 border-b border-slate-100 pb-3">
+                <AlertCircle className="w-6 h-6" />
+                <h3 className="text-lg font-bold">Xác nhận xóa dữ liệu</h3>
+              </div>
+              <p className="text-sm text-slate-600 leading-relaxed">{deleteModal.message}</p>
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-2">
+                <button
+                  onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" /> {deleteModal.actionTitle}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

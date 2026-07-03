@@ -13,6 +13,16 @@ import java.time.Period;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * BenhNhanService
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Service
 public class BenhNhanService {
     @Autowired
@@ -26,6 +36,11 @@ public class BenhNhanService {
     @Autowired
     private LoVacXinRepository loVacXinRepository;
 
+    /**
+     * Lấy danh sách toàn bộ bệnh nhân cùng với lịch sử tiêm chủng của họ.
+     *
+     * @return List<BenhNhanDTO> Danh sách bệnh nhân đã được ánh xạ sang DTO
+     */
     public List<BenhNhanDTO> getAllPatients() {
         return repository.findByFlagDeleteFalseOrFlagDeleteIsNull().stream().map(bn -> {
             BenhNhanDTO dto = new BenhNhanDTO();
@@ -55,6 +70,12 @@ public class BenhNhanService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Cập nhật thông tin hồ sơ bệnh nhân và các bản ghi lịch sử tiêm chủng tương ứng.
+     *
+     * @param id  Mã bệnh nhân
+     * @param dto Đối tượng chứa dữ liệu bệnh nhân cần cập nhật
+     */
     public void updatePatient(Long id, BenhNhanDTO dto) {
         BenhNhan bn = repository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy bệnh nhân"));
         bn.setTenBenhNhan(dto.getFullName());
@@ -111,6 +132,11 @@ public class BenhNhanService {
         }
     }
 
+    /**
+     * Xóa mềm bản ghi lịch sử tiêm chủng của bệnh nhân.
+     *
+     * @param recordId Mã chi tiết đăng ký tiêm cần xóa
+     */
     public void deleteHistoryRecord(Long recordId) {
         ChiTietDkTiem ct = chiTietDkTiemRepository.findById(recordId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bản ghi lịch sử với ID: " + recordId));
@@ -123,6 +149,12 @@ public class BenhNhanService {
         });
     }
 
+    /**
+     * Lấy thông tin chi tiết của một bệnh nhân bao gồm toàn bộ lịch sử tiêm chủng.
+     *
+     * @param id Mã bệnh nhân
+     * @return BenhNhanDTO Thông tin bệnh nhân đã được ánh xạ
+     */
     public BenhNhanDTO getPatientById(Long id) {
         BenhNhan bn = repository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy bệnh nhân"));
         BenhNhanDTO dto = new BenhNhanDTO();

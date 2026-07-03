@@ -51,14 +51,25 @@
 package com.vaccine.qltiemchungbackend.entity;
 
 // 1. THÊM IMPORT NÀY
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.time.LocalDate;
 
+/**
+ * VacXin
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Entity
 @Table(name = "VACXIN")
 @Data

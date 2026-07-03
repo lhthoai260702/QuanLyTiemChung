@@ -3,11 +3,22 @@ package com.vaccine.qltiemchungbackend.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.time.LocalDate;
 
+/**
+ * KhoVacXinDTO
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Data
 @NoArgsConstructor
-@AllArgsConstructor // Lombok sẽ TỰ ĐỘNG tạo ra constructor 17 tham số tương ứng với thứ tự khai báo dưới đây
+@AllArgsConstructor
 public class KhoVacXinDTO {
     // Thông tin Lô Vắc xin
     private Long soLo;

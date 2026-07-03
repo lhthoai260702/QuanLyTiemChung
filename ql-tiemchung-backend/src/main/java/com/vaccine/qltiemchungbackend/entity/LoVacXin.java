@@ -4,8 +4,19 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.time.LocalDate;
 
+/**
+ * LoVacXin
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Entity
 @Table(name = "LOVACXIN")
 @Data

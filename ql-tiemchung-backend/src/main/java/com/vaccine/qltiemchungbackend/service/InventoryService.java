@@ -9,23 +9,55 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * InventoryService
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Service
 public class InventoryService {
 
-    @Autowired private LoVacXinRepository loVacXinRepository;
-    @Autowired private VacXinRepository vacXinRepository;
-    @Autowired private LoaiVacXinRepository loaiVacXinRepository;
-    @Autowired private NhaCungCapRepository nhaCungCapRepository;
-    @Autowired private HoaDonRepository hoaDonRepository;
+    @Autowired
+    private LoVacXinRepository loVacXinRepository;
+    @Autowired
+    private VacXinRepository vacXinRepository;
+    @Autowired
+    private LoaiVacXinRepository loaiVacXinRepository;
+    @Autowired
+    private NhaCungCapRepository nhaCungCapRepository;
+    @Autowired
+    private HoaDonRepository hoaDonRepository;
 
+    /**
+     * Lấy toàn bộ danh sách các lô vắc-xin hiện có trong kho.
+     *
+     * @return List<KhoVacXinDTO> Danh sách thông tin chi tiết các lô vắc-xin
+     */
     public List<KhoVacXinDTO> getAllKhoVacXin() {
         return loVacXinRepository.findAllKhoVacXin();
     }
 
+    /**
+     * Lấy danh sách các phân loại vắc-xin đang khả dụng (chưa bị xóa mềm).
+     *
+     * @return List<LoaiVacXin> Danh sách loại vắc-xin
+     */
     public List<LoaiVacXin> getAllLoaiVacXin() {
         return loaiVacXinRepository.findByFlagDeleteFalseOrFlagDeleteIsNull();
     }
 
+    /**
+     * Thêm mới hoặc cập nhật thông tin của một lô vắc-xin trong kho.
+     * Bao gồm xử lý tạo mới tự động các thực thể liên quan: Vắc-xin, Loại vắc-xin, Nhà cung cấp và Hóa đơn.
+     *
+     * @param dto Đối tượng chứa dữ liệu lô vắc-xin cần lưu
+     * @return KhoVacXinDTO Dữ liệu lô vắc-xin sau khi lưu thành công (kèm theo mã sinh tự động)
+     */
     @Transactional
     public KhoVacXinDTO saveOrUpdateKhoVacXin(KhoVacXinDTO dto) {
 
@@ -127,6 +159,13 @@ public class InventoryService {
         return dto;
     }
 
+    /**
+     * Thực hiện nghiệp vụ xuất kho vắc-xin.
+     * Cập nhật trừ đi số lượng hiện tại của lô vắc-xin tương ứng.
+     *
+     * @param soLo        Số lô vắc-xin cần xuất
+     * @param soLuongXuat Số lượng cần xuất kho
+     */
     @Transactional
     public void exportVaccine(Long soLo, int soLuongXuat) {
         LoVacXin loVacXin = loVacXinRepository.findById(soLo)
@@ -136,6 +175,11 @@ public class InventoryService {
         loVacXinRepository.save(loVacXin);
     }
 
+    /**
+     * Xóa mềm bản ghi một lô vắc-xin khỏi kho hàng.
+     *
+     * @param soLo Số lô vắc-xin cần xóa
+     */
     @Transactional
     public void deleteKhoVacXin(Long soLo) {
         LoVacXin loVacXin = loVacXinRepository.findById(soLo)

@@ -4,19 +4,42 @@ import com.vaccine.qltiemchungbackend.dto.BookingRequestDTO;
 import com.vaccine.qltiemchungbackend.entity.BenhNhan;
 import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
 import com.vaccine.qltiemchungbackend.entity.LoVacXin;
-import com.vaccine.qltiemchungbackend.repository.*;
+import com.vaccine.qltiemchungbackend.repository.BenhNhanRepository;
+import com.vaccine.qltiemchungbackend.repository.ChiTietDkTiemRepository;
+import com.vaccine.qltiemchungbackend.repository.LichTiemChungRepository;
+import com.vaccine.qltiemchungbackend.repository.LoVacXinRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * CustomerService
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Service
 public class CustomerService {
 
-    @Autowired private BenhNhanRepository benhNhanRepository;
-    @Autowired private LoVacXinRepository loVacXinRepository;
-    @Autowired private ChiTietDkTiemRepository chiTietDkTiemRepository;
-    @Autowired private LichTiemChungRepository lichTiemChungRepository;
+    @Autowired
+    private BenhNhanRepository benhNhanRepository;
+    @Autowired
+    private LoVacXinRepository loVacXinRepository;
+    @Autowired
+    private ChiTietDkTiemRepository chiTietDkTiemRepository;
+    @Autowired
+    private LichTiemChungRepository lichTiemChungRepository;
 
+    /**
+     * Đăng ký lịch tiêm chủng cho khách hàng (Bệnh nhân).
+     * Tự động kiểm tra tồn kho và lấy lô vắc-xin phù hợp cho đăng ký trung tâm hoặc đăng ký tự do.
+     *
+     * @param request Thông tin yêu cầu đăng ký tiêm chủng
+     */
     @Transactional
     public void bookVaccine(BookingRequestDTO request) {
         // 1. Lấy thông tin Bệnh nhân

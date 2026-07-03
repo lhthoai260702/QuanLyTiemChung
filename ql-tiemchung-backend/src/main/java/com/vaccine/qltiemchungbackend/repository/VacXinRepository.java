@@ -10,13 +10,42 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * VacXinRepository
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Repository
 public interface VacXinRepository extends JpaRepository<VacXin, Long> {
+
+    /**
+     * Tìm kiếm thông tin vắc-xin thông qua tên vắc-xin.
+     *
+     * @param tenVacXin Tên vắc-xin cần tìm kiếm
+     * @return Optional<VacXin> Thông tin vắc-xin nếu có
+     */
     Optional<VacXin> findByTenVacXin(String tenVacXin);
 
+    /**
+     * Lấy danh sách toàn bộ các loại vắc-xin khả dụng (chưa bị xóa mềm).
+     * Sắp xếp theo tên vắc-xin (Tăng dần).
+     *
+     * @return List<VacXin> Danh sách vắc-xin
+     */
     @Query("SELECT v FROM VacXin v WHERE v.flagDelete = false OR v.flagDelete IS NULL ORDER BY LOWER(v.tenVacXin) ASC")
     List<VacXin> findAllAvailable();
 
+    /**
+     * Lấy danh sách thông tin hiển thị vắc-xin dành riêng cho phía Khách hàng (Customer).
+     * Dữ liệu bao gồm các thông số cơ bản và tổng số lượng tồn kho của từng vắc-xin.
+     *
+     * @return List<CustomerVaccineProjection> Danh sách thông tin vắc-xin
+     */
     @Query(value = "SELECT " +
             "v.MaVacXin as maVacXin, " +
             "v.TenVacXin as tenVacXin, " +
@@ -33,6 +62,12 @@ public interface VacXinRepository extends JpaRepository<VacXin, Long> {
             "ORDER BY LOWER(v.TenVacXin) ASC", nativeQuery = true)
     List<CustomerVaccineProjection> findAllVaccinesForCustomer();
 
+    /**
+     * Tìm danh sách các vắc-xin trực thuộc một mã loại vắc-xin cụ thể.
+     *
+     * @param maLoaiVacXin Mã phân loại vắc-xin
+     * @return List<VacXin> Danh sách vắc-xin cùng loại
+     */
     @Query("SELECT v FROM VacXin v WHERE v.loaiVacXin.maLoaiVacXin = :maLoaiVacXin AND (v.flagDelete = false OR v.flagDelete IS NULL)")
     List<VacXin> findByLoaiVacXinId(@Param("maLoaiVacXin") Long maLoaiVacXin);
 }

@@ -10,6 +10,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * SupportController
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @RestController
 @RequestMapping("/api/support")
 @CrossOrigin(origins = "http://localhost:3000")
@@ -21,18 +31,32 @@ public class SupportController {
     @Autowired
     private SupportService supportService;
 
-    // --- API NHẮC NHỞ TIÊM CHỦNG ---
+    /**
+     * Lấy danh sách nhắc nhở tiêm chủng
+     *
+     * @return ResponseEntity<List<ReminderProjection>>
+     */
     @GetMapping("/reminders")
     public ResponseEntity<List<ReminderProjection>> getReminders() {
         return ResponseEntity.ok(chiTietDkTiemRepository.findDanhSachNhacNho());
     }
 
-    // --- API TƯ VẤN TIÊM CHỦNG (FAQ) ---
+    /**
+     * Lấy danh sách các câu hỏi thường gặp (FAQ)
+     *
+     * @return ResponseEntity<List<FaqDTO>>
+     */
     @GetMapping("/faqs")
     public ResponseEntity<List<FaqDTO>> getFaqs() {
         return ResponseEntity.ok(supportService.getAllFaqs());
     }
 
+    /**
+     * Thêm mới một câu hỏi thường gặp (FAQ)
+     *
+     * @param request dữ liệu FAQ
+     * @return ResponseEntity<?>
+     */
     @PostMapping("/faqs")
     public ResponseEntity<?> createFaq(@RequestBody FaqDTO request) {
         try {
@@ -43,6 +67,13 @@ public class SupportController {
         }
     }
 
+    /**
+     * Cập nhật thông tin FAQ hiện có
+     *
+     * @param id      mã FAQ
+     * @param request dữ liệu cập nhật FAQ
+     * @return ResponseEntity<?>
+     */
     @PutMapping("/faqs/{id}")
     public ResponseEntity<?> updateFaq(@PathVariable Long id, @RequestBody FaqDTO request) {
         try {

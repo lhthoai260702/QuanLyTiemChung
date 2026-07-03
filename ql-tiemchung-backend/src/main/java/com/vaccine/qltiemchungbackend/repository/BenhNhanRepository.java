@@ -9,12 +9,35 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * BenhNhanRepository
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Repository
 public interface BenhNhanRepository extends JpaRepository<BenhNhan, Long> {
 
+    /**
+     * Lấy danh sách toàn bộ bệnh nhân đang hoạt động (chưa bị xóa mềm).
+     * Sắp xếp danh sách theo tên bệnh nhân (Alpha-beta) tăng dần.
+     *
+     * @return List<BenhNhan> Danh sách thực thể bệnh nhân
+     */
     @Query("SELECT b FROM BenhNhan b WHERE b.flagDelete = false OR b.flagDelete IS NULL ORDER BY LOWER(b.tenBenhNhan) ASC")
     List<BenhNhan> findByFlagDeleteFalseOrFlagDeleteIsNull();
 
+    /**
+     * Lấy lịch sử tiêm chủng của một bệnh nhân cụ thể dựa vào mã bệnh nhân.
+     * Truy vấn Native SQL kết hợp dữ liệu từ các bảng: CHITIET_DK_TIEM, LOVACXIN, VACXIN, LOAIVACXIN, LICHTIEMCHUNG, HOSOBENHAN.
+     *
+     * @param maBenhNhan Mã của bệnh nhân cần tra cứu lịch sử
+     * @return List<LichSuTiemProjection> Danh sách dữ liệu lịch sử tiêm chủng
+     */
     @Query(value = "SELECT " +
             "  dk.MaChiTietDKTiem AS recordId, " +
             "  v.TenVacXin AS vaccineName, " +

@@ -8,9 +8,26 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * DichBenhRepository
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Repository
 public interface DichBenhRepository extends JpaRepository<DichBenh, Long> {
 
+    /**
+     * Lấy toàn bộ danh sách dịch bệnh hiện có trên hệ thống (chưa bị xóa mềm).
+     * Dữ liệu trả về được tổng hợp kèm theo danh sách các loại vắc-xin có thể phòng ngừa dịch bệnh đó.
+     * Sắp xếp theo thời điểm khảo sát giảm dần.
+     *
+     * @return List<DichBenhProjection> Danh sách thông tin chi tiết các dịch bệnh
+     */
     @Query(value = "SELECT " +
             "db.MaDichBenh AS id, " +
             "CAST(db.ThoiDiemKhaoSat AS VARCHAR) AS thoiDiemKhaoSat, " +

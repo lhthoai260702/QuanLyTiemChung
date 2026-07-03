@@ -12,6 +12,16 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * TaiKhoanService
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Service
 public class TaiKhoanService {
 
@@ -21,6 +31,12 @@ public class TaiKhoanService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    /**
+     * Lấy toàn bộ thông tin hệ thống các tài khoản kèm theo chi tiết phân quyền và thông tin mở rộng (Nhân viên/Bệnh nhân).
+     * Dữ liệu được trích xuất từ Native Query.
+     *
+     * @return List<AccountDTO> Danh sách thông tin tài khoản hoàn chỉnh
+     */
     public List<AccountDTO> getAllAccounts() {
         // Lấy danh sách từ Native Query đã có sẵn dữ liệu Join
         return taiKhoanRepository.findAllAccountsWithRoles()
@@ -49,7 +65,12 @@ public class TaiKhoanService {
                 }).collect(Collectors.toList());
     }
 
-    // Hàm Tạo Mới đã nâng cấp (Tích hợp Mã hoá mật khẩu BCrypt)
+    /**
+     * Xử lý luồng tạo tài khoản mới.
+     * Bao gồm: Tạo đối tượng TaiKhoan, mã hóa mật khẩu bằng thuật toán BCrypt, gán quyền và tạo hồ sơ phụ (Nhân viên / Bệnh nhân).
+     *
+     * @param dto Dữ liệu tạo tài khoản do Client gửi lên
+     */
     @Transactional
     public void createAccount(AccountCreationDTO dto) {
         TaiKhoan tk = new TaiKhoan();
@@ -77,7 +98,13 @@ public class TaiKhoanService {
         }
     }
 
-    // Hàm Update mới (Tích hợp kiểm tra và Mã hoá mật khẩu BCrypt nếu có đổi)
+    /**
+     * Cập nhật thông tin của một tài khoản hiện có.
+     * Cập nhật mật khẩu nếu có truyền xuống, thay đổi phân quyền và xử lý dữ liệu mở rộng cho từng đối tượng (Nhân viên / Bệnh nhân).
+     *
+     * @param id  Mã tài khoản cần cập nhật
+     * @param dto Dữ liệu thông tin tài khoản mới
+     */
     @Transactional
     public void updateAccount(Long id, AccountCreationDTO dto) {
         TaiKhoan tk = taiKhoanRepository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản"));
@@ -108,6 +135,12 @@ public class TaiKhoanService {
         }
     }
 
+    /**
+     * Xóa mềm một tài khoản khỏi hệ thống.
+     *
+     * @param id Mã tài khoản cần vô hiệu hóa
+     * @throws RuntimeException Ném ra ngoại lệ nếu tài khoản không tồn tại
+     */
     @Transactional
     public void deleteAccount(Long id) {
         if (!taiKhoanRepository.existsById(id)) {

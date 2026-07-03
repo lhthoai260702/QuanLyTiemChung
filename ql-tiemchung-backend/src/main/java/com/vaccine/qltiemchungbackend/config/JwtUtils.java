@@ -10,6 +10,16 @@ import org.springframework.stereotype.Component;
 import java.security.Key;
 import java.util.Date;
 
+/**
+ * JwtUtils
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Component
 public class JwtUtils {
 
@@ -19,10 +29,21 @@ public class JwtUtils {
     @Value("${jwt.expiration}")
     private long expireDuration;
 
+    /**
+     * Lấy khóa ký bảo mật (Signing Key) dựa trên chuỗi bí mật
+     *
+     * @return Key
+     */
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secretKey.getBytes());
     }
 
+    /**
+     * Tạo chuỗi token JWT dựa trên tên người dùng
+     *
+     * @param username
+     * @return String
+     */
     public String generateToken(String username) {
         return Jwts.builder()
                 .setSubject(username)
@@ -32,6 +53,12 @@ public class JwtUtils {
                 .compact();
     }
 
+    /**
+     * Kiểm tra tính hợp lệ và thời hạn của token
+     *
+     * @param token
+     * @return boolean
+     */
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token);
@@ -41,6 +68,12 @@ public class JwtUtils {
         }
     }
 
+    /**
+     * Lấy tên người dùng (subject) từ chuỗi token
+     *
+     * @param token
+     * @return String
+     */
     public String getUsernameFromToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())

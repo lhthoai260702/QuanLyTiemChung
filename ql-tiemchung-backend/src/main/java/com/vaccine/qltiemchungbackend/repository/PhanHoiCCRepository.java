@@ -10,10 +10,25 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/**
+ * PhanHoiCCRepository
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Repository
 public interface PhanHoiCCRepository extends JpaRepository<PhanHoiCC, Long> {
 
-    // (Query cũ của bạn) Lấy danh sách cho Customer
+    /**
+     * Lấy danh sách phản hồi cấp cao (VIP) theo mã bệnh nhân (Dành cho Customer).
+     *
+     * @param maBenhNhan Mã bệnh nhân cần truy vấn
+     * @return List<Object[]> Danh sách thông tin phản hồi
+     */
     @Query(value = "SELECT " +
             "p.MaPhanHoiCC AS id, " +
             "p.content AS content, " +
@@ -23,15 +38,19 @@ public interface PhanHoiCCRepository extends JpaRepository<PhanHoiCC, Long> {
             "ORDER BY p.MaPhanHoiCC DESC", nativeQuery = true)
     List<Object[]> layDanhSachPhanHoiCCTheoBenhNhan(@Param("maBenhNhan") Long maBenhNhan);
 
-    // THÊM MỚI: Lấy TOÀN BỘ danh sách phản hồi cấp cao (Dành cho Admin)
+    /**
+     * Lấy TOÀN BỘ danh sách phản hồi cấp cao (Dành cho Admin/Quản lý).
+     *
+     * @return List<Object[]> Danh sách toàn bộ phản hồi cấp cao
+     */
     @Query(value = "SELECT " +
             "p.MaPhanHoiCC AS id, " +
             "bn.TenBenhNhan AS customerName, " +
             "p.content AS comments, " +
             "tk.Email AS email, " +
-            "p.name AS status, " + // Tạm dùng cột name lưu Loại phản hồi (vd: Phàn nàn, Khen ngợi)
+            "p.name AS status, " +
             "p.NoiDungTraLoi AS responseText, " +
-            "'---' AS thoiGianTiem " + // Không có thời gian cụ thể
+            "'---' AS thoiGianTiem " +
             "FROM PHANHOICC p " +
             "JOIN BENHNHAN bn ON p.MaBenhNhan = bn.MaBenhNhan " +
             "JOIN TAIKHOAN tk ON bn.MaTaiKhoan = tk.MaTaiKhoan " +
@@ -39,7 +58,12 @@ public interface PhanHoiCCRepository extends JpaRepository<PhanHoiCC, Long> {
             "ORDER BY p.MaPhanHoiCC DESC", nativeQuery = true)
     List<Object[]> layTatCaPhanHoiCC();
 
-    // THÊM MỚI: Cập nhật phản hồi cấp cao
+    /**
+     * Cập nhật nội dung trả lời cho một phản hồi cấp cao.
+     *
+     * @param id            Mã phản hồi cấp cao cần cập nhật
+     * @param noiDungTraLoi Nội dung trả lời từ hệ thống/nhân viên
+     */
     @Modifying
     @Transactional
     @Query(value = "UPDATE PHANHOICC SET NoiDungTraLoi = :noiDungTraLoi WHERE MaPhanHoiCC = :id", nativeQuery = true)

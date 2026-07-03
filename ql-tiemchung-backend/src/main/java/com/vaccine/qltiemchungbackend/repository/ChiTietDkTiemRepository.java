@@ -1,17 +1,33 @@
 package com.vaccine.qltiemchungbackend.repository;
 
-import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
 import com.vaccine.qltiemchungbackend.dto.ReminderProjection;
+import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * ChiTietDkTiemRepository
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Repository
 public interface ChiTietDkTiemRepository extends JpaRepository<ChiTietDkTiem, Long> {
 
-    // Tìm các chi tiết đăng ký chưa được lập hồ sơ (chưa tiêm) VÀ có ngày tiêm >= ngày hiện tại
+    /**
+     * Lấy danh sách chi tiết đăng ký tiêm cần nhắc nhở.
+     * Điều kiện: Chưa được lập hồ sơ (chưa tiêm), chưa bị xóa mềm,
+     * và thời gian cần tiêm lớn hơn hoặc bằng ngày hiện tại.
+     *
+     * @return List<ReminderProjection> Danh sách các bản ghi nhắc nhở tiêm chủng
+     */
     @Query(value = "SELECT " +
             "dk.MaChiTietDKTiem AS id, " +
             "bn.MaBenhNhan AS patientId, " +
@@ -28,7 +44,7 @@ public interface ChiTietDkTiemRepository extends JpaRepository<ChiTietDkTiem, Lo
             "LEFT JOIN HOSOBENHAN hs ON dk.MaChiTietDKTiem = hs.MaChiTietDKTiem " +
             "WHERE (dk.flag_delete = FALSE OR dk.flag_delete IS NULL) " +
             "  AND hs.MaHoSoBenhAn IS NULL " +
-            "  AND dk.ThoiGianCanTiem >= CURRENT_DATE " + // <-- THÊM ĐIỀU KIỆN LỌC NGÀY TẠI ĐÂY
+            "  AND dk.ThoiGianCanTiem >= CURRENT_DATE " +
             "ORDER BY dk.ThoiGianCanTiem ASC", nativeQuery = true)
     List<ReminderProjection> findDanhSachNhacNho();
 }

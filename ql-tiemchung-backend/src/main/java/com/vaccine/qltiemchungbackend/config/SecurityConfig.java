@@ -18,6 +18,16 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 
+/**
+ * SecurityConfig
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -25,17 +35,35 @@ public class SecurityConfig {
     @Autowired
     private JwtAuthFilter jwtAuthFilter;
 
+    /**
+     * Khởi tạo đối tượng mã hóa mật khẩu sử dụng thuật toán BCrypt
+     *
+     * @return PasswordEncoder
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // Bean này cần thiết để gọi xử lý đăng nhập trong AuthController
+    /**
+     * Khởi tạo Bean quản lý xác thực (AuthenticationManager) để gọi xử lý đăng nhập trong AuthController
+     *
+     * @param config
+     * @return AuthenticationManager
+     * @throws Exception
+     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
+    /**
+     * Thiết lập chuỗi bộ lọc bảo mật (Security Filter Chain) cho các luồng HTTP
+     *
+     * @param http
+     * @return SecurityFilterChain
+     * @throws Exception
+     */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -59,6 +87,11 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * Cấu hình chính sách CORS để cho phép các domain client gọi API
+     *
+     * @return CorsConfigurationSource
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

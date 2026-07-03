@@ -1,17 +1,33 @@
 package com.vaccine.qltiemchungbackend.repository;
 
+import com.vaccine.qltiemchungbackend.dto.CustomerTransactionProjection;
 import com.vaccine.qltiemchungbackend.dto.SupplierTransactionProjection;
 import com.vaccine.qltiemchungbackend.entity.HoaDon;
-import com.vaccine.qltiemchungbackend.dto.CustomerTransactionProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
+/**
+ * HoaDonRepository
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Repository
 public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
 
+    /**
+     * Lấy danh sách tất cả các hóa đơn (giao dịch) của khách hàng.
+     * Truy vấn kết hợp với bảng Hồ sơ bệnh án, Chi tiết đăng ký tiêm và Vắc-xin.
+     *
+     * @return List<CustomerTransactionProjection> Danh sách giao dịch khách hàng
+     */
     @Query(value = "SELECT " +
             "CAST(hd.MaHoaDon AS VARCHAR) AS id, " +
             "CAST(hsba.ThoiGianTiem AS VARCHAR) AS date, " +
@@ -29,6 +45,12 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Long> {
             "ORDER BY hsba.ThoiGianTiem DESC", nativeQuery = true)
     List<CustomerTransactionProjection> findAllCustomerTransactions();
 
+    /**
+     * Lấy danh sách 100 giao dịch (hóa đơn) nhập hàng gần nhất từ nhà cung cấp.
+     * Liên kết dữ liệu bảng Lô vắc-xin và Nhà cung cấp.
+     *
+     * @return List<SupplierTransactionProjection> Danh sách giao dịch với nhà cung cấp
+     */
     @Query(value = "SELECT " +
             "CAST(hd.MaHoaDon AS VARCHAR) AS id, " +
             "CAST(lvx.NgayNhan AS VARCHAR) AS date, " +

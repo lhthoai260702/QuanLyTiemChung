@@ -13,12 +13,30 @@ import org.springframework.stereotype.Service;
 import java.util.Collections;
 import java.util.Optional;
 
+/**
+ * CustomUserDetailsService
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
 
     @Autowired
     private TaiKhoanRepository taiKhoanRepository;
 
+    /**
+     * Tải thông tin người dùng dựa trên tên đăng nhập để tích hợp với Spring Security Context.
+     * Cấu hình phân quyền Role dựa vào mã quyền lưu trong cơ sở dữ liệu.
+     *
+     * @param username Tên đăng nhập của người dùng
+     * @return UserDetails Đối tượng UserDetails của Spring Security
+     * @throws UsernameNotFoundException Ném ra khi không tìm thấy tài khoản
+     */
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         // 1. Tìm User trong Database thông qua Repository

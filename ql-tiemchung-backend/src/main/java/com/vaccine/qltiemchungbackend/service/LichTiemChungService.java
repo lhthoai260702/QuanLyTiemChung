@@ -13,6 +13,16 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * LichTiemChungService
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Service
 public class LichTiemChungService {
 
@@ -25,6 +35,11 @@ public class LichTiemChungService {
     @Autowired
     private VacXinRepository vacXinRepository;
 
+    /**
+     * Lấy danh sách toàn bộ các lịch tiêm chủng trung tâm kèm theo dữ liệu loại vắc-xin và bác sĩ.
+     *
+     * @return List<LichTiemChungDTO> Danh sách dữ liệu hiển thị lịch tiêm
+     */
     public List<LichTiemChungDTO> getAllSchedules() {
         return lichTiemChungRepository.findByFlagDeleteFalseOrFlagDeleteIsNull().stream().map(ltc -> {
             LichTiemChungDTO dto = new LichTiemChungDTO();
@@ -71,6 +86,11 @@ public class LichTiemChungService {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * Tạo mới một lịch tiêm chủng hệ thống và phân công danh sách bác sĩ tham gia.
+     *
+     * @param dto Dữ liệu cấu hình lịch tiêm chủng mới
+     */
     @Transactional
     public void createSchedule(LichTiemChungDTO dto) {
         LichTiemChung ltc = new LichTiemChung();
@@ -101,6 +121,12 @@ public class LichTiemChungService {
         }
     }
 
+    /**
+     * Cập nhật thông tin cấu hình lịch tiêm chủng và điều chỉnh lại danh sách bác sĩ tham gia.
+     *
+     * @param id  Mã lịch tiêm chủng
+     * @param dto Thông tin lịch tiêm chủng cần cập nhật
+     */
     @Transactional
     public void updateSchedule(Long id, LichTiemChungDTO dto) {
         LichTiemChung ltc = lichTiemChungRepository.findById(id)
@@ -133,6 +159,11 @@ public class LichTiemChungService {
         }
     }
 
+    /**
+     * Xóa mềm một bản ghi lịch tiêm chủng khỏi hệ thống.
+     *
+     * @param id Mã lịch tiêm chủng cần xóa
+     */
     public void deleteSchedule(Long id) {
         LichTiemChung ltc = lichTiemChungRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch tiêm!"));

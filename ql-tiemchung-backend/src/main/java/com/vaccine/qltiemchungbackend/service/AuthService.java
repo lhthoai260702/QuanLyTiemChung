@@ -11,6 +11,16 @@ import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
+/**
+ * AuthService
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @Service
 public class AuthService {
 
@@ -23,6 +33,12 @@ public class AuthService {
     @Autowired
     private JwtUtils jwtUtils;
 
+    /**
+     * Xác thực thông tin đăng nhập của người dùng và cấp phát JWT Token.
+     *
+     * @param request Đối tượng chứa tên đăng nhập và mật khẩu
+     * @return LoginResponse Kết quả đăng nhập (kèm token và mã quyền nếu thành công)
+     */
     public LoginResponse authenticate(LoginRequest request) {
         // 1. Tìm tài khoản bằng Username
         Optional<TaiKhoan> taiKhoanOpt = taiKhoanRepository.findByTenDangNhapAndFlagDeleteFalseOrFlagDeleteIsNull(request.getUsername());

@@ -10,6 +10,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * LichTiemChungController
+ * * Version 1.0
+ * * Date: 03-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 03-07-2026 lhthoai   Create
+ */
 @RestController
 @RequestMapping("/api/admin")
 @CrossOrigin(origins = "http://localhost:3000") // Cổng Frontend của bạn
@@ -21,16 +31,32 @@ public class LichTiemChungController {
     @Autowired
     private LoaiVacXinRepository loaiVacXinRepository;
 
+    /**
+     * Lấy danh sách toàn bộ lịch tiêm chủng
+     *
+     * @return ResponseEntity<List<LichTiemChungDTO>>
+     */
     @GetMapping("/schedules")
     public ResponseEntity<List<LichTiemChungDTO>> getAllSchedules() {
         return ResponseEntity.ok(lichTiemChungService.getAllSchedules());
     }
 
+    /**
+     * Lấy danh sách các loại vắc-xin
+     *
+     * @return ResponseEntity<List<LoaiVacXin>>
+     */
     @GetMapping("/vaccine-types")
     public ResponseEntity<List<LoaiVacXin>> getAllVaccineTypes() {
         return ResponseEntity.ok(loaiVacXinRepository.findByFlagDeleteFalseOrFlagDeleteIsNull());
     }
 
+    /**
+     * Tạo mới một lịch tiêm chủng
+     *
+     * @param request thông tin lịch tiêm chủng cần tạo
+     * @return ResponseEntity<?>
+     */
     @PostMapping("/schedules")
     public ResponseEntity<?> createSchedule(@RequestBody LichTiemChungDTO request) {
         try {
@@ -41,6 +67,13 @@ public class LichTiemChungController {
         }
     }
 
+    /**
+     * Cập nhật thông tin lịch tiêm chủng
+     *
+     * @param id      mã lịch tiêm chủng
+     * @param request dữ liệu lịch tiêm cập nhật
+     * @return ResponseEntity<?>
+     */
     @PutMapping("/schedules/{id}")
     public ResponseEntity<?> updateSchedule(@PathVariable Long id, @RequestBody LichTiemChungDTO request) {
         try {
@@ -51,6 +84,12 @@ public class LichTiemChungController {
         }
     }
 
+    /**
+     * Xóa lịch tiêm chủng theo ID
+     *
+     * @param id mã lịch tiêm chủng cần xóa
+     * @return ResponseEntity<?>
+     */
     @DeleteMapping("/schedules/{id}")
     public ResponseEntity<?> deleteSchedule(@PathVariable Long id) {
         try {

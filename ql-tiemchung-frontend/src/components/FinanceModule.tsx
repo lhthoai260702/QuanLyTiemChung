@@ -625,7 +625,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     <div className="space-y-6 animate-fade-in pb-10">
       {/* Module Title & Metrics */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">💵 Phân hệ Kế Toán & Quản Lý Giao Dịch</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Quản lý tài chính</h2>
         <p className="text-sm text-slate-500 mt-1">Quản lý thống kê các giao dịch với khách hàng, nhà cung cấp và niêm yết giá vắc-xin.</p>
       </div>
 
@@ -754,7 +754,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
                   type="submit"
                   className="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
                 >
-                  <Save className="w-4 h-4" /> Cập nhật đồng bộ CSDL
+                  <Save className="w-4 h-4" /> Lưu
                 </button>
               </div>
             </form>
@@ -988,7 +988,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
                     </select>
                     {supplierErrors.maVacXin && <p className="text-[10px] text-red-500 font-bold mt-1.5">{supplierErrors.maVacXin}</p>}
                     <p className="text-[11px] text-indigo-600 mt-1.5 italic">
-                      * Chọn vắc xin đã có để tự động điền thông tự. Bạn có thể chỉnh sửa các ô bên dưới nếu giá trị thay đổi để lưu đè lại vào CSDL.
+                      * Chọn vắc xin đã có để tự động điền thông tự. Bạn có thể chỉnh sửa các ô bên dưới nếu giá trị thay đổi để lưu.
                     </p>
                   </div>
 
@@ -1163,7 +1163,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
                   type="submit"
                   className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-emerald-700 flex items-center gap-2 transition-colors"
                 >
-                  <Save className="w-5 h-5" /> Lưu CSDL Nhập Kho Hóa Đơn
+                  <Save className="w-5 h-5" /> Lưu
                 </button>
               </div>
             </form>
@@ -1173,7 +1173,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <h3 className="font-bold text-sm text-slate-700">Lịch sử hóa đơn nhập hàng từ Nhà Cung Cấp</h3>
               <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full text-xs font-extrabold border border-emerald-100">
-                Tổng số: {filteredSupplierTxs.length} Lô
+                Tổng số: {filteredSupplierTxs.length} bản ghi
               </span>
             </div>
             <div className="overflow-x-auto">
@@ -1315,7 +1315,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
                   type="submit"
                   className="px-5 py-2 bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-amber-700 flex items-center gap-1.5 transition-colors"
                 >
-                  <Save className="w-4 h-4" /> Cập nhật lên CSDL
+                  <Save className="w-4 h-4" /> Lưu
                 </button>
               </div>
             </form>

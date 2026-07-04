@@ -348,8 +348,8 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     <div className="space-y-6 animate-fade-in h-full flex flex-col">
       {/* Header Module */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">💬 Phân hệ Hỗ Trợ & Tư Vấn (Support)</h2>
-        <p className="text-sm text-slate-500 mt-1">Gửi nhắc nhở tiêm chủng, biên tập FAQ và giải đáp thắc mắc người dân.</p>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Hỗ trợ khách hàng</h2>
+        <p className="text-sm text-slate-500 mt-1">Năng nắm bắt thông tin, hỗ trợ và phản hồi các thông tin từ khách hàng.</p>
       </div>
 
       {/* Tabs */}
@@ -389,7 +389,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
           <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
               <h3 className="font-bold text-slate-800 text-sm">Danh sách Bệnh nhân tới hạn tiêm</h3>
-              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{reminders.length} danh sách</span>
+              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{reminders.length} bản ghi</span>
             </div>
             <div className="overflow-auto flex-1">
               <table className="w-full text-left text-xs border-collapse table-fixed">
@@ -619,7 +619,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
                     type="submit"
                     className="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
                   >
-                    <Save className="w-4 h-4" /> {selectedFaq.id ? "Cập nhật Trả lời" : "Đăng câu hỏi"}
+                    <Save className="w-4 h-4" /> {selectedFaq.id ? "Lưu" : "Đăng câu hỏi"}
                   </button>
                 </div>
               </form>
@@ -764,7 +764,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
                       type="submit"
                       className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-5 py-2.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-colors"
                     >
-                      <Send className="w-4 h-4" /> Gởi
+                      <Send className="w-4 h-4" /> Gửi
                     </button>
                   </div>
                 </form>

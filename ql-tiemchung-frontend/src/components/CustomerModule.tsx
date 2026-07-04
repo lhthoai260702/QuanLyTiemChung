@@ -428,7 +428,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       <div className="space-y-6 animate-fade-in h-full flex flex-col">
         {/* HEADER CHUẨN */}
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">👤 Phân hệ Khách Hàng (Customer)</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Hệ thống Tiêm chủng VaccineFlow Pro</h2>
           <p className="text-sm text-slate-500 mt-1">Tra cứu thông tin, đăng ký tiêm chủng và quản lý hồ sơ cá nhân.</p>
         </div>
 
@@ -623,7 +623,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
                           type="submit"
                           className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold cursor-pointer flex items-center gap-2 hover:bg-blue-700 shadow-md shadow-blue-600/20 transition-all"
                         >
-                          <Save className="w-4 h-4" /> Lưu thông tin mới
+                          <Save className="w-4 h-4" /> Lưu
                         </button>
                       </div>
                     </div>
@@ -641,7 +641,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
                     <h3 className="font-bold text-lg text-slate-800">Lịch sử và Nhật ký tiêm chủng chi tiết</h3>
                   </div>
                   <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-extrabold border border-blue-100">
-                    Đã tiêm: {history.length} mũi
+                    {history.length} bản ghi
                   </span>
                 </div>
 
@@ -825,7 +825,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                 <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Lịch tiêm phòng trung tâm</h3>
-                <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{schedules.length} record</span>
+                <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{schedules.length} bản ghi</span>
               </div>
 
               <div className="p-4 overflow-x-auto">
@@ -1145,7 +1145,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
                     type="submit"
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 hover:bg-blue-700"
                   >
-                    <Send className="w-4 h-4" /> Gửi phản hồi
+                    <Send className="w-4 h-4" /> Gửi
                   </button>
                 </div>
               </form>
@@ -1160,7 +1160,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
                   <h3 className="font-bold text-slate-800 text-sm">Thắc mắc của tôi</h3>
                   <p className="text-xs text-slate-500 mt-1">Theo dõi quá trình trung tâm giải quyết khiếu nại/thắc mắc</p>
                 </div>
-                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{myFeedbacks.length} thư</span>
+                <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{myFeedbacks.length} bản ghi</span>
               </div>
 
               <div className="overflow-y-auto p-6 space-y-4">
@@ -1397,7 +1397,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
                 onClick={handleConfirmBooking}
                 className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 shadow-md shadow-blue-600/20 cursor-pointer transition-colors flex items-center gap-1.5"
               >
-                <PlusCircle className="w-4 h-4" /> Xác nhận đăng ký
+                <PlusCircle className="w-4 h-4" /> Xác nhận
               </button>
             </div>
           </div>

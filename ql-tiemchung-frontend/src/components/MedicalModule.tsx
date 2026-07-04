@@ -328,7 +328,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
   return (
     <div className="space-y-6 animate-fade-in h-full flex flex-col">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">🩺 Phân hệ Y Tế (Medical)</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Quản lý bệnh án</h2>
         <p className="text-sm text-slate-500 mt-1">Quản lý hồ sơ bệnh án, kê đơn và theo dõi tiêm chủng lâm sàng.</p>
       </div>
 
@@ -337,7 +337,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
           <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
             <div className="flex justify-between items-center">
               <span className="font-bold text-xs text-slate-500 uppercase tracking-wider">Danh sách Bệnh án</span>
-              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredPatients.length} record</span>
+              <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredPatients.length} bản ghi</span>
             </div>
             <div className="relative">
               <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
@@ -697,13 +697,13 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
                   onClick={() => setRightPaneMode("detail")}
                   className="px-5 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  Hủy / Quay lại
+                  Quay lại
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-blue-700 flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <Save className="w-4 h-4" /> Cập nhật
+                  <Save className="w-4 h-4" /> Lưu
                 </button>
               </div>
             </form>
@@ -795,13 +795,13 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
                   onClick={() => setRightPaneMode("detail")}
                   className="px-5 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  Hủy / Quay lại
+                  Quay lại
                 </button>
                 <button
                   type="submit"
                   className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-emerald-700 flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  <Save className="w-4 h-4" /> Xác nhận Kê đơn
+                  <Save className="w-4 h-4" /> Lưu
                 </button>
               </div>
             </form>

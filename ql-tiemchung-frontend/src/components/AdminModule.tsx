@@ -725,8 +725,8 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
     <div className="space-y-6 animate-fade-in relative h-full flex flex-col">
       {/* Header Module */}
       <div className="shrink-0">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">👑 Phân hệ Ban Quản Trị Hệ Thống (Admin)</h2>
-        <p className="text-sm text-slate-500 mt-1">Quản lý và điều chỉnh định mức danh mục hệ thống theo SRS V3.0.</p>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Quản Trị Hệ Thống</h2>
+        <p className="text-sm text-slate-500 mt-1">Quản lý hệ thống, như sửa, thêm, xóa dữ liệu, phân quyền cho các user khác.</p>
       </div>
 
       {/* Tabs Menu */}
@@ -1023,7 +1023,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                   type="submit"
                   className="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold shadow-sm hover:bg-blue-700 cursor-pointer flex items-center gap-1"
                 >
-                  <Save className="w-4 h-4" /> Lưu lại
+                  <Save className="w-4 h-4" /> Lưu
                 </button>
               </div>
             </form>
@@ -1091,7 +1091,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                   <span className="text-slate-800">
                     {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredAccounts.length)}
                   </span>{" "}
-                  trong tổng số <span className="text-slate-800">{filteredAccounts.length}</span> người dùng
+                  trong tổng số <span className="text-slate-800">{filteredAccounts.length}</span> bản ghi
                 </span>
                 <div className="flex items-center gap-1.5">
                   <button
@@ -1369,7 +1369,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
               <div className="p-4 bg-slate-50 border-b border-slate-200 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-xs text-slate-500 uppercase tracking-wider">Danh sách lịch tiêm</span>
-                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredSchedules.length} record</span>
+                  <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredSchedules.length} bản ghi</span>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1632,7 +1632,7 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
                       type="submit"
                       className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl flex items-center gap-2 shadow-md shadow-amber-600/20 transition-all"
                     >
-                      <Send className="w-4 h-4" /> Xác nhận & Gửi phản hồi
+                      <Send className="w-4 h-4" /> Gửi
                     </button>
                   </div>
                 </form>

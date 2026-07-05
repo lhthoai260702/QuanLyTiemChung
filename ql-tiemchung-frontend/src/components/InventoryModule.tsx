@@ -15,7 +15,10 @@ import {
   Package,
   Activity,
   Truck,
+  User, // BỔ SUNG: Import icon User
 } from "lucide-react";
+
+import ProfileTab from "./ProfileTab"; // BỔ SUNG: Import Component ProfileTab
 
 // --- INTERFACES ---
 export interface KhoVacXin {
@@ -56,7 +59,8 @@ interface InventoryModuleProps {
 }
 
 export default function InventoryModule({ triggerToast }: InventoryModuleProps) {
-  const [activeTab, setActiveTab] = useState<"view" | "import" | "export">("view");
+  // BỔ SUNG: Thêm "account_info" vào type của activeTab
+  const [activeTab, setActiveTab] = useState<"account_info" | "view" | "import" | "export">("view");
 
   // =========================================================================
   // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
@@ -684,12 +688,22 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       </div>
 
       <div className="border-b border-slate-200 flex space-x-2">
+        {/* BỔ SUNG NÚT BẤM TAB THÔNG TIN CÁ NHÂN VÀO ĐẦU DANH SÁCH */}
+        <button
+          onClick={() => {
+            setActiveTab("account_info");
+            setEditingVacId(null);
+          }}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-2 transition-colors ${activeTab === "account_info" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <User className="w-4 h-4" /> Thông tin Tài khoản
+        </button>
         <button
           onClick={() => {
             setActiveTab("view");
             setEditingVacId(null);
           }}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 ${activeTab === "view" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-1 transition-colors ${activeTab === "view" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
           Xem tình hình kho bãi
         </button>
@@ -701,7 +715,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
             setIsNewSupplier(false);
             setImportErrors({});
           }}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-1 ${activeTab === "import" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-1 transition-colors ${activeTab === "import" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
           <PlusCircle className="w-4 h-4" /> Form Nhập Kho (Mới)
         </button>
@@ -711,11 +725,14 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
             setExportErrors({});
             setExportForm({ soLoId: "", soLuongXuat: "" });
           }}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-1 ${activeTab === "export" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-1 transition-colors ${activeTab === "export" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
           <MinusCircle className="w-4 h-4" /> Xuất vắc-xin
         </button>
       </div>
+
+      {/* BỔ SUNG: HIỂN THỊ COMPONENT THÔNG TIN TÀI KHOẢN KHI BẤM TAB NÀY */}
+      {activeTab === "account_info" && <ProfileTab triggerToast={triggerToast} />}
 
       {activeTab === "view" && (
         <div className="bg-white rounded-xl border border-slate-200 flex flex-col flex-1 overflow-hidden shadow-sm">

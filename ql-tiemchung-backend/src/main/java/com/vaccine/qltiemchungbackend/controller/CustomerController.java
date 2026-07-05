@@ -10,6 +10,7 @@ import com.vaccine.qltiemchungbackend.service.CustomerService;
 import com.vaccine.qltiemchungbackend.service.SupportService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -78,27 +79,29 @@ public class CustomerController {
     }
 
     /**
-     * Lấy chi tiết hồ sơ bệnh nhân theo ID
+     * Lấy chi tiết hồ sơ bệnh nhân cho người dùng đang đăng nhập
      *
-     * @param id mã bệnh nhân
-     * @return ResponseEntity<BenhNhanDTO>
+     * @param authentication
+     * @return
      */
-    @GetMapping("/profile/{id}")
-    public ResponseEntity<BenhNhanDTO> getCustomerProfile(@PathVariable Long id) {
-        return ResponseEntity.ok(benhNhanService.getPatientById(id));
+    @GetMapping("/profile")
+    public ResponseEntity<BenhNhanDTO> getMyProfile(Authentication authentication) {
+        String username = authentication.getName();
+        return ResponseEntity.ok(benhNhanService.getPatientByUsername(username));
     }
 
     /**
-     * Cập nhật thông tin hồ sơ của bệnh nhân
+     * Cập nhật thông tin hồ sơ đồng bộ cả 2 bảng
      *
-     * @param id      mã bệnh nhân
-     * @param request dữ liệu cập nhật
-     * @return ResponseEntity<?>
+     * @param authentication
+     * @param request
+     * @return
      */
-    @PutMapping("/profile/{id}")
-    public ResponseEntity<?> updateCustomerProfile(@PathVariable Long id, @RequestBody BenhNhanDTO request) {
+    @PutMapping("/profile")
+    public ResponseEntity<?> updateMyProfile(Authentication authentication, @RequestBody BenhNhanDTO request) {
         try {
-            benhNhanService.updatePatient(id, request);
+            String username = authentication.getName();
+            benhNhanService.updatePatientByUsername(username, request);
             return ResponseEntity.ok().body("{\"message\": \"Cập nhật hồ sơ thành công!\"}");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"" + e.getMessage() + "\"}");

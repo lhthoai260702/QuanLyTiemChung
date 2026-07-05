@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // Bổ sung import useNavigate
+import { useNavigate } from "react-router-dom";
 import { FAQ, SystemLog } from "../types";
-import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail } from "lucide-react";
+import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail, User } from "lucide-react"; // Bổ sung icon User
+import ProfileTab from "./ProfileTab"; // Bổ sung import ProfileTab
 
 export interface FAQType {
   id?: string | number | null;
@@ -40,7 +41,8 @@ interface SupportModuleProps {
 }
 
 export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs, triggerToast }: SupportModuleProps) {
-  const [activeTab, setActiveTab] = useState<"reminder" | "faq" | "tickets">("tickets");
+  // Thêm 'account_info' vào union type của activeTab
+  const [activeTab, setActiveTab] = useState<"account_info" | "reminder" | "faq" | "tickets">("tickets");
   const navigate = useNavigate(); // Hook điều hướng
 
   // =========================================================================
@@ -354,6 +356,16 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
 
       {/* Tabs */}
       <div className="border-b border-slate-200 flex space-x-2">
+        {/* NÚT TAB THÔNG TIN TÀI KHOẢN */}
+        <button
+          onClick={() => setActiveTab("account_info")}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-2 transition-colors ${
+            activeTab === "account_info" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
+          }`}
+        >
+          <User className="w-4 h-4" /> Thông tin Tài khoản
+        </button>
+
         <button
           onClick={() => setActiveTab("reminder")}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
@@ -379,6 +391,11 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
           <MessageSquare className="w-4 h-4" /> Giải đáp thắc mắc
         </button>
       </div>
+
+      {/* ==================================================================================== */}
+      {/* HIỂN THỊ COMPONENT THÔNG TIN TÀI KHOẢN KHI BẤM TAB NÀY */}
+      {/* ==================================================================================== */}
+      {activeTab === "account_info" && <ProfileTab triggerToast={triggerToast} />}
 
       {/* ==================================================================================== */}
       {/* MÀN HÌNH 1: NHẮC NHỞ TIÊM CHỦNG */}

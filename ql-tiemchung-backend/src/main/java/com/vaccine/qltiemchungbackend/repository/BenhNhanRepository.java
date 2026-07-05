@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * BenhNhanRepository
@@ -61,4 +62,10 @@ public interface BenhNhanRepository extends JpaRepository<BenhNhan, Long> {
             "  AND (dk.flag_delete = false OR dk.flag_delete IS NULL)",
             nativeQuery = true)
     List<LichSuTiemProjection> findLichSuTiemByMaBenhNhan(@Param("maBenhNhan") Long maBenhNhan);
+
+    /**
+     * Tìm bệnh nhân thông qua username (tên đăng nhập) của tài khoản
+     */
+    @Query("SELECT b FROM BenhNhan b WHERE b.maTaiKhoan = (SELECT t.maTaiKhoan FROM TaiKhoan t WHERE t.tenDangNhap = :username AND (t.flagDelete = FALSE OR t.flagDelete IS NULL))")
+    Optional<BenhNhan> findByUsername(@Param("username") String username);
 }

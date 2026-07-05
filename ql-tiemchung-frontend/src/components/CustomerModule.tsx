@@ -1,3 +1,5 @@
+// src/components/CustomerModule.tsx
+
 import React, { useState, useEffect } from "react";
 import {
   User,
@@ -71,14 +73,16 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
   };
 
   // --- DỮ LIỆU THẬT LẤY TỪ DATABASE ---
+  // Đã gỡ bỏ hardcode ID = 1 ở đây
   const [profile, setProfile] = useState({
-    id: "1", // Tạm thời hardcode người dùng đang đăng nhập có id = 1
+    id: "", 
     name: "",
     dob: "",
     gender: "Nam",
     phone: "",
     address: "",
   });
+  
   const [history, setHistory] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [diseases, setDiseases] = useState<any[]>([]);
@@ -116,10 +120,11 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
     }
   };
 
-  // Fetch My Feedbacks (Dùng tạm ID = 1)
+  // Fetch My Feedbacks
   const fetchMyFeedbacks = async () => {
+    if (!profile.id) return; // Chỉ gọi nếu profile id đã có
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/customer/my-feedbacks/1");
+      const res = await fetchWithAuth(`http://localhost:8080/api/customer/my-feedbacks/${profile.id}`);
       if (res.ok) {
         const data = await res.json();
         setMyFeedbacks(data);
@@ -132,7 +137,8 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
   // --- HÀM TẢI DỮ LIỆU CÁ NHÂN TỪ API ---
   const fetchProfile = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/customer/profile/1");
+      // Dùng endpoint mới không cần tham số ID (Lấy từ Token của Backend)
+      const response = await fetchWithAuth("http://localhost:8080/api/customer/profile");
       if (response.ok) {
         const data = await response.json();
         const profileData = {
@@ -143,18 +149,19 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
           phone: data.phone || "",
           address: data.address || "",
         };
+        
         setProfile(profileData);
-        setProfileForm(profileData); // Cập nhật form form default khi load xong dữ liệu
+        setProfileForm(profileData); 
 
         // Map đầy đủ lịch sử tiêm theo các trường mở rộng
         const formattedHistory = data.history.map((h: any, i: number) => ({
           id: h.recordId || i,
           date: h.date || "---",
-          place: h.place || "Chưa xác định", // Database chưa lưu địa điểm tiêm, dùng giá trị mặc định trực quan
+          place: h.place || "Chưa xác định", 
           vacName: h.vaccineName || "---",
-          vacType: h.vaccineType || "Chưa xác định", // Dự phòng mô tả loại vắc xin
-          dosage: h.dosage || "Chưa xác định", // Dự phòng hàm lượng tiêu chuẩn
-          status: h.nextDose || "Chưa xác định", // Kết quả/Trạng thái
+          vacType: h.vaccineType || "Chưa xác định", 
+          dosage: h.dosage || "Chưa xác định", 
+          status: h.nextDose || "Chưa xác định", 
         }));
         setHistory(formattedHistory);
       }
@@ -194,15 +201,20 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
     }
   };
 
-  // Gọi API mỗi khi người dùng truy cập các tab tương ứng
+  // 1. Luôn ưu tiên fetch ID User vào lần đầu tải để dùng cho toàn bộ component
+  useEffect(() => {
+    fetchProfile(); 
+  }, []);
+
+  // 2. Chuyển đổi tab sẽ fetch lại
   useEffect(() => {
     if (activeTab === "profile") fetchProfile();
     if (activeTab === "vaccines") fetchVaccines();
     if (activeTab === "schedules") fetchSchedules();
     if (activeTab === "diseases") fetchDiseases();
     if (activeTab === "faqs") fetchFaqs();
-    if (activeTab === "my_feedbacks") fetchMyFeedbacks();
-  }, [activeTab]);
+    if (activeTab === "my_feedbacks" && profile.id) fetchMyFeedbacks();
+  }, [activeTab, profile.id]);
 
   // --- STATES: FORMS & VALIDATION ---
   // 2. Phản hồi
@@ -270,7 +282,8 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         address: profileForm.address,
       };
 
-      const res = await fetchWithAuth(`http://localhost:8080/api/customer/profile/1`, {
+      // Đổi sang endpoint mới, Backend sẽ tự tìm user từ Token
+      const res = await fetchWithAuth(`http://localhost:8080/api/customer/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -306,7 +319,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       if (!feedbackForm.time) errors.time = "Vui lòng nhập/chọn thời gian tiêm";
       if (!feedbackForm.place.trim()) errors.place = "Vui lòng nhập địa điểm";
       if (!feedbackForm.doctor.trim()) errors.doctor = "Vui lòng nhập tên nhân viên";
-      if (!feedbackForm.normalContent.trim()) errors.normalContent = "Vui lòng nhập nội dung phản hồi"; // <-- THÊM VALIDATE
+      if (!feedbackForm.normalContent.trim()) errors.normalContent = "Vui lòng nhập nội dung phản hồi"; 
     } else {
       if (!feedbackForm.highLevelContent.trim()) errors.highLevelContent = "Vui lòng nhập nội dung phản hồi";
     }
@@ -321,12 +334,12 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       const endpoint = feedbackType === "after_vaccine" ? "/api/customer/feedback/normal" : "/api/customer/feedback/high-level";
 
       const payload = {
-        maBenhNhan: 1,
+        maBenhNhan: profile.id, // Dùng ID linh động
         vacName: feedbackForm.vacName,
         time: feedbackForm.time,
         place: feedbackForm.place,
         doctor: feedbackForm.doctor,
-        normalContent: feedbackForm.normalContent, // <-- THÊM VÀO PAYLOAD GỬI ĐI
+        normalContent: feedbackForm.normalContent, 
         highLevelType: feedbackForm.highLevelType,
         highLevelContent: feedbackForm.highLevelContent,
       };
@@ -360,7 +373,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
 
     try {
       const payload: any = {
-        maBenhNhan: 1,
+        maBenhNhan: profile.id, // Dùng ID linh động
       };
 
       if (bookModal.type === "vaccine") {

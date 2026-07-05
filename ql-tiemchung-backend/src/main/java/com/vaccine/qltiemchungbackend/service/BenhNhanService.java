@@ -7,6 +7,7 @@ import com.vaccine.qltiemchungbackend.entity.*;
 import com.vaccine.qltiemchungbackend.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
@@ -35,6 +36,45 @@ public class BenhNhanService {
     private HoaDonRepository hoaDonRepository;
     @Autowired
     private LoVacXinRepository loVacXinRepository;
+    @Autowired
+    private TaiKhoanRepository taiKhoanRepository;
+
+    /**
+     * Lấy hồ sơ từ tên đăng nhập (JWT Token)
+     *
+     * @param username
+     * @return
+     */
+    public BenhNhanDTO getPatientByUsername(String username) {
+        BenhNhan bn = repository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh nhân"));
+        return getPatientById(bn.getMaBenhNhan()); // Tái sử dụng logic mapping có sẵn
+    }
+
+    /**
+     * Cập nhật hồ sơ dựa vào tên đăng nhập và đồng bộ TAIKHOAN, BENHNHAN
+     *
+     * @param username
+     * @param dto
+     */
+    @Transactional
+    public void updatePatientByUsername(String username, BenhNhanDTO dto) {
+        BenhNhan bn = repository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh nhân"));
+
+        // 1. Cập nhật bảng BENHNHAN và History (Tái sử dụng logic cũ)
+        updatePatient(bn.getMaBenhNhan(), dto);
+
+        // 2. Đồng bộ bảng TAIKHOAN
+        if (bn.getMaTaiKhoan() != null) {
+            TaiKhoan tk = taiKhoanRepository.findById(bn.getMaTaiKhoan()).orElse(null);
+            if (tk != null) {
+                tk.setHoTen(dto.getFullName());
+                tk.setNoiO(dto.getAddress());
+                taiKhoanRepository.save(tk);
+            }
+        }
+    }
 
     /**
      * Lấy danh sách toàn bộ bệnh nhân cùng với lịch sử tiêm chủng của họ.

@@ -19,8 +19,11 @@ import {
   Banknote,
   Package,
   Activity,
-  AlertCircle, // Bổ sung icon AlertCircle cho Popup Delete
+  AlertCircle,
+  User, // Bổ sung icon AlertCircle cho Popup Delete
 } from "lucide-react";
+
+import ProfileTab from "./ProfileTab";
 
 interface FinanceModuleProps {
   invoices: Invoice[];
@@ -83,7 +86,7 @@ interface VacXinDB extends ItemDB {
 }
 
 export default function FinanceModule({ invoices, setInvoices, vaccines, systemLogs, setSystemLogs, triggerToast }: FinanceModuleProps) {
-  const [activeTab, setActiveTab] = useState<"customer_tx" | "supplier_tx" | "pricing">("customer_tx");
+  const [activeTab, setActiveTab] = useState<"account_info" | "customer_tx" | "supplier_tx" | "pricing">("customer_tx");
   const navigate = useNavigate(); // Hook điều hướng
 
   const formatCurrencyInput = (value: number | undefined) => {
@@ -632,6 +635,12 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       {/* Tabs list */}
       <div className="border-b border-slate-200 flex space-x-2">
         <button
+          onClick={() => setActiveTab("account_info")}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "account_info" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <User className="w-4 h-4" /> Thông tin Tài khoản
+        </button>
+        <button
           onClick={() => setActiveTab("customer_tx")}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "customer_tx" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
@@ -653,6 +662,9 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
           <Tag className="w-4 h-4" /> Quản lý giá vắc xin
         </button>
       </div>
+
+      {/* ======================= TAB MỚI: THÔNG TIN TÀI KHOẢN ======================= */}
+      {activeTab === "account_info" && <ProfileTab triggerToast={triggerToast} />}
 
       {/* ========================================================================= */}
       {/* TAB 1: GIAO DỊCH KHÁCH HÀNG */}
@@ -1411,7 +1423,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
               </div>
             </div>
           </div>,
-          document.body
+          document.body,
         )}
     </div>
   );

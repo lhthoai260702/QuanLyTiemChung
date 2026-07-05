@@ -1,3 +1,4 @@
+// src/main/java/com/vaccine/qltiemchungbackend/entity/BenhNhan.java
 package com.vaccine.qltiemchungbackend.entity;
 
 import jakarta.persistence.*;
@@ -5,16 +6,6 @@ import lombok.Data;
 
 import java.time.LocalDate;
 
-/**
- * BenhNhan
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @Entity
 @Table(name = "BENHNHAN")
 @Data
@@ -23,6 +14,10 @@ public class BenhNhan {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "MaBenhNhan")
     private Long maBenhNhan;
+
+    // THÊM TRƯỜNG NÀY ĐỂ MAPPING VỚI TÀI KHOẢN ĐĂNG NHẬP
+    @Column(name = "MaTaiKhoan")
+    private Long maTaiKhoan;
 
     @Column(name = "TenBenhNhan")
     private String tenBenhNhan;

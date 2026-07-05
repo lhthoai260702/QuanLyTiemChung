@@ -1,6 +1,7 @@
 package com.vaccine.qltiemchungbackend.repository;
 
 import com.vaccine.qltiemchungbackend.dto.AccountRoleProjection;
+import com.vaccine.qltiemchungbackend.dto.ProfileProjection;
 import com.vaccine.qltiemchungbackend.entity.TaiKhoan;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -165,4 +166,19 @@ public interface TaiKhoanRepository extends JpaRepository<TaiKhoan, Long> {
      */
     @Query(value = "SELECT MAX(MaQuyen) FROM CHITIETPHANQUYEN WHERE MaTaiKhoan = :maTaiKhoan", nativeQuery = true)
     Long findMaQuyenByMaTaiKhoan(@Param("maTaiKhoan") Long maTaiKhoan);
+
+    /**
+     * Lấy thông tin cá nhân của nhân viên bằng Tên Đăng Nhập
+     *
+     * @param username
+     * @return
+     */
+    @Query(value = "SELECT " +
+            "tk.TenDangNhap as tenDangNhap, tk.HoTen as hoTen, " +
+            "tk.CMND as cmnd, tk.NoiO as noiO, tk.MoTa as moTa, tk.Email as email, " +
+            "nv.NamSinh as namSinh, nv.SDT as sdt " +
+            "FROM TAIKHOAN tk " +
+            "LEFT JOIN NHANVIEN nv ON tk.MaTaiKhoan = nv.MaTaiKhoan " +
+            "WHERE tk.TenDangNhap = :username AND (tk.flag_delete = FALSE OR tk.flag_delete IS NULL)", nativeQuery = true)
+    Optional<ProfileProjection> findProfileByUsername(@Param("username") String username);
 }

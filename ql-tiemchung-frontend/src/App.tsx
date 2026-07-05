@@ -31,7 +31,7 @@ import CustomerModule from './components/CustomerModule';
 import SupportModule from './components/SupportModule';
 import FinanceModule from './components/FinanceModule';
 
-// Lucide icons
+// Lucide icons (Bổ sung icon AlertCircle cho lỗi)
 import {
   Syringe,
   Shield,
@@ -42,7 +42,8 @@ import {
   DollarSign,
   CheckCircle2,
   ArrowRight,
-  LogOut
+  LogOut,
+  AlertCircle 
 } from 'lucide-react';
 
 type RoleType = 'Admin' | 'Inventory' | 'Medical' | 'Customer' | 'Support' | 'Finance';
@@ -104,7 +105,9 @@ export default function App() {
   // 2. Navigation Active States
   const [activeRole, setActiveRole] = useState<RoleType>('Admin');
   const [viewMode, setViewMode] = useState<'hub' | 'module'>('hub');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // NÂNG CẤP: Chuyển đổi trạng thái toastMessage để lưu cả nội dung và loại thông báo (thành công / lỗi)
+  const [toastMessage, setToastMessage] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
   // STATE LƯU THÔNG TIN NGƯỜI DÙNG ĐĂNG NHẬP VÀ PHÂN QUYỀN
   const [loggedInName, setLoggedInName] = useState<string>("Người dùng");
@@ -181,9 +184,24 @@ export default function App() {
     }
   }, []);
 
-  // Toast trigger utility
+  // NÂNG CẤP: Tự động phát hiện lỗi dựa trên từ khóa trong câu thông báo (tránh việc phải truyền thêm biến type vào từng hàm gọi)
   const triggerToast = (message: string) => {
-    setToastMessage(message);
+    let type: 'success' | 'error' = 'success';
+    const lowerMsg = message.toLowerCase();
+    
+    if (
+      lowerMsg.includes('lỗi') || 
+      lowerMsg.includes('thất bại') || 
+      lowerMsg.includes('không thể') || 
+      lowerMsg.includes('vui lòng') || 
+      lowerMsg.includes('hết hạn') ||
+      lowerMsg.includes('chưa đăng nhập')
+    ) {
+      type = 'error';
+    }
+    
+    setToastMessage({ message, type });
+    
     setTimeout(() => {
       setToastMessage(null);
     }, 4500);
@@ -380,15 +398,17 @@ export default function App() {
       <footer className="h-10 bg-slate-900 border-t border-slate-800 shrink-0">
       </footer>
 
-      {/* 4. REAL-TIME EVENT POPUP TOAST NOTIFIER */}
+      {/* 4. REAL-TIME EVENT POPUP TOAST NOTIFIER (NÂNG CẤP ĐỔI MÀU GIAO DIỆN KHI CÓ LỖI) */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 max-w-sm border border-slate-700/80 animate-slide-in flex items-start gap-3">
-          <div className="bg-emerald-500 text-slate-950 p-1.5 rounded-lg shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
+          <div className={`${toastMessage.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-slate-950'} p-1.5 rounded-lg shrink-0`}>
+            {toastMessage.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
           </div>
           <div className="space-y-1">
-            <h4 className="text-xs font-bold text-slate-100 font-sans tracking-wide">THÔNG BÁO HỆ THỐNG</h4>
-            <p className="text-xs text-slate-300 leading-relaxed font-semibold">{toastMessage}</p>
+            <h4 className={`text-xs font-bold font-sans tracking-wide ${toastMessage.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
+              {toastMessage.type === 'error' ? 'CẢNH BÁO LỖI' : 'THÔNG BÁO HỆ THỐNG'}
+            </h4>
+            <p className="text-xs text-slate-300 leading-relaxed font-semibold">{toastMessage.message}</p>
           </div>
         </div>
       )}

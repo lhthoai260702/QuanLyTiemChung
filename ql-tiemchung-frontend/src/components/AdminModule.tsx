@@ -146,7 +146,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   // HÀM CALL API LẤY DANH SÁCH USER
   const fetchAccounts = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/admin/accounts");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts`);
       if (response.ok) {
         const data = await response.json();
         setAccounts(data);
@@ -168,7 +168,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   // HÀM CALL API LẤY DANH SÁCH LỊCH TIÊM
   const fetchSchedules = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/admin/schedules");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
       if (response.ok) {
         const data = await response.json();
         setSchedules(data);
@@ -191,7 +191,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const fetchHighLevelTickets = async () => {
     setIsTicketsLoading(true);
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/customer/admin/feedback/high-level");
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/admin/feedback/high-level`);
       if (res.ok) {
         const data = await res.json();
         setTicketsList(data);
@@ -365,7 +365,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
 
   const fetchVaccineTypes = async () => {
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/admin/vaccine-types");
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/vaccine-types`);
       if (res.ok) setVaccineTypes(await res.json());
     } catch (err) {
       if (err !== "Unauthorized") console.error(err);
@@ -374,7 +374,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
 
   const fetchVaccinesList = async () => {
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/customer/vaccines");
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
       if (res.ok) setVaccinesList(await res.json());
     } catch (err) {
       if (err !== "Unauthorized") console.error(err);
@@ -442,7 +442,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (itemToDelete.type === "schedule") {
       const numericId = String(itemToDelete.id).replace("LTC", "");
       try {
-        const response = await fetchWithAuth(`http://localhost:8080/api/admin/schedules/${numericId}`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}api/admin/schedules/${numericId}`, {
           method: "DELETE",
         });
         if (response.ok) {
@@ -458,7 +458,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       }
     } else if (itemToDelete.type === "account") {
       try {
-        const response = await fetchWithAuth(`http://localhost:8080/api/admin/accounts/${itemToDelete.id}`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts/${itemToDelete.id}`, {
           method: "DELETE",
         });
         if (response.ok) {
@@ -601,7 +601,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     };
 
     try {
-      const url = editingAccountId ? `http://localhost:8080/api/admin/accounts/${editingAccountId}` : "http://localhost:8080/api/admin/accounts";
+      const url = editingAccountId
+        ? `${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts/${editingAccountId}`
+        : `${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts`;
       const response = await fetchWithAuth(url, {
         method: editingAccountId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -671,8 +673,8 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
 
     try {
       const url = editingScheduleId
-        ? `http://localhost:8080/api/admin/schedules/${editingScheduleId.replace("LTC", "")}`
-        : "http://localhost:8080/api/admin/schedules";
+        ? `${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules/${editingScheduleId.replace("LTC", "")}`
+        : `${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`;
 
       const response = await fetchWithAuth(url, {
         method: editingScheduleId ? "PUT" : "POST",
@@ -720,7 +722,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
 
     try {
       const rawId = String(selectedTicket.id).replace("PHCC-", "");
-      const res = await fetchWithAuth(`http://localhost:8080/api/customer/admin/feedback/high-level/resolve/${rawId}`, {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/admin/feedback/high-level/resolve/${rawId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ normalContent: ticketResponse }),

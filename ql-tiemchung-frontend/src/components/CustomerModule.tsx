@@ -92,7 +92,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
   const fetchDiseases = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/customer/diseases");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/diseases`);
       if (response.ok) {
         const data = await response.json();
         setDiseases(data);
@@ -111,7 +111,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   // Fetch FAQs
   const fetchFaqs = async () => {
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/customer/faqs");
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/faqs`);
       if (res.ok) {
         const data = await res.json();
         setFaqs(data);
@@ -125,7 +125,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   const fetchMyFeedbacks = async () => {
     if (!profile.id) return; // Chỉ gọi nếu profile id đã có
     try {
-      const res = await fetchWithAuth(`http://localhost:8080/api/customer/my-feedbacks/${profile.id}`);
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/my-feedbacks/${profile.id}`);
       if (res.ok) {
         const data = await res.json();
         setMyFeedbacks(data);
@@ -139,7 +139,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   const fetchProfile = async () => {
     try {
       // Dùng endpoint mới không cần tham số ID (Lấy từ Token của Backend)
-      const response = await fetchWithAuth("http://localhost:8080/api/customer/profile");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/profile`);
       if (response.ok) {
         const data = await response.json();
         const profileData = {
@@ -174,7 +174,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
   const fetchVaccines = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/customer/vaccines");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
       if (response.ok) {
         const data = await response.json();
         setVaccines(data);
@@ -189,7 +189,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
   const fetchSchedules = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/admin/schedules");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
       if (response.ok) {
         const data = await response.json();
         setSchedules(data);
@@ -284,7 +284,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       };
 
       // Đổi sang endpoint mới, Backend sẽ tự tìm user từ Token
-      const res = await fetchWithAuth(`http://localhost:8080/api/customer/profile`, {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -349,7 +349,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
         highLevelContent: feedbackForm.highLevelContent,
       };
 
-      const res = await fetchWithAuth(`http://localhost:8080${endpoint}`, {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -396,7 +396,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
         }
       }
 
-      const res = await fetchWithAuth("http://localhost:8080/api/customer/book", {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

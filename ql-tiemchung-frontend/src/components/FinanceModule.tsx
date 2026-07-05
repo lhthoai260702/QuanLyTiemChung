@@ -212,9 +212,9 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   const fetchMetadata = async () => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-types"),
-        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-list"),
-        fetchWithAuth("http://localhost:8080/api/inventory/suppliers"),
+        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`),
+        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`),
+        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`),
       ]);
       if (resType.ok) {
         const data = await resType.json();
@@ -246,7 +246,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
 
   const fetchCustomerTransactions = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/finance/customer-transactions");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions`);
       if (response.ok) setCustomerTxs(await response.json());
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin khách hàng!");
@@ -255,7 +255,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
 
   const fetchSupplierTransactions = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`);
       if (response.ok) setSupplierTxs(await response.json());
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Lỗi kết nối tải dữ liệu nhà cung cấp!");
@@ -264,7 +264,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
 
   const fetchVaccinePrices = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/finance/vaccine-prices");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices`);
       if (response.ok) setVaccinePrices(await response.json());
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin giá vắc-xin!");
@@ -289,7 +289,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
 
     try {
       if (type === "customer") {
-        const response = await fetchWithAuth(`http://localhost:8080/api/finance/customer-transactions/${id}`, { method: "DELETE" });
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions/${id}`, { method: "DELETE" });
         if (response.ok) {
           setCustomerTxs(customerTxs.filter((tx) => tx.id !== id));
           triggerToast("Đã hủy và xóa mềm hóa đơn thành công!");
@@ -297,7 +297,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
           triggerToast("Tác vụ lỗi: Hủy hóa đơn thất bại!");
         }
       } else if (type === "supplier") {
-        const response = await fetchWithAuth(`http://localhost:8080/api/inventory/vaccines/${id}`, { method: "DELETE" });
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${id}`, { method: "DELETE" });
         if (response.ok) {
           setSupplierTxs(supplierTxs.filter((tx) => tx.soLo !== id));
           triggerToast("Hủy hóa đơn nhập lô thành công!");
@@ -305,7 +305,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
           triggerToast("Lỗi xóa giao dịch");
         }
       } else if (type === "price") {
-        const response = await fetchWithAuth(`http://localhost:8080/api/finance/vaccine-prices/${id}`, { method: "DELETE" });
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices/${id}`, { method: "DELETE" });
         if (response.ok) {
           triggerToast("Đã xóa bảng giá vắc-xin thành công!");
           fetchVaccinePrices();
@@ -355,7 +355,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     try {
       if (editingCustomerTxId) {
         // Gọi API PUT Update để đồng bộ lại HoSoBenhAn và Các bảng liên quan
-        const response = await fetchWithAuth(`http://localhost:8080/api/finance/customer-transactions/${editingCustomerTxId}`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions/${editingCustomerTxId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(customerForm),
@@ -535,7 +535,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         maNhaCungCap: isNewSupplier ? null : supplierForm.maNhaCungCap,
       };
 
-      const res = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines", {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -583,7 +583,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       return;
     }
     try {
-      const response = await fetchWithAuth(`http://localhost:8080/api/finance/vaccine-prices/${priceForm.id}`, {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices/${priceForm.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(priceForm),

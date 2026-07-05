@@ -94,7 +94,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchReminders = async () => {
     setIsLoadingReminders(true);
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/support/reminders");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/support/reminders`);
       if (response.ok) {
         const data = await response.json();
         const today = new Date();
@@ -135,7 +135,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchFaqs = async () => {
     setIsLoadingFaqs(true);
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/support/faqs");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/support/faqs`);
       if (response.ok) {
         const data = await response.json();
         setFaqsList(data);
@@ -163,7 +163,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchTickets = async () => {
     setIsLoadingTickets(true);
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/customer/feedback/list");
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/list`);
       if (res.ok) {
         const data = await res.json();
         const mapped = data.map((t: any) => ({
@@ -258,7 +258,9 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
 
     try {
       const isEditing = selectedFaq.id != null;
-      const url = isEditing ? `http://localhost:8080/api/support/faqs/${selectedFaq.id}` : `http://localhost:8080/api/support/faqs`;
+      const url = isEditing
+        ? `${import.meta.env.VITE_API_BASE_URL}/api/support/faqs/${selectedFaq.id}`
+        : `${import.meta.env.VITE_API_BASE_URL}/api/support/faqs`;
 
       const method = isEditing ? "PUT" : "POST";
 
@@ -320,7 +322,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     try {
       // Bỏ phần chữ "PH-" để lấy ID gốc truyền cho Endpoint
       const rawId = String(selectedTicket.id).replace("PH-", "");
-      const res = await fetchWithAuth(`http://localhost:8080/api/customer/feedback/resolve/${rawId}`, {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/resolve/${rawId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ normalContent: ticketResponse }),

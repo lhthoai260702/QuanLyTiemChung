@@ -43,7 +43,7 @@ export default function ProfileTab({ triggerToast, onNameChange }: ProfileTabPro
 
   const loadProfile = async () => {
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/profile");
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/profile`);
       if (res.ok) {
         const data = await res.json();
 
@@ -129,7 +129,7 @@ export default function ProfileTab({ triggerToast, onNameChange }: ProfileTabPro
     };
 
     try {
-      const res = await fetchWithAuth("http://localhost:8080/api/profile", {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/profile`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

@@ -60,7 +60,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
 
   const fetchPatients = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/medical/patients");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/patients`);
       if (response.ok) {
         const data = await response.json();
         setPatients(data);
@@ -79,7 +79,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
 
   const fetchVaccinesForCombobox = async () => {
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/medical/vaccines");
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/vaccines`);
       if (response.ok) {
         const data = await response.json();
         setVaccineOptions(data);
@@ -186,7 +186,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
   const handleDeleteHistoryRecord = async (recordId: number, index: number) => {
     if (!window.confirm("Bạn có chắc chắn muốn xóa bản ghi lịch sử tiêm này không?")) return;
     try {
-      const response = await fetchWithAuth(`http://localhost:8080/api/medical/history/${recordId}`, {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/history/${recordId}`, {
         method: "DELETE",
       });
       if (response.ok) {
@@ -249,7 +249,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
     }
 
     try {
-      const response = await fetchWithAuth(`http://localhost:8080/api/medical/patients/${selectedPatient?.id}`, {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/patients/${selectedPatient?.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -301,7 +301,7 @@ export default function MedicalModule({ patients, setPatients, vaccines, trigger
     }
 
     try {
-      const response = await fetchWithAuth("http://localhost:8080/api/medical/prescribe", {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/prescribe`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -97,7 +97,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const fetchInventoryData = async () => {
     try {
       setLoading(true);
-      const res = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines");
+      const res = await fetchWithAuth("${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines");
       if (!res.ok) throw new Error("Lỗi kết nối");
       setVaccines(await res.json());
       setError(null);
@@ -111,9 +111,9 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const fetchMetadata = async () => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-types"),
-        fetchWithAuth("http://localhost:8080/api/inventory/vaccine-list"),
-        fetchWithAuth("http://localhost:8080/api/inventory/suppliers"),
+        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`),
+        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`),
+        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`),
       ]);
       if (resType.ok) {
         const data = await resType.json();
@@ -304,7 +304,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         maNhaCungCap: isNewSupplier ? null : importForm.maNhaCungCap,
       };
 
-      const res = await fetchWithAuth("http://localhost:8080/api/inventory/vaccines", {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -340,7 +340,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       }
 
       try {
-        const res = await fetchWithAuth(`http://localhost:8080/api/inventory/vaccines/${targetVac.soLo}/export?quantity=${exportForm.soLuongXuat}`, {
+        const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${targetVac.soLo}/export?quantity=${exportForm.soLuongXuat}`, {
           method: "POST",
         });
         if (!res.ok) throw new Error("Lỗi khi xuất kho");
@@ -358,7 +358,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const confirmDelete = async () => {
     if (itemToDelete === null) return;
     try {
-      await fetchWithAuth(`http://localhost:8080/api/inventory/vaccines/${itemToDelete}`, { method: "DELETE" });
+      await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${itemToDelete}`, { method: "DELETE" });
       triggerToast("Hủy Lô Vắc-xin thành công!");
       fetchInventoryData();
     } catch (err: any) {

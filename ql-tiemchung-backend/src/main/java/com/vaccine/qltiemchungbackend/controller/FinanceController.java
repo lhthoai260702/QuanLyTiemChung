@@ -22,7 +22,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/finance")
-@CrossOrigin(origins = "http://localhost:3000")
 public class FinanceController {
 
     @Autowired

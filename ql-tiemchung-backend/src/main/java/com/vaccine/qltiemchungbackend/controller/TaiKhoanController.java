@@ -21,7 +21,6 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/admin")
-@CrossOrigin(origins = "http://localhost:3000") // Cho phép Frontend kết nối
 public class TaiKhoanController {
 
     @Autowired

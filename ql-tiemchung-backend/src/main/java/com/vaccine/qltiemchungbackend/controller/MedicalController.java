@@ -30,7 +30,6 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/medical")
-@CrossOrigin(origins = "http://localhost:3000")
 public class MedicalController {
 
     @Autowired

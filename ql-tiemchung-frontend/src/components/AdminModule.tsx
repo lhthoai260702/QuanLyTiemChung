@@ -82,9 +82,10 @@ export interface LichTiemChungSRS {
 
 interface AdminModuleProps {
   triggerToast?: (msg: string) => void;
+  onNameChange?: (name: string) => void;
 }
 
-export default function AdminModule({ triggerToast = alert }: AdminModuleProps) {
+export default function AdminModule({ triggerToast = alert, onNameChange }: AdminModuleProps) {
   const [activeTab, setActiveTab] = useState<"schedules" | "accounts" | "feedback">("accounts");
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
@@ -609,6 +610,22 @@ export default function AdminModule({ triggerToast = alert }: AdminModuleProps) 
 
       if (response.ok) {
         triggerToast(editingAccountId ? "Cập nhật tài khoản thành công!" : "Tạo mới và phân luồng thành công!");
+        if (editingAccountId) {
+          const currentUserStr = localStorage.getItem("user");
+          if (currentUserStr) {
+            try {
+              const currentUser = JSON.parse(currentUserStr);
+              // Đối chiếu tenDangNhap của tài khoản đang sửa với tenDangNhap đang đăng nhập
+              if (currentUser.tenDangNhap === accForm.tenDangNhap || currentUser.username === accForm.tenDangNhap) {
+                if (onNameChange) {
+                  onNameChange(accForm.hoTen);
+                }
+              }
+            } catch (e) {
+              console.error("Lỗi parse user từ localStorage:", e);
+            }
+          }
+        }
         fetchAccounts();
         resetAccountForm();
       } else {

@@ -31,7 +31,7 @@ import CustomerModule from './components/CustomerModule';
 import SupportModule from './components/SupportModule';
 import FinanceModule from './components/FinanceModule';
 
-// Lucide icons (Bổ sung icon AlertCircle cho lỗi)
+// Lucide icons
 import {
   Syringe,
   Shield,
@@ -207,6 +207,25 @@ export default function App() {
     }, 4500);
   };
 
+  // XỬ LÝ CẬP NHẬT TÊN NGAY LẬP TỨC CHO HEADER
+  const handleNameChange = (newName: string) => {
+    setLoggedInName(newName);
+    
+    // Cập nhật lại localStorage để reload không bị mất tên mới
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        if (userData.hoTen !== undefined) userData.hoTen = newName;
+        if (userData.name !== undefined) userData.name = newName;
+        localStorage.setItem('user', JSON.stringify(userData));
+      } catch (e) {
+        // Trường hợp user đang lưu là chuỗi thuần (không phải object)
+        localStorage.setItem('user', newName); 
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-sky-50 flex flex-col font-sans select-none antialiased overflow-x-hidden">
       
@@ -345,12 +364,14 @@ export default function App() {
               {activeRole === 'Admin' && (
                 <AdminModule
                   triggerToast={triggerToast}
+                  onNameChange={handleNameChange}
                 />
               )}
 
               {activeRole === 'Inventory' && (
                 <InventoryModule
                   triggerToast={triggerToast}
+                  onNameChange={handleNameChange}
                 />
               )}
 
@@ -360,12 +381,14 @@ export default function App() {
                   setPatients={setPatients}
                   vaccines={vaccines}
                   triggerToast={triggerToast}
+                  onNameChange={handleNameChange}
                 />
               )}
 
               {activeRole === 'Customer' && (
                 <CustomerModule
                   triggerToast={triggerToast}
+                  onNameChange={handleNameChange}
                 />
               )}
 
@@ -376,6 +399,7 @@ export default function App() {
                   systemLogs={systemLogs}
                   setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
+                  onNameChange={handleNameChange}
                 />
               )}
 
@@ -387,6 +411,7 @@ export default function App() {
                   systemLogs={systemLogs}
                   setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
+                  onNameChange={handleNameChange}
                 />
               )}
             </div>
@@ -398,7 +423,7 @@ export default function App() {
       <footer className="h-10 bg-slate-900 border-t border-slate-800 shrink-0">
       </footer>
 
-      {/* 4. REAL-TIME EVENT POPUP TOAST NOTIFIER (NÂNG CẤP ĐỔI MÀU GIAO DIỆN KHI CÓ LỖI) */}
+      {/* 4. REAL-TIME EVENT POPUP TOAST NOTIFIER */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 max-w-sm border border-slate-700/80 animate-slide-in flex items-start gap-3">
           <div className={`${toastMessage.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-slate-950'} p-1.5 rounded-lg shrink-0`}>

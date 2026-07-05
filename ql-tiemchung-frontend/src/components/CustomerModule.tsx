@@ -22,6 +22,7 @@ import {
 
 interface CustomerModuleProps {
   triggerToast: (msg: string) => void;
+  onNameChange?: (name: string) => void;
 }
 
 // --- ĐỊNH NGHĨA KIỂU DỮ LIỆU VẮC XIN THEO BACKEND ---
@@ -50,7 +51,7 @@ export interface MyFeedbackType {
   time: string;
 }
 
-export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
+export default function CustomerModule({ triggerToast, onNameChange }: CustomerModuleProps) {
   // --- STATES: ĐIỀU HƯỚNG TABS ---
   const [activeTab, setActiveTab] = useState<"profile" | "vaccines" | "schedules" | "diseases" | "feedback" | "faqs" | "my_feedbacks">("profile");
 
@@ -64,7 +65,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       Authorization: `Bearer ${token}`,
     };
     const response = await fetch(url, { ...options, headers });
-    
+
     if (response.status === 401 || response.status === 403) {
       triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
       return Promise.reject("Unauthorized");
@@ -75,14 +76,14 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
   // --- DỮ LIỆU THẬT LẤY TỪ DATABASE ---
   // Đã gỡ bỏ hardcode ID = 1 ở đây
   const [profile, setProfile] = useState({
-    id: "", 
+    id: "",
     name: "",
     dob: "",
     gender: "Nam",
     phone: "",
     address: "",
   });
-  
+
   const [history, setHistory] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [diseases, setDiseases] = useState<any[]>([]);
@@ -149,19 +150,19 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
           phone: data.phone || "",
           address: data.address || "",
         };
-        
+
         setProfile(profileData);
-        setProfileForm(profileData); 
+        setProfileForm(profileData);
 
         // Map đầy đủ lịch sử tiêm theo các trường mở rộng
         const formattedHistory = data.history.map((h: any, i: number) => ({
           id: h.recordId || i,
           date: h.date || "---",
-          place: h.place || "Chưa xác định", 
+          place: h.place || "Chưa xác định",
           vacName: h.vaccineName || "---",
-          vacType: h.vaccineType || "Chưa xác định", 
-          dosage: h.dosage || "Chưa xác định", 
-          status: h.nextDose || "Chưa xác định", 
+          vacType: h.vaccineType || "Chưa xác định",
+          dosage: h.dosage || "Chưa xác định",
+          status: h.nextDose || "Chưa xác định",
         }));
         setHistory(formattedHistory);
       }
@@ -203,7 +204,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
 
   // 1. Luôn ưu tiên fetch ID User vào lần đầu tải để dùng cho toàn bộ component
   useEffect(() => {
-    fetchProfile(); 
+    fetchProfile();
   }, []);
 
   // 2. Chuyển đổi tab sẽ fetch lại
@@ -297,6 +298,10 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       setProfile({ ...profileForm });
       setIsEditingProfile(false);
       triggerToast("Cập nhật thông tin cá nhân lên hệ thống thành công!");
+
+      if (onNameChange) {
+        onNameChange(profileForm.name);
+      }
     } catch (error: any) {
       if (error !== "Unauthorized") triggerToast("Lỗi cập nhật: " + error.message);
     }
@@ -319,7 +324,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
       if (!feedbackForm.time) errors.time = "Vui lòng nhập/chọn thời gian tiêm";
       if (!feedbackForm.place.trim()) errors.place = "Vui lòng nhập địa điểm";
       if (!feedbackForm.doctor.trim()) errors.doctor = "Vui lòng nhập tên nhân viên";
-      if (!feedbackForm.normalContent.trim()) errors.normalContent = "Vui lòng nhập nội dung phản hồi"; 
+      if (!feedbackForm.normalContent.trim()) errors.normalContent = "Vui lòng nhập nội dung phản hồi";
     } else {
       if (!feedbackForm.highLevelContent.trim()) errors.highLevelContent = "Vui lòng nhập nội dung phản hồi";
     }
@@ -339,7 +344,7 @@ export default function CustomerModule({ triggerToast }: CustomerModuleProps) {
         time: feedbackForm.time,
         place: feedbackForm.place,
         doctor: feedbackForm.doctor,
-        normalContent: feedbackForm.normalContent, 
+        normalContent: feedbackForm.normalContent,
         highLevelType: feedbackForm.highLevelType,
         highLevelContent: feedbackForm.highLevelContent,
       };

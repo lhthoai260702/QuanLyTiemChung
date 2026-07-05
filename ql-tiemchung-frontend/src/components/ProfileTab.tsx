@@ -14,9 +14,10 @@ interface ProfileForm {
 
 interface ProfileTabProps {
   triggerToast: (msg: string) => void;
+  onNameChange?: (name: string) => void;
 }
 
-export default function ProfileTab({ triggerToast }: ProfileTabProps) {
+export default function ProfileTab({ triggerToast, onNameChange }: ProfileTabProps) {
   const [profile, setProfile] = useState<ProfileForm>({
     tenDangNhap: "",
     hoTen: "",
@@ -135,6 +136,9 @@ export default function ProfileTab({ triggerToast }: ProfileTabProps) {
       });
       if (res.ok) {
         triggerToast("Cập nhật thông tin thành công!");
+        if (onNameChange) {
+          onNameChange(profile.hoTen);
+        }
       } else {
         triggerToast("Lỗi: Cập nhật thông tin thất bại!");
       }

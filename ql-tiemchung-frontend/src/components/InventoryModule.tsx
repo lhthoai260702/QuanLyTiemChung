@@ -97,7 +97,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const fetchInventoryData = async () => {
     try {
       setLoading(true);
-      const res = await fetchWithAuth("${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines");
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`);
       if (!res.ok) throw new Error("Lỗi kết nối");
       setVaccines(await res.json());
       setError(null);

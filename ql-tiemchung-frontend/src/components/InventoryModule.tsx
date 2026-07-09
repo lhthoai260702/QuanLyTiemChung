@@ -15,10 +15,7 @@ import {
   Package,
   Activity,
   Truck,
-  User, // BỔ SUNG: Import icon User
 } from "lucide-react";
-
-import ProfileTab from "./ProfileTab"; // BỔ SUNG: Import Component ProfileTab
 
 // --- INTERFACES ---
 export interface KhoVacXin {
@@ -59,8 +56,7 @@ interface InventoryModuleProps {
 }
 
 export default function InventoryModule({ triggerToast }: InventoryModuleProps) {
-  // BỔ SUNG: Thêm "account_info" vào type của activeTab
-  const [activeTab, setActiveTab] = useState<"account_info" | "view" | "import" | "export">("view");
+  const [activeTab, setActiveTab] = useState<"view" | "import" | "export">("view");
 
   // =========================================================================
   // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
@@ -131,7 +127,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
             dieuKienBaoQuan: d.dieuKienBaoQuan,
             doTuoiTiemChung: d.doTuoiTiemChung,
             donGia: d.donGia,
-          })),
+          }))
         );
       }
       if (resSup.ok) {
@@ -143,14 +139,35 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     }
   };
 
-  // Lọc & Phân trang
+  // =========================================================================
+  // XỬ LÝ LỌC, GOM NHÓM VÀ SẮP XẾP VẮC XIN
+  // =========================================================================
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
 
-  const filteredVaccines = vaccines.filter((v) => v.tenVacXin.toLowerCase().includes(searchQuery.toLowerCase()));
-  const totalPages = Math.ceil(filteredVaccines.length / ITEMS_PER_PAGE) || 1;
-  const currentVaccines = filteredVaccines.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const groupedVaccines = useMemo(() => {
+    // 1. Tìm kiếm theo tên
+    const filtered = vaccines.filter((v) => v.tenVacXin.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    // 2. Gom nhóm theo Loại vắc-xin
+    const groups: Record<string, KhoVacXin[]> = {};
+    filtered.forEach((v) => {
+      const groupName = v.loaiVacXin || "Chưa phân loại";
+      if (!groups[groupName]) groups[groupName] = [];
+      groups[groupName].push(v);
+    });
+
+    // 3. Sắp xếp các nhóm theo tên nhóm (A-Z)
+    const sortedGroups = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+    // 4. Trả về mảng đã phân nhóm và sắp xếp Hạn sử dụng bên trong từng nhóm
+    return sortedGroups.map((groupName) => {
+      const items = groups[groupName].sort((a, b) => {
+        return new Date(a.hanSuDung).getTime() - new Date(b.hanSuDung).getTime(); // Hạn gần nhất xếp trước
+      });
+      return { groupName, items };
+    });
+  }, [vaccines, searchQuery]);
+
 
   // Forms
   const [editingVacId, setEditingVacId] = useState<number | null>(null);
@@ -187,7 +204,6 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     }
   };
 
-  // TÁCH BIỆT: Xử lý riêng cho ô Tổng Tiền Hóa Đơn Nhập
   const handleTongTienChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (!val) {
@@ -197,13 +213,11 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     }
     const num = Number(val);
     if (num < 100000000000) {
-      // Giới hạn số tiền lớn
       setImportForm({ ...importForm, tongTien: num });
       setImportErrors({ ...importErrors, tongTien: "" });
     }
   };
 
-  // Handle Vaccine Selection
   const handleSelectVaccine = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (val === "OTHER") {
@@ -241,7 +255,6 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     }
   };
 
-  // Handle Supplier Selection
   const handleSelectSupplier = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (val === "OTHER") {
@@ -263,14 +276,12 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
-    // Validate Lô & Hóa đơn
     if (!importForm.ngayNhan) newErrors.ngayNhan = "Vui lòng chọn ngày nhận";
     if (!importForm.soLuong || Number(importForm.soLuong) <= 0) newErrors.soLuong = "Số lượng phải > 0";
     if (!importForm.giayPhep?.trim()) newErrors.giayPhep = "Vui lòng nhập giấy phép";
     if (!importForm.nuocSanXuat?.trim()) newErrors.nuocSanXuat = "Vui lòng nhập nơi sản xuất";
     if (!importForm.tongTien || Number(importForm.tongTien) <= 0) newErrors.tongTien = "Tổng tiền HĐ phải > 0";
 
-    // Validate Vaccine
     if (isNewVaccine) {
       if (!importForm.tenVacXin?.trim()) newErrors.tenVacXin = "Vui lòng nhập tên vắc-xin";
       if (!importForm.loaiVacXin?.trim()) newErrors.loaiVacXin = "Vui lòng nhập loại vắc-xin";
@@ -283,7 +294,6 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       if (!importForm.maVacXin) newErrors.maVacXin = "Vui lòng chọn vắc-xin";
     }
 
-    // Validate Supplier
     if (isNewSupplier) {
       if (!importForm.tenNhaCungCap?.trim()) newErrors.tenNhaCungCap = "Vui lòng nhập tên nhà CC";
     } else {
@@ -683,21 +693,11 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   return (
     <div className="space-y-6 animate-fade-in h-full flex flex-col pb-10">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Quản lý Kho bãi</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Quản lý vắc xin</h2>
         <p className="text-sm text-slate-500 mt-1">Quản lý các thông tin về kho thuốc của trung tâm.</p>
       </div>
 
       <div className="border-b border-slate-200 flex space-x-2">
-        {/* BỔ SUNG NÚT BẤM TAB THÔNG TIN CÁ NHÂN VÀO ĐẦU DANH SÁCH */}
-        <button
-          onClick={() => {
-            setActiveTab("account_info");
-            setEditingVacId(null);
-          }}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-2 transition-colors ${activeTab === "account_info" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-        >
-          <User className="w-4 h-4" /> Thông tin Tài khoản
-        </button>
         <button
           onClick={() => {
             setActiveTab("view");
@@ -731,9 +731,6 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         </button>
       </div>
 
-      {/* BỔ SUNG: HIỂN THỊ COMPONENT THÔNG TIN TÀI KHOẢN KHI BẤM TAB NÀY */}
-      {activeTab === "account_info" && <ProfileTab triggerToast={triggerToast} />}
-
       {activeTab === "view" && (
         <div className="bg-white rounded-xl border border-slate-200 flex flex-col flex-1 overflow-hidden shadow-sm">
           <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
@@ -765,31 +762,56 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {currentVaccines.length > 0 ? (
-                  currentVaccines.map((v) => (
-                    <tr key={v.soLo} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-3.5 font-mono font-bold text-slate-400">#{v.soLo}</td>
-                      <td className="p-3.5 font-bold text-blue-700 truncate">{v.tenVacXin}</td>
-                      <td className="p-3.5 text-slate-600 truncate">{v.loaiVacXin}</td>
-                      <td className="p-3.5 text-center text-red-600 font-mono font-semibold">{v.hanSuDung}</td>
-                      <td className="p-3.5 text-right text-blue-600 font-extrabold">{v.soLuong}</td>
-                      <td className="p-3.5 text-center">
-                        <span
-                          className={`px-2 py-1 rounded text-[10px] font-bold border ${v.soLuong === 0 ? "bg-red-50 text-red-700 border-red-200" : v.soLuong <= 50 ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}
-                        >
-                          {v.soLuong === 0 ? "Đã hết" : v.soLuong <= 50 ? "Sắp hết" : "Sẵn có"}
-                        </span>
-                      </td>
-                      <td className="p-3.5 text-center">
-                        <button
-                          onClick={() => setItemToDelete(v.soLo)}
-                          className="text-red-500 hover:text-red-700 p-1.5 bg-red-50 hover:bg-red-100 rounded transition-colors"
-                          title="Xóa Lô"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
+                {groupedVaccines.length > 0 ? (
+                  groupedVaccines.map((group) => (
+                    <React.Fragment key={group.groupName}>
+                      {/* Tiêu đề Phân Nhóm */}
+                      <tr className="bg-slate-200/60 border-y border-slate-300">
+                        <td colSpan={7} className="p-3 font-bold text-slate-800 text-sm uppercase tracking-wider">
+                          📦 Nhóm: {group.groupName} <span className="text-blue-600 text-xs normal-case ml-2">({group.items.length} lô)</span>
+                        </td>
+                      </tr>
+
+                      {/* Các lô bên trong nhóm */}
+                      {group.items.map((v) => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0); // Đưa về mốc 0h để chuẩn so sánh
+                        const expiryDate = new Date(v.hanSuDung);
+                        const isExpired = expiryDate < today;
+
+                        return (
+                          <tr key={v.soLo} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3.5 font-mono font-bold text-slate-400">#{v.soLo}</td>
+                            <td className="p-3.5 font-bold text-blue-700 truncate">{v.tenVacXin}</td>
+                            <td className="p-3.5 text-slate-600 truncate">{v.loaiVacXin}</td>
+                            
+                            {/* Cột hiển thị Hạn sử dụng (Đỏ / Xanh) */}
+                            <td className={`p-3.5 text-center font-mono font-semibold ${isExpired ? "text-red-600" : "text-emerald-600"}`}>
+                              {v.hanSuDung}
+                              {isExpired && <span className="block text-[10px] text-red-500 font-bold">Đã hết hạn</span>}
+                            </td>
+
+                            <td className="p-3.5 text-right text-blue-600 font-extrabold">{v.soLuong}</td>
+                            <td className="p-3.5 text-center">
+                              <span
+                                className={`px-2 py-1 rounded text-[10px] font-bold border ${v.soLuong === 0 ? "bg-red-50 text-red-700 border-red-200" : v.soLuong <= 50 ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}
+                              >
+                                {v.soLuong === 0 ? "Đã hết" : v.soLuong <= 50 ? "Sắp hết" : "Sẵn có"}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <button
+                                onClick={() => setItemToDelete(v.soLo)}
+                                className="text-red-500 hover:text-red-700 p-1.5 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                                title="Xóa Lô"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
                   ))
                 ) : (
                   <tr>
@@ -893,7 +915,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
               </div>
             </div>
           </div>,
-          document.body,
+          document.body
         )}
     </div>
   );

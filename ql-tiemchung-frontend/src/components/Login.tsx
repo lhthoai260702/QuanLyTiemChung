@@ -54,7 +54,7 @@ const Login: React.FC = () => {
                         <Syringe className="w-8 h-8" />
                     </div>
                     <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">VaccineFlow Pro</h2>
-                    <p className="text-sm text-slate-500 mt-1.5 font-medium">Hệ thống Quản lý Tiêm chủng GSP V.2</p>
+                    <p className="text-sm text-slate-500 mt-1.5 font-medium">Hệ thống Quản lý Tiêm chủng</p>
                 </div>
 
                 {/* Error Banner */}
@@ -106,17 +106,11 @@ const Login: React.FC = () => {
                             type="submit"
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-5 py-3.5 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-600/20 transition-all active:scale-[0.98] group"
                         >
-                            Đăng nhập vào Hệ thống
+                            Đăng nhập
                             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </button>
                     </div>
                 </form>
-
-                {/* Footer notes */}
-                <div className="relative z-10 mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Hệ thống bảo mật nội bộ 256-bit</span>
-                </div>
             </div>
         </div>
     );

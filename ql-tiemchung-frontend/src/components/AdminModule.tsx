@@ -577,6 +577,13 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (!accForm.hoTen.trim()) newErrors.hoTen = "Vui lòng nhập họ và tên";
     if (!accForm.cmnd) newErrors.cmnd = "Vui lòng nhập CCCD/CMND";
 
+    // Validate Email
+    if (!accForm.email.trim()) {
+      newErrors.email = "Vui lòng nhập email";
+    } else if (!/^\S+@\S+\.\S+$/.test(accForm.email)) {
+      newErrors.email = "Email không đúng định dạng hợp lệ";
+    }
+
     const phoneNum = accForm.sdt.replace(/\s/g, "");
     if (!phoneNum) newErrors.sdt = "Vui lòng nhập số điện thoại";
     else if (phoneNum.length < 10) newErrors.sdt = "Số điện thoại phải đủ 10 số";
@@ -881,14 +888,20 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Email</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">
+                      Email <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="email"
                       maxLength={255}
                       value={accForm.email}
-                      onChange={(e) => setAccForm({ ...accForm, email: e.target.value })}
-                      className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none focus:border-blue-500"
+                      onChange={(e) => {
+                        setAccForm({ ...accForm, email: e.target.value });
+                        setAccErrors({ ...accErrors, email: "" });
+                      }}
+                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${accErrors.email ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                     />
+                    {accErrors.email && <p className="text-[10px] text-red-500 font-bold mt-1">{accErrors.email}</p>}
                   </div>
                 </div>
                 <div className="space-y-4">
@@ -1177,10 +1190,10 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-1 bg-white p-3 rounded-lg border border-slate-200 flex flex-col justify-between shadow-xs">
-                  <label className="block text-xs font-bold text-slate-700 mb-2">
-                    📅 Ngày tiêm <span className="text-red-500">*</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Ngày tiêm <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -1189,147 +1202,117 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
                       handleDateChange(e.target.value);
                       setScheduleErrors({ ...scheduleErrors, dateInput: "" });
                     }}
-                    className={`w-full px-2.5 py-1.5 border rounded-md text-xs outline-none transition-colors ${scheduleErrors.dateInput ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
+                    className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.dateInput ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
                   />
                   {scheduleErrors.dateInput && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.dateInput}</p>}
-
-                  <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1.5 text-center">
-                    <div>
-                      <span className="block text-[10px] text-slate-400 font-semibold">Ngày</span>
-                      <input
-                        type="text"
-                        readOnly
-                        value={scheduleForm.dateInput ? String(new Date(scheduleForm.dateInput).getDate()).padStart(2, "0") : ""}
-                        className="w-full text-center bg-slate-50 border-0 text-xs font-bold py-1 rounded"
-                      />
-                    </div>
-                    <div>
-                      <span className="block text-[10px] text-slate-400 font-semibold">Tháng</span>
-                      <input
-                        type="text"
-                        readOnly
-                        value={scheduleForm.dateInput ? String(new Date(scheduleForm.dateInput).getMonth() + 1).padStart(2, "0") : ""}
-                        className="w-full text-center bg-slate-50 border-0 text-xs font-bold py-1 rounded"
-                      />
-                    </div>
-                    <div>
-                      <span className="block text-[10px] text-slate-400 font-semibold">Năm</span>
-                      <input
-                        type="text"
-                        readOnly
-                        value={scheduleForm.dateInput ? String(new Date(scheduleForm.dateInput).getFullYear()) : ""}
-                        className="w-full text-center bg-slate-50 border-0 text-xs font-bold py-1 rounded"
-                      />
-                    </div>
-                  </div>
                 </div>
 
-                <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Thời gian tiêm chủng <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={50}
-                      placeholder="VD: 07:30 - 11:30"
-                      value={scheduleForm.thoiGian}
-                      onChange={(e) => {
-                        setScheduleForm({ ...scheduleForm, thoiGian: e.target.value });
-                        setScheduleErrors({ ...scheduleErrors, thoiGian: "" });
-                      }}
-                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.thoiGian ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-                    />
-                    {scheduleErrors.thoiGian && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.thoiGian}</p>}
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Thời gian tiêm chủng <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={50}
+                    placeholder="VD: 07:30 - 11:30"
+                    value={scheduleForm.thoiGian}
+                    onChange={(e) => {
+                      setScheduleForm({ ...scheduleForm, thoiGian: e.target.value });
+                      setScheduleErrors({ ...scheduleErrors, thoiGian: "" });
+                    }}
+                    className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.thoiGian ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
+                  />
+                  {scheduleErrors.thoiGian && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.thoiGian}</p>}
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Tên vắc xin đợt này <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={scheduleForm.maVacXin || 0}
-                      onChange={handleVaccineSelect}
-                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors cursor-pointer ${
-                        scheduleErrors.maVacXin ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"
-                      }`}
-                    >
-                      <option value={0} disabled>
-                        -- Chọn tên vắc xin --
-                      </option>
-                      {vaccinesList &&
-                        vaccinesList.map((v) => (
-                          <option key={v.maVacXin} value={v.maVacXin}>
-                            {v.tenVacXin}
-                          </option>
-                        ))}
-                    </select>
-                    {scheduleErrors.maVacXin && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.maVacXin}</p>}
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Tên vắc xin đợt này <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={scheduleForm.maVacXin || 0}
+                    onChange={handleVaccineSelect}
+                    className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors cursor-pointer ${
+                      scheduleErrors.maVacXin ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"
+                    }`}
+                  >
+                    <option value={0} disabled>
+                      -- Chọn tên vắc xin --
+                    </option>
+                    {vaccinesList &&
+                      vaccinesList.map((v) => (
+                        <option key={v.maVacXin} value={v.maVacXin}>
+                          {v.tenVacXin}
+                        </option>
+                      ))}
+                  </select>
+                  {scheduleErrors.maVacXin && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.maVacXin}</p>}
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Nhóm phân loại (Tự động)</label>
-                    <input
-                      type="text"
-                      disabled
-                      value={scheduleForm.loaiVacXinName || "---"}
-                      className="w-full bg-slate-100 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none text-slate-500 font-medium cursor-not-allowed"
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Nhóm phân loại (Tự động)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={scheduleForm.loaiVacXinName || "---"}
+                    className="w-full bg-slate-100 px-3 py-2 border border-slate-200 rounded-lg text-xs outline-none text-slate-500 font-medium cursor-not-allowed"
+                  />
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Số lượng vắc xin (liều) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={scheduleForm.soLuong || ""}
-                      onChange={(e) => {
-                        setScheduleForm({ ...scheduleForm, soLuong: Number(e.target.value) });
-                        setScheduleErrors({ ...scheduleErrors, soLuong: "" });
-                      }}
-                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.soLuong ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-                    />
-                    {scheduleErrors.soLuong && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.soLuong}</p>}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Độ tuổi khuyên dùng <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={100}
-                      value={scheduleForm.doTuoi}
-                      onChange={(e) => {
-                        setScheduleForm({ ...scheduleForm, doTuoi: e.target.value });
-                        setScheduleErrors({ ...scheduleErrors, doTuoi: "" });
-                      }}
-                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.doTuoi ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-                    />
-                    {scheduleErrors.doTuoi && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.doTuoi}</p>}
-                  </div>
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Địa điểm tổ chức <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={255}
-                      value={scheduleForm.diaDiem}
-                      onChange={(e) => {
-                        setScheduleForm({ ...scheduleForm, diaDiem: e.target.value });
-                        setScheduleErrors({ ...scheduleErrors, diaDiem: "" });
-                      }}
-                      className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.diaDiem ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-                    />
-                    {scheduleErrors.diaDiem && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.diaDiem}</p>}
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Số lượng vắc xin (liều) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={scheduleForm.soLuong || ""}
+                    onChange={(e) => {
+                      setScheduleForm({ ...scheduleForm, soLuong: Number(e.target.value) });
+                      setScheduleErrors({ ...scheduleErrors, soLuong: "" });
+                    }}
+                    className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none text-right transition-colors ${scheduleErrors.soLuong ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
+                  />
+                  {scheduleErrors.soLuong && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.soLuong}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Độ tuổi khuyên dùng <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={scheduleForm.doTuoi}
+                    onChange={(e) => {
+                      setScheduleForm({ ...scheduleForm, doTuoi: e.target.value });
+                      setScheduleErrors({ ...scheduleErrors, doTuoi: "" });
+                    }}
+                    className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.doTuoi ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
+                  />
+                  {scheduleErrors.doTuoi && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.doTuoi}</p>}
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Địa điểm tổ chức <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={255}
+                    value={scheduleForm.diaDiem}
+                    onChange={(e) => {
+                      setScheduleForm({ ...scheduleForm, diaDiem: e.target.value });
+                      setScheduleErrors({ ...scheduleErrors, diaDiem: "" });
+                    }}
+                    className={`w-full bg-white px-3 py-2 border rounded-lg text-xs outline-none transition-colors ${scheduleErrors.diaDiem ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
+                  />
+                  {scheduleErrors.diaDiem && <p className="text-[10px] text-red-500 font-bold mt-1">{scheduleErrors.diaDiem}</p>}
                 </div>
 
                 <div className="md:col-span-2">
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Hội đồng Y tế / Bác sĩ phụ trách</label>
-                  <div className="bg-white border border-slate-200 rounded-lg p-3 max-h-32 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="bg-white border border-slate-200 rounded-lg p-3 max-h-48 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {accounts
                       .filter((a) => a.phanQuyen?.toLowerCase().includes("y tế") || a.maQuyen === 5)
                       .map((bs) => (

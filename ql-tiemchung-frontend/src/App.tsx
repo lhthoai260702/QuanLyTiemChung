@@ -30,6 +30,7 @@ import MedicalModule from './components/MedicalModule';
 import CustomerModule from './components/CustomerModule';
 import SupportModule from './components/SupportModule';
 import FinanceModule from './components/FinanceModule';
+import ProfileTab from './components/ProfileTab'; // Component trang Hồ sơ
 
 // Lucide icons
 import {
@@ -43,7 +44,9 @@ import {
   CheckCircle2,
   ArrowRight,
   LogOut,
-  AlertCircle 
+  AlertCircle,
+  ChevronDown,
+  User
 } from 'lucide-react';
 
 type RoleType = 'Admin' | 'Inventory' | 'Medical' | 'Customer' | 'Support' | 'Finance';
@@ -104,51 +107,28 @@ export default function App() {
 
   // 2. Navigation Active States
   const [activeRole, setActiveRole] = useState<RoleType>('Admin');
-  const [viewMode, setViewMode] = useState<'hub' | 'module'>('hub');
+  const [viewMode, setViewMode] = useState<'hub' | 'module' | 'profile'>('hub');
   
-  // NÂNG CẤP: Chuyển đổi trạng thái toastMessage để lưu cả nội dung và loại thông báo (thành công / lỗi)
+  // STATE LƯU LẠI MÀN HÌNH TRƯỚC ĐÓ ĐỂ QUAY VỀ
+  const [previousViewMode, setPreviousViewMode] = useState<'hub' | 'module'>('hub');
+  
   const [toastMessage, setToastMessage] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
   // STATE LƯU THÔNG TIN NGƯỜI DÙNG ĐĂNG NHẬP VÀ PHÂN QUYỀN
   const [loggedInName, setLoggedInName] = useState<string>("Người dùng");
   const [userRole, setUserRole] = useState<number>(1);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // 3. Persist hooks
-  useEffect(() => {
-    localStorage.setItem('mediflow_users', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_vaccines', JSON.stringify(vaccines));
-  }, [vaccines]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_patients', JSON.stringify(patients));
-  }, [patients]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_appointments', JSON.stringify(appointments));
-  }, [appointments]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_tickets', JSON.stringify(tickets));
-  }, [tickets]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_faqs', JSON.stringify(faqs));
-  }, [faqs]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_invoices', JSON.stringify(invoices));
-  }, [invoices]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_system_logs', JSON.stringify(systemLogs));
-  }, [systemLogs]);
-
-  useEffect(() => {
-    localStorage.setItem('mediflow_stock_logs', JSON.stringify(stockLogs));
-  }, [stockLogs]);
+  useEffect(() => { localStorage.setItem('mediflow_users', JSON.stringify(users)); }, [users]);
+  useEffect(() => { localStorage.setItem('mediflow_vaccines', JSON.stringify(vaccines)); }, [vaccines]);
+  useEffect(() => { localStorage.setItem('mediflow_patients', JSON.stringify(patients)); }, [patients]);
+  useEffect(() => { localStorage.setItem('mediflow_appointments', JSON.stringify(appointments)); }, [appointments]);
+  useEffect(() => { localStorage.setItem('mediflow_tickets', JSON.stringify(tickets)); }, [tickets]);
+  useEffect(() => { localStorage.setItem('mediflow_faqs', JSON.stringify(faqs)); }, [faqs]);
+  useEffect(() => { localStorage.setItem('mediflow_invoices', JSON.stringify(invoices)); }, [invoices]);
+  useEffect(() => { localStorage.setItem('mediflow_system_logs', JSON.stringify(systemLogs)); }, [systemLogs]);
+  useEffect(() => { localStorage.setItem('mediflow_stock_logs', JSON.stringify(stockLogs)); }, [stockLogs]);
 
   // LẤY HỌ TÊN VÀ QUYỀN TỪ LOCAL STORAGE KHI COMPONENT MOUNT
   useEffect(() => {
@@ -156,18 +136,14 @@ export default function App() {
     if (userStr) {
       try {
         const userData = JSON.parse(userStr);
-        // Lấy tên
         if (userData && userData.hoTen) {
           setLoggedInName(userData.hoTen);
         } else if (userData && userData.name) {
           setLoggedInName(userData.name);
         }
 
-        // --- LOGIC PHÂN QUYỀN (RBAC) ---
         if (userData && userData.maQuyen) {
           setUserRole(userData.maQuyen);
-          
-          // NẾU KHÔNG PHẢI ADMIN -> CHUYỂN THẲNG VÀO MODULE VÀ BỎ QUA HUB
           if (userData.maQuyen !== 1) {
             setViewMode('module');
             if (userData.maQuyen === 2) setActiveRole('Inventory');
@@ -178,13 +154,11 @@ export default function App() {
           }
         }
       } catch (e) {
-        // Nếu userStr không phải chuỗi JSON mà là plain text thì lấy trực tiếp
         setLoggedInName(userStr);
       }
     }
   }, []);
 
-  // NÂNG CẤP: Tự động phát hiện lỗi dựa trên từ khóa trong câu thông báo (tránh việc phải truyền thêm biến type vào từng hàm gọi)
   const triggerToast = (message: string) => {
     let type: 'success' | 'error' = 'success';
     const lowerMsg = message.toLowerCase();
@@ -207,11 +181,8 @@ export default function App() {
     }, 4500);
   };
 
-  // XỬ LÝ CẬP NHẬT TÊN NGAY LẬP TỨC CHO HEADER
   const handleNameChange = (newName: string) => {
     setLoggedInName(newName);
-    
-    // Cập nhật lại localStorage để reload không bị mất tên mới
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
@@ -220,7 +191,6 @@ export default function App() {
         if (userData.name !== undefined) userData.name = newName;
         localStorage.setItem('user', JSON.stringify(userData));
       } catch (e) {
-        // Trường hợp user đang lưu là chuỗi thuần (không phải object)
         localStorage.setItem('user', newName); 
       }
     }
@@ -230,14 +200,17 @@ export default function App() {
     <div className="min-h-screen bg-sky-50 flex flex-col font-sans select-none antialiased overflow-x-hidden">
       
       {/* ========================================================= */}
-      {/* 1. UNIFIED NAVBAR CỐ ĐỊNH CHUNG CHO CẢ 2 TRẠNG THÁI (HUB & MODULE) */}
+      {/* 1. UNIFIED NAVBAR CỐ ĐỊNH CHUNG */}
       {/* ========================================================= */}
       <nav className="h-16 bg-white border-b border-sky-100 flex items-center justify-between px-6 sm:px-8 shrink-0 shadow-sm z-10 relative">
-        {/* Nút bấm để quay về trang chủ (Hub) - CHỈ ADMIN ĐƯỢC PHÉP QUAY LẠI HUB */}
+        {/* Nút bấm để quay về trang chủ (Hub) hoặc về Module tương ứng */}
         <div 
-          onClick={() => { if (userRole === 1) setViewMode('hub') }}
-          className={`flex items-center gap-3 transition-opacity ${userRole === 1 ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
-          title={userRole === 1 ? "Về Trang chủ" : "VaccineFlow Pro"}
+          onClick={() => {
+            if (userRole === 1) setViewMode('hub');
+            else setViewMode('module');
+          }}
+          className="flex items-center gap-3 transition-opacity cursor-pointer hover:opacity-80"
+          title={userRole === 1 ? "Về Trang chủ" : "Về Phân hệ Công việc"}
         >
           <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-sky-500 rounded-xl flex items-center justify-center text-white font-extrabold text-xl shadow-md shadow-blue-500/20">
             <Syringe className="w-5 h-5" />
@@ -247,26 +220,63 @@ export default function App() {
           </span>
         </div>
         
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-3">
-            {/* HIỂN THỊ TÊN NGƯỜI DÙNG Ở ĐÂY */}
-            <span className="text-sm font-bold text-slate-800 hidden sm:block">Xin chào, {loggedInName}</span>
-            {/* Nút Đăng xuất màu đỏ */}
-            <button
-              onClick={handleLogout}
-              className="p-2 text-red-500 bg-red-50 border border-red-100 hover:text-red-600 hover:bg-red-100 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
-              title="Đăng xuất"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
+        {/* DROPDOWN USER PROFILE */}
+        <div className="relative">
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="flex items-center gap-2 hover:bg-slate-50 p-2 rounded-lg transition-colors cursor-pointer outline-none"
+          >
+            <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center shrink-0">
+              <User className="w-4 h-4" />
+            </div>
+            <span className="text-sm font-bold text-slate-800 hidden sm:block">{loggedInName}</span>
+            <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+          </button>
+          
+          {isDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
+              <button 
+                onClick={() => {
+                  if (viewMode !== 'profile') {
+                    setPreviousViewMode(viewMode as 'hub' | 'module');
+                  }
+                  setViewMode('profile');
+                  setIsDropdownOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-100 cursor-pointer transition-colors font-medium"
+              >
+                <User className="w-4 h-4" /> Xem hồ sơ
+              </button>
+              <button 
+                onClick={() => {
+                  handleLogout();
+                  setIsDropdownOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer transition-colors font-medium"
+              >
+                <LogOut className="w-4 h-4" /> Đăng xuất
+              </button>
+            </div>
+          )}
         </div>
       </nav>
 
       {/* ========================================================= */}
       {/* 2. KHU VỰC HIỂN THỊ NỘI DUNG (THAY ĐỔI THEO TRẠNG THÁI) */}
       {/* ========================================================= */}
-      {viewMode === 'hub' ? (
+      {viewMode === 'profile' ? (
+        <div className="flex-1 flex overflow-hidden">
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative">
+            <div className="max-w-3xl mx-auto">
+              <ProfileTab 
+                triggerToast={triggerToast} 
+                onNameChange={handleNameChange}
+                onBack={() => setViewMode(previousViewMode)} // Quay lại màn hình trước đó
+              />
+            </div>
+          </main>
+        </div>
+      ) : viewMode === 'hub' ? (
         <div className="flex-1 flex flex-col">
           {/* Main Content Hub */}
           <main className="flex-1 max-w-7xl mx-auto w-full p-6 sm:p-10 flex flex-col justify-center my-auto">

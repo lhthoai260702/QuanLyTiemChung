@@ -1,6 +1,8 @@
+// src/components/FinanceModule.tsx
+
 import React, { useState, useEffect } from "react";
-import { createPortal } from "react-dom"; // Bổ sung import createPortal
-import { useNavigate } from "react-router-dom"; // Bổ sung import useNavigate
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import { Invoice, Vaccine, SystemLog } from "../types";
 import {
   CreditCard,
@@ -20,10 +22,7 @@ import {
   Package,
   Activity,
   AlertCircle,
-  User, // Bổ sung icon AlertCircle cho Popup Delete
 } from "lucide-react";
-
-import ProfileTab from "./ProfileTab";
 
 interface FinanceModuleProps {
   invoices: Invoice[];
@@ -86,8 +85,9 @@ interface VacXinDB extends ItemDB {
 }
 
 export default function FinanceModule({ invoices, setInvoices, vaccines, systemLogs, setSystemLogs, triggerToast }: FinanceModuleProps) {
-  const [activeTab, setActiveTab] = useState<"account_info" | "customer_tx" | "supplier_tx" | "pricing">("customer_tx");
-  const navigate = useNavigate(); // Hook điều hướng
+  // Thay đổi tab mặc định thành customer_tx và xóa 'account_info'
+  const [activeTab, setActiveTab] = useState<"customer_tx" | "supplier_tx" | "pricing">("customer_tx");
+  const navigate = useNavigate();
 
   const formatCurrencyInput = (value: number | undefined) => {
     if (!value || value === 0) return "";
@@ -173,20 +173,16 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
   // =========================================================================
 
-  // Chặn người dùng nếu chưa đăng nhập (Không có token)
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
       triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
-      navigate("/"); // Đẩy về trang Login
+      navigate("/");
     }
   }, [navigate, triggerToast]);
 
-  // Hàm Fetch đính kèm Token tự động cho mọi Request
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
-
-    // Gộp headers cũ với Authorization header mới
     const headers = {
       ...options.headers,
       Authorization: `Bearer ${token}`,
@@ -194,7 +190,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
 
     const response = await fetch(url, { ...options, headers });
 
-    // Nếu Backend báo lỗi 401 (Unauthorized) hoặc 403 (Forbidden) -> Token hết hạn/Sai quyền
     if (response.status === 401 || response.status === 403) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -316,7 +311,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ");
     } finally {
-      // Đóng modal sau khi xóa (thành công hoặc lỗi)
       setDeleteModal({ isOpen: false, type: null, id: null, message: "", actionTitle: "" });
     }
   };
@@ -354,7 +348,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     }
     try {
       if (editingCustomerTxId) {
-        // Gọi API PUT Update để đồng bộ lại HoSoBenhAn và Các bảng liên quan
         const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions/${editingCustomerTxId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -621,9 +614,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     (p) => p.id.toString().toLowerCase().includes(searchPriceQuery.toLowerCase()) || p.name.toLowerCase().includes(searchPriceQuery.toLowerCase()),
   );
 
-  const totalCustomerRevenue = customerTxs.reduce((sum, tx) => sum + tx.price * tx.quantity, 0);
-  const totalSupplierCost = supplierTxs.reduce((sum, tx) => sum + (tx.tongTien || 0), 0);
-
   return (
     <div className="space-y-6 animate-fade-in pb-10">
       {/* Module Title & Metrics */}
@@ -632,14 +622,8 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         <p className="text-sm text-slate-500 mt-1">Quản lý thống kê các giao dịch với khách hàng, nhà cung cấp và niêm yết giá vắc-xin.</p>
       </div>
 
-      {/* Tabs list */}
+      {/* Tabs list - Đã bỏ tab account_info */}
       <div className="border-b border-slate-200 flex space-x-2">
-        <button
-          onClick={() => setActiveTab("account_info")}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "account_info" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-        >
-          <User className="w-4 h-4" /> Thông tin Tài khoản
-        </button>
         <button
           onClick={() => setActiveTab("customer_tx")}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "customer_tx" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
@@ -662,9 +646,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
           <Tag className="w-4 h-4" /> Quản lý giá vắc xin
         </button>
       </div>
-
-      {/* ======================= TAB MỚI: THÔNG TIN TÀI KHOẢN ======================= */}
-      {activeTab === "account_info" && <ProfileTab triggerToast={triggerToast} />}
 
       {/* ========================================================================= */}
       {/* TAB 1: GIAO DỊCH KHÁCH HÀNG */}

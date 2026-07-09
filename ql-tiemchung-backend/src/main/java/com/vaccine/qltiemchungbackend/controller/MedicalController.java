@@ -2,6 +2,7 @@ package com.vaccine.qltiemchungbackend.controller;
 
 import com.vaccine.qltiemchungbackend.dto.BenhNhanDTO;
 import com.vaccine.qltiemchungbackend.dto.KeDonRequestDTO;
+import com.vaccine.qltiemchungbackend.dto.LichSuTiemDTO;
 import com.vaccine.qltiemchungbackend.dto.VacXinBasicDTO;
 import com.vaccine.qltiemchungbackend.entity.BenhNhan;
 import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
@@ -18,16 +19,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * MedicalController
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @RestController
 @RequestMapping("/api/medical")
 public class MedicalController {
@@ -47,23 +38,11 @@ public class MedicalController {
     @Autowired
     private BenhNhanRepository benhNhanRepository;
 
-    /**
-     * Lấy danh sách toàn bộ bệnh nhân
-     *
-     * @return List<BenhNhanDTO>
-     */
     @GetMapping("/patients")
     public List<BenhNhanDTO> getAllPatients() {
         return benhNhanService.getAllPatients();
     }
 
-    /**
-     * Cập nhật thông tin hồ sơ bệnh nhân
-     *
-     * @param id  mã bệnh nhân
-     * @param dto dữ liệu bệnh nhân cần cập nhật
-     * @return ResponseEntity<String>
-     */
     @PutMapping("/patients/{id}")
     public ResponseEntity<String> updatePatient(@PathVariable Long id, @RequestBody BenhNhanDTO dto) {
         try {
@@ -74,11 +53,6 @@ public class MedicalController {
         }
     }
 
-    /**
-     * Lấy danh sách vắc-xin khả dụng để hiển thị trên ComboBox
-     *
-     * @return List<VacXinBasicDTO>
-     */
     @GetMapping("/vaccines")
     public List<VacXinBasicDTO> getVaccinesForCombobox() {
         return vacXinRepository.findAllAvailable().stream().map(v -> {
@@ -89,28 +63,21 @@ public class MedicalController {
         }).collect(Collectors.toList());
     }
 
-    /**
-     * Xử lý quá trình bác sĩ kê đơn vắc-xin và lưu lịch tiêm vào cơ sở dữ liệu
-     *
-     * @param req thông tin yêu cầu kê đơn
-     * @return ResponseEntity<String>
-     */
     @PostMapping("/prescribe")
     public ResponseEntity<String> prescribeVaccine(@RequestBody KeDonRequestDTO req) {
         try {
-            // 1. Tìm bệnh nhân
             BenhNhan bn = benhNhanRepository.findById(req.getPatientId())
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy bệnh nhân!"));
 
-            // 2. Tự động tìm Lô Vắc xin còn khả dụng cho loại vắc xin bác sĩ chọn
             LoVacXin loVacXin = loVacXinRepository.findAvailableLotByVaccineId(req.getVaccineId())
                     .orElseThrow(() -> new RuntimeException("Vắc xin này hiện đã hết hàng trong kho hoặc không có lô nào khả dụng!"));
 
-            // 3. Tạo chi tiết đăng ký tiêm (Hẹn lịch)
             ChiTietDkTiem chiTiet = new ChiTietDkTiem();
             chiTiet.setBenhNhan(bn);
-            chiTiet.setMaLo(loVacXin.getMaLo()); // Lưu MaLo vào DB
+            chiTiet.setMaLo(loVacXin.getMaLo());
             chiTiet.setThoiGianCanTiem(req.getDate());
+            chiTiet.setGioTiem(req.getTime());
+            chiTiet.setTrangThai("Chưa tiêm");
 
             chiTietDkTiemRepository.save(chiTiet);
 
@@ -120,12 +87,17 @@ public class MedicalController {
         }
     }
 
-    /**
-     * Xóa bản ghi lịch sử tiêm chủng của bệnh nhân
-     *
-     * @param recordId mã bản ghi lịch sử
-     * @return ResponseEntity<String>
-     */
+    // THÊM API CẬP NHẬT LỊCH SỬ TIÊM
+    @PutMapping("/history/{recordId}")
+    public ResponseEntity<String> updateHistoryRecord(@PathVariable Long recordId, @RequestBody LichSuTiemDTO dto) {
+        try {
+            benhNhanService.updateHistoryRecord(recordId, dto);
+            return ResponseEntity.ok("Cập nhật lịch sử tiêm thành công!");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
+        }
+    }
+
     @DeleteMapping("/history/{recordId}")
     public ResponseEntity<String> deleteHistoryRecord(@PathVariable Long recordId) {
         try {

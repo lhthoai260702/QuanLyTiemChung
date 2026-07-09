@@ -6,24 +6,16 @@ import com.vaccine.qltiemchungbackend.dto.LichSuTiemProjection;
 import com.vaccine.qltiemchungbackend.entity.*;
 import com.vaccine.qltiemchungbackend.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * BenhNhanService
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @Service
 public class BenhNhanService {
     @Autowired
@@ -38,49 +30,22 @@ public class BenhNhanService {
     private LoVacXinRepository loVacXinRepository;
     @Autowired
     private TaiKhoanRepository taiKhoanRepository;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
-    /**
-     * Lấy hồ sơ từ tên đăng nhập (JWT Token)
-     *
-     * @param username
-     * @return
-     */
     public BenhNhanDTO getPatientByUsername(String username) {
         BenhNhan bn = repository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh nhân"));
-        return getPatientById(bn.getMaBenhNhan()); // Tái sử dụng logic mapping có sẵn
+        return getPatientById(bn.getMaBenhNhan());
     }
 
-    /**
-     * Cập nhật hồ sơ dựa vào tên đăng nhập và đồng bộ TAIKHOAN, BENHNHAN
-     *
-     * @param username
-     * @param dto
-     */
     @Transactional
     public void updatePatientByUsername(String username, BenhNhanDTO dto) {
         BenhNhan bn = repository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh nhân"));
-
-        // 1. Cập nhật bảng BENHNHAN và History (Tái sử dụng logic cũ)
         updatePatient(bn.getMaBenhNhan(), dto);
-
-        // 2. Đồng bộ bảng TAIKHOAN
-        if (bn.getMaTaiKhoan() != null) {
-            TaiKhoan tk = taiKhoanRepository.findById(bn.getMaTaiKhoan()).orElse(null);
-            if (tk != null) {
-                tk.setHoTen(dto.getFullName());
-                tk.setNoiO(dto.getAddress());
-                taiKhoanRepository.save(tk);
-            }
-        }
     }
 
-    /**
-     * Lấy danh sách toàn bộ bệnh nhân cùng với lịch sử tiêm chủng của họ.
-     *
-     * @return List<BenhNhanDTO> Danh sách bệnh nhân đã được ánh xạ sang DTO
-     */
     public List<BenhNhanDTO> getAllPatients() {
         return repository.findByFlagDeleteFalseOrFlagDeleteIsNull().stream().map(bn -> {
             BenhNhanDTO dto = new BenhNhanDTO();
@@ -93,29 +58,37 @@ public class BenhNhanService {
             dto.setPhone(bn.getSdt());
             dto.setAge(bn.getNgaySinh() != null ? Period.between(bn.getNgaySinh(), LocalDate.now()).getYears() : 0);
 
+            if (bn.getMaTaiKhoan() != null) {
+                taiKhoanRepository.findById(bn.getMaTaiKhoan()).ifPresent(tk -> {
+                    dto.setCmnd(tk.getCmnd());
+                    dto.setEmail(tk.getEmail());
+                });
+            }
+
+            // --- BỔ SUNG BẮT ĐẦU TỪ ĐÂY: GẮN LỊCH SỬ TIÊM VÀO DANH SÁCH ---
             List<LichSuTiemProjection> projections = repository.findLichSuTiemByMaBenhNhan(bn.getMaBenhNhan());
             List<LichSuTiemDTO> historyList = projections.stream().map(p -> {
                 LichSuTiemDTO h = new LichSuTiemDTO();
                 h.setRecordId(p.getRecordId());
                 h.setVaccineName(p.getVaccineName());
                 h.setDate(p.getDate());
+                h.setTime(p.getTime());
                 h.setSideEffect(p.getSideEffect());
                 h.setThoiGianTacDung(p.getThoiGianTacDung());
                 h.setStatus(p.getStatus());
+                h.setPlace(p.getPlace());
+                h.setVaccineType(p.getVaccineType());
+                h.setDosage(p.getDosage());
                 return h;
             }).collect(Collectors.toList());
 
             dto.setHistory(historyList);
+            // --- KẾT THÚC BỔ SUNG ---
+
             return dto;
         }).collect(Collectors.toList());
     }
 
-    /**
-     * Cập nhật thông tin hồ sơ bệnh nhân và các bản ghi lịch sử tiêm chủng tương ứng.
-     *
-     * @param id  Mã bệnh nhân
-     * @param dto Đối tượng chứa dữ liệu bệnh nhân cần cập nhật
-     */
     public void updatePatient(Long id, BenhNhanDTO dto) {
         BenhNhan bn = repository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy bệnh nhân"));
         bn.setTenBenhNhan(dto.getFullName());
@@ -130,53 +103,67 @@ public class BenhNhanService {
         }
         repository.save(bn);
 
-        if (dto.getHistory() != null && !dto.getHistory().isEmpty()) {
-            for (LichSuTiemDTO hist : dto.getHistory()) {
-                if (hist.getRecordId() != null) {
-                    chiTietDkTiemRepository.findById(hist.getRecordId()).ifPresent(ct -> {
-                        if (hist.getDate() != null && !hist.getDate().isEmpty()) {
-                            ct.setThoiGianCanTiem(LocalDate.parse(hist.getDate()));
-                            chiTietDkTiemRepository.save(ct);
-                        }
-
-                        if ("Đã tiêm".equals(hist.getStatus())) {
-                            HoSoBenhAn hs = hoSoBenhAnRepository.findByMaChiTietDkTiem(ct.getMaChiTietDkTiem())
-                                    .orElse(new HoSoBenhAn());
-
-                            if (hs.getMaHoSoBenhAn() == null) {
-                                LoVacXin lo = loVacXinRepository.findById(ct.getMaLo()).orElse(null);
-                                double price = 0.0;
-                                if (lo != null && lo.getVacXin() != null && lo.getVacXin().getDonGia() != null) {
-                                    price = lo.getVacXin().getDonGia();
-                                }
-
-                                HoaDon hd = new HoaDon();
-                                hd.setTongTien(price);
-                                hd.setFlagDelete(false);
-                                hd = hoaDonRepository.save(hd);
-
-                                hs.setMaHoaDon(hd.getMaHoaDon());
-                            }
-
-                            hs.setChiTietDkTiem(ct);
-                            hs.setPhanUngSauTiem(hist.getSideEffect());
-                            hs.setThoiGianTacDung(hist.getThoiGianTacDung());
-                            if (hist.getDate() != null && !hist.getDate().isEmpty()) {
-                                hs.setThoiGianTiem(LocalDate.parse(hist.getDate()));
-                            }
-                            hoSoBenhAnRepository.save(hs);
-                        }
-                    });
+        if (bn.getMaTaiKhoan() != null) {
+            taiKhoanRepository.findById(bn.getMaTaiKhoan()).ifPresent(tk -> {
+                tk.setCmnd(dto.getCmnd());
+                tk.setEmail(dto.getEmail());
+                if (dto.getMatKhau() != null && !dto.getMatKhau().isEmpty()) {
+                    tk.setMatKhau(passwordEncoder.encode(dto.getMatKhau()));
                 }
+                taiKhoanRepository.save(tk);
+            });
+        }
+    }
+
+    @Transactional
+    public void updateHistoryRecord(Long recordId, LichSuTiemDTO dto) {
+        ChiTietDkTiem ct = chiTietDkTiemRepository.findById(recordId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy bản ghi lịch sử với ID: " + recordId));
+
+        // Kiểm tra xem bản ghi đã được tiêm (có Hồ sơ bệnh án) chưa
+        Optional<HoSoBenhAn> hsbaOpt = hoSoBenhAnRepository.findByMaChiTietDkTiem(recordId);
+
+        if (hsbaOpt.isPresent() || "Đã tiêm".equals(ct.getTrangThai())) {
+            // NẾU ĐÃ TIÊM -> CHỈ CẬP NHẬT PHẢN ỨNG SAU TIÊM VÀ THỜI GIAN TÁC DỤNG
+            HoSoBenhAn hs = hsbaOpt.orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh án để cập nhật!"));
+            hs.setPhanUngSauTiem(dto.getSideEffect());
+            hs.setThoiGianTacDung(dto.getThoiGianTacDung());
+            hoSoBenhAnRepository.save(hs);
+        } else {
+            // NẾU CHƯA TIÊM HOẶC BỊ HOÃN -> ĐƯỢC PHÉP CẬP NHẬT TRẠNG THÁI VÀ NGÀY GIỜ
+            if (dto.getDate() != null && !dto.getDate().isEmpty()) {
+                ct.setThoiGianCanTiem(LocalDate.parse(dto.getDate()));
+            }
+            ct.setGioTiem(dto.getTime());
+            ct.setTrangThai(dto.getStatus());
+            chiTietDkTiemRepository.save(ct);
+
+            // NẾU TRẠNG THÁI VỪA CHUYỂN THÀNH "ĐÃ TIÊM" -> TẠO HỒ SƠ BỆNH ÁN & HÓA ĐƠN
+            if ("Đã tiêm".equals(dto.getStatus())) {
+                HoSoBenhAn hs = new HoSoBenhAn();
+                LoVacXin lo = loVacXinRepository.findById(ct.getMaLo()).orElse(null);
+                double price = 0.0;
+                if (lo != null && lo.getVacXin() != null && lo.getVacXin().getDonGia() != null) {
+                    price = lo.getVacXin().getDonGia();
+                }
+
+                HoaDon hd = new HoaDon();
+                hd.setTongTien(price);
+                hd.setFlagDelete(false);
+                hd = hoaDonRepository.save(hd);
+
+                hs.setMaHoaDon(hd.getMaHoaDon());
+                hs.setChiTietDkTiem(ct);
+                hs.setPhanUngSauTiem(dto.getSideEffect());
+                hs.setThoiGianTacDung(dto.getThoiGianTacDung());
+                if (dto.getDate() != null && !dto.getDate().isEmpty()) {
+                    hs.setThoiGianTiem(LocalDate.parse(dto.getDate()));
+                }
+                hoSoBenhAnRepository.save(hs);
             }
         }
     }
 
-    /**
-     * Xóa mềm bản ghi lịch sử tiêm chủng của bệnh nhân.
-     *
-     * @param recordId Mã chi tiết đăng ký tiêm cần xóa
-     */
     public void deleteHistoryRecord(Long recordId) {
         ChiTietDkTiem ct = chiTietDkTiemRepository.findById(recordId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy bản ghi lịch sử với ID: " + recordId));
@@ -189,12 +176,6 @@ public class BenhNhanService {
         });
     }
 
-    /**
-     * Lấy thông tin chi tiết của một bệnh nhân bao gồm toàn bộ lịch sử tiêm chủng.
-     *
-     * @param id Mã bệnh nhân
-     * @return BenhNhanDTO Thông tin bệnh nhân đã được ánh xạ
-     */
     public BenhNhanDTO getPatientById(Long id) {
         BenhNhan bn = repository.findById(id).orElseThrow(() -> new RuntimeException("Không tìm thấy bệnh nhân"));
         BenhNhanDTO dto = new BenhNhanDTO();
@@ -207,12 +188,20 @@ public class BenhNhanService {
         dto.setPhone(bn.getSdt());
         dto.setAge(bn.getNgaySinh() != null ? Period.between(bn.getNgaySinh(), LocalDate.now()).getYears() : 0);
 
+        if (bn.getMaTaiKhoan() != null) {
+            taiKhoanRepository.findById(bn.getMaTaiKhoan()).ifPresent(tk -> {
+                dto.setCmnd(tk.getCmnd());
+                dto.setEmail(tk.getEmail());
+            });
+        }
+
         List<LichSuTiemProjection> projections = repository.findLichSuTiemByMaBenhNhan(bn.getMaBenhNhan());
         List<LichSuTiemDTO> historyList = projections.stream().map(p -> {
             LichSuTiemDTO h = new LichSuTiemDTO();
             h.setRecordId(p.getRecordId());
             h.setVaccineName(p.getVaccineName());
             h.setDate(p.getDate());
+            h.setTime(p.getTime());
             h.setSideEffect(p.getSideEffect());
             h.setThoiGianTacDung(p.getThoiGianTacDung());
             h.setStatus(p.getStatus());

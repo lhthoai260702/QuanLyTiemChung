@@ -5,16 +5,6 @@ import lombok.Data;
 
 import java.time.LocalDate;
 
-/**
- * ChiTietDkTiem
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @Entity
 @Table(name = "CHITIET_DK_TIEM")
 @Data
@@ -34,7 +24,13 @@ public class ChiTietDkTiem {
     @Column(name = "ThoiGianCanTiem")
     private LocalDate thoiGianCanTiem;
 
-    // BỔ SUNG TRƯỜNG NÀY ĐỂ MAPPING VỚI DATABASE
+    // THÊM TRƯỜNG GIỜ TIÊM & TRẠNG THÁI TIÊM
+    @Column(name = "GioTiem")
+    private String gioTiem;
+
+    @Column(name = "TrangThai")
+    private String trangThai = "Chưa tiêm";
+
     @Column(name = "MaLichTiem")
     private Long maLichTiem;
 

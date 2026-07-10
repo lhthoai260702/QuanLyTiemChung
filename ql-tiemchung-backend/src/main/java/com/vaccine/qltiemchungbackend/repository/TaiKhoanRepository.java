@@ -168,17 +168,20 @@ public interface TaiKhoanRepository extends JpaRepository<TaiKhoan, Long> {
     Long findMaQuyenByMaTaiKhoan(@Param("maTaiKhoan") Long maTaiKhoan);
 
     /**
-     * Lấy thông tin cá nhân của nhân viên bằng Tên Đăng Nhập
+     * Lấy thông tin cá nhân của người dùng bằng Tên Đăng Nhập (Bao gồm cả Nhân viên và Khách hàng)
      *
-     * @param username
-     * @return
+     * @param username Tên đăng nhập
+     * @return Optional<ProfileProjection>
      */
     @Query(value = "SELECT " +
             "tk.TenDangNhap as tenDangNhap, tk.HoTen as hoTen, " +
             "tk.CMND as cmnd, tk.NoiO as noiO, tk.MoTa as moTa, tk.Email as email, " +
-            "nv.NamSinh as namSinh, nv.SDT as sdt " +
+            "nv.NamSinh as namSinh, COALESCE(nv.SDT, bn.SDT) as sdt, " +
+            "CAST(bn.NgaySinh AS VARCHAR) as ngaySinh, bn.DiaChi as diaChi, " +
+            "bn.NguoiGiamHo as nguoiGiamHo, bn.GioiTinh as gioiTinh " +
             "FROM TAIKHOAN tk " +
             "LEFT JOIN NHANVIEN nv ON tk.MaTaiKhoan = nv.MaTaiKhoan " +
+            "LEFT JOIN BENHNHAN bn ON tk.MaTaiKhoan = bn.MaTaiKhoan " +
             "WHERE tk.TenDangNhap = :username AND (tk.flag_delete = FALSE OR tk.flag_delete IS NULL)", nativeQuery = true)
     Optional<ProfileProjection> findProfileByUsername(@Param("username") String username);
 }

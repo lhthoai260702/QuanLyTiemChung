@@ -842,7 +842,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
                     </label>
                     <input
                       type="text"
-                      maxLength={50}
+                      maxLength={40}
                       disabled={!!editingAccountId}
                       value={accForm.tenDangNhap}
                       onChange={(e) => {

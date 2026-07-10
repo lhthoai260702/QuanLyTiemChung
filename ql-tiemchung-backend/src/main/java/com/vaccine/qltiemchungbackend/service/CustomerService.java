@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
  * * Date: 03-07-2026
  * * Copyright
  * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
+ * DATE        AUTHOR    DESCRIPTION
  * -----------------------------------------------------------------------
  * 03-07-2026 lhthoai   Create
  */
@@ -49,6 +49,7 @@ public class CustomerService {
         ChiTietDkTiem dk = new ChiTietDkTiem();
         dk.setBenhNhan(bn);
         dk.setFlagDelete(false);
+        dk.setTrangThai("Chưa tiêm");
 
         // Phân nhánh logic: Đăng ký theo Lịch trung tâm hoặc Đăng ký trực tiếp vắc xin
         if (request.getMaLichTiem() != null) {
@@ -66,6 +67,7 @@ public class CustomerService {
 
             dk.setMaLo(loVacXin.getMaLo());
             dk.setThoiGianCanTiem(ltc.getNgayTiem() != null ? ltc.getNgayTiem() : request.getNgayMongMuon());
+            dk.setGioTiem(ltc.getThoiGianChung());
 
             // LƯU TRỰC TIẾP MÃ LỊCH TIÊM VÀO DATABASE
             dk.setMaLichTiem(ltc.getMaLichTiem());
@@ -77,6 +79,7 @@ public class CustomerService {
 
             dk.setMaLo(loVacXin.getMaLo());
             dk.setThoiGianCanTiem(request.getNgayMongMuon());
+            dk.setGioTiem(request.getGioMongMuon());
             // Đăng ký tự do thì không có mã lịch tiêm (sẽ Null và lấy địa điểm mặc định là Trụ sở chính)
         }
 

@@ -1,9 +1,6 @@
 package com.vaccine.qltiemchungbackend.controller;
 
-import com.vaccine.qltiemchungbackend.dto.BenhNhanDTO;
-import com.vaccine.qltiemchungbackend.dto.KeDonRequestDTO;
-import com.vaccine.qltiemchungbackend.dto.LichSuTiemDTO;
-import com.vaccine.qltiemchungbackend.dto.VacXinBasicDTO;
+import com.vaccine.qltiemchungbackend.dto.*;
 import com.vaccine.qltiemchungbackend.entity.BenhNhan;
 import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
 import com.vaccine.qltiemchungbackend.entity.LoVacXin;
@@ -12,6 +9,7 @@ import com.vaccine.qltiemchungbackend.repository.ChiTietDkTiemRepository;
 import com.vaccine.qltiemchungbackend.repository.LoVacXinRepository;
 import com.vaccine.qltiemchungbackend.repository.VacXinRepository;
 import com.vaccine.qltiemchungbackend.service.BenhNhanService;
+import com.vaccine.qltiemchungbackend.service.TaiKhoanService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -37,6 +35,9 @@ public class MedicalController {
 
     @Autowired
     private BenhNhanRepository benhNhanRepository;
+
+    @Autowired
+    private TaiKhoanService taiKhoanService;
 
     @GetMapping("/patients")
     public List<BenhNhanDTO> getAllPatients() {
@@ -79,6 +80,7 @@ public class MedicalController {
             chiTiet.setGioTiem(req.getTime());
             chiTiet.setTrangThai("Chưa tiêm");
 
+            chiTiet.setGhiChu(req.getGhiChu());
             chiTietDkTiemRepository.save(chiTiet);
 
             return ResponseEntity.ok("Kê đơn và lên lịch thành công!");
@@ -105,6 +107,18 @@ public class MedicalController {
             return ResponseEntity.ok("Đã xóa lịch sử tiêm thành công!");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("Lỗi: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/patients/account")
+    public ResponseEntity<?> createPatientAccount(@RequestBody AccountCreationDTO request) {
+        try {
+            // Ép cứng quyền là Khách hàng (Bệnh nhân) - maQuyen = 6
+            request.setMaQuyen(6L);
+            taiKhoanService.createAccount(request);
+            return ResponseEntity.ok().body("{\"message\": \"Tạo hồ sơ bệnh nhân thành công!\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"error\": \"Lỗi: " + e.getMessage() + "\"}");
         }
     }
 }

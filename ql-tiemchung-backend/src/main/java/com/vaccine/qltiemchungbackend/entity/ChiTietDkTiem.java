@@ -24,7 +24,6 @@ public class ChiTietDkTiem {
     @Column(name = "ThoiGianCanTiem")
     private LocalDate thoiGianCanTiem;
 
-    // THÊM TRƯỜNG GIỜ TIÊM & TRẠNG THÁI TIÊM
     @Column(name = "GioTiem")
     private String gioTiem;
 
@@ -33,6 +32,10 @@ public class ChiTietDkTiem {
 
     @Column(name = "MaLichTiem")
     private Long maLichTiem;
+
+    // THÊM TRƯỜNG GHI CHÚ
+    @Column(name = "GhiChu")
+    private String ghiChu;
 
     @Column(name = "flag_delete")
     private Boolean flagDelete = false;

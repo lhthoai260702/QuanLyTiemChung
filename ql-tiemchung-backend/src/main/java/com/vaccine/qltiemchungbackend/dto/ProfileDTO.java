@@ -10,6 +10,15 @@ public class ProfileDTO {
     private String noiO;
     private String moTa;
     private String email;
+    private String matKhau; // Phục vụ cho đổi mật khẩu
+
+    // Dành cho Nhân viên
     private Integer namSinh;
     private String sdt;
+
+    // Dành riêng cho Bệnh nhân / Khách hàng
+    private String ngaySinh;
+    private String gioiTinh;
+    private String diaChi;
+    private String nguoiGiamHo;
 }

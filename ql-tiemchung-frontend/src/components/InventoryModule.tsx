@@ -6,10 +6,7 @@ import {
   MinusCircle,
   Edit,
   Trash2,
-  X,
   Save,
-  ChevronLeft,
-  ChevronRight,
   RefreshCw,
   AlertCircle,
   Package,
@@ -56,7 +53,7 @@ interface InventoryModuleProps {
 }
 
 export default function InventoryModule({ triggerToast }: InventoryModuleProps) {
-  const [activeTab, setActiveTab] = useState<"view" | "import" | "export">("view");
+  const [activeTab, setActiveTab] = useState<"view" | "import">("view");
 
   // =========================================================================
   // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
@@ -145,33 +142,32 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const [searchQuery, setSearchQuery] = useState("");
 
   const groupedVaccines = useMemo(() => {
-    // 1. Tìm kiếm theo tên
     const filtered = vaccines.filter((v) => v.tenVacXin.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    // 2. Gom nhóm theo Loại vắc-xin
     const groups: Record<string, KhoVacXin[]> = {};
     filtered.forEach((v) => {
       const groupName = v.loaiVacXin || "Chưa phân loại";
       if (!groups[groupName]) groups[groupName] = [];
       groups[groupName].push(v);
     });
-
-    // 3. Sắp xếp các nhóm theo tên nhóm (A-Z)
     const sortedGroups = Object.keys(groups).sort((a, b) => a.localeCompare(b));
-
-    // 4. Trả về mảng đã phân nhóm và sắp xếp Hạn sử dụng bên trong từng nhóm
     return sortedGroups.map((groupName) => {
       const items = groups[groupName].sort((a, b) => {
-        return new Date(a.hanSuDung).getTime() - new Date(b.hanSuDung).getTime(); // Hạn gần nhất xếp trước
+        return new Date(a.hanSuDung).getTime() - new Date(b.hanSuDung).getTime();
       });
       return { groupName, items };
     });
   }, [vaccines, searchQuery]);
 
-
-  // Forms
+  // =========================================================================
+  // STATES CHO FORMS & MODALS
+  // =========================================================================
   const [editingVacId, setEditingVacId] = useState<number | null>(null);
   const [itemToDelete, setItemToDelete] = useState<number | null>(null);
+  
+  // States cho Xuất kho
+  const [exportingVac, setExportingVac] = useState<KhoVacXin | null>(null);
+  const [exportQuantity, setExportQuantity] = useState<string>("");
+  const [exportErrors, setExportErrors] = useState<Record<string, string>>({});
 
   const [importForm, setImportForm] = useState<Partial<KhoVacXin>>({
     soLuong: 0,
@@ -180,11 +176,6 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     tinhTrang: "Bình thường",
   });
   const [importErrors, setImportErrors] = useState<Record<string, string>>({});
-
-  const [exportForm, setExportForm] = useState({ soLoId: "", soLuongXuat: "" });
-  const [exportErrors, setExportErrors] = useState<Record<string, string>>({});
-
-  // Trạng thái kiểm soát Disable
   const [isNewVaccine, setIsNewVaccine] = useState(false);
   const [isNewSupplier, setIsNewSupplier] = useState(false);
 
@@ -320,48 +311,49 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("Lưu thất bại");
-      triggerToast("Thao tác nhập kho thành công!");
+      triggerToast(editingVacId ? "Cập nhật lô vắc-xin thành công!" : "Thao tác nhập kho thành công!");
 
       fetchInventoryData();
       fetchMetadata();
       setActiveTab("view");
+      setEditingVacId(null);
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Lỗi khi lưu Database");
     }
   };
 
+  // --- HÀM XỬ LÝ XUẤT KHO ---
   const handleExportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errors: Record<string, string> = {};
+    if (!exportingVac) return;
 
-    if (!exportForm.soLoId) errors.soLoId = "Vui lòng chọn Lô vắc-xin";
-    if (!exportForm.soLuongXuat || Number(exportForm.soLuongXuat) <= 0) errors.soLuongXuat = "Số lượng xuất phải > 0";
+    const errors: Record<string, string> = {};
+    if (!exportQuantity || Number(exportQuantity) <= 0) {
+      errors.quantity = "Số lượng xuất phải > 0";
+    } else if (Number(exportQuantity) > exportingVac.soLuong) {
+      errors.quantity = "Vượt quá số lượng tồn kho hiện tại!";
+    }
 
     if (Object.keys(errors).length > 0) {
       setExportErrors(errors);
       return;
     }
 
-    const targetVac = vaccines.find((v) => v.soLo === Number(exportForm.soLoId));
-    if (targetVac) {
-      if (Number(exportForm.soLuongXuat) > targetVac.soLuong) {
-        setExportErrors({ soLuongXuat: "Số lượng xuất không được vượt quá số lượng tồn!" });
-        return;
-      }
-
-      try {
-        const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${targetVac.soLo}/export?quantity=${exportForm.soLuongXuat}`, {
-          method: "POST",
-        });
-        if (!res.ok) throw new Error("Lỗi khi xuất kho");
-        triggerToast("Xuất kho thành công");
-        setExportForm({ soLoId: "", soLuongXuat: "" });
-        setExportErrors({});
-        fetchInventoryData();
-        setActiveTab("view");
-      } catch (err: any) {
-        if (err !== "Unauthorized") triggerToast(err.message);
-      }
+    try {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${exportingVac.soLo}/export?quantity=${exportQuantity}`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error("Lỗi khi xuất kho");
+      
+      triggerToast(`Xuất thành công ${exportQuantity} liều vắc-xin ${exportingVac.tenVacXin}`);
+      
+      // Reset Modal và load lại
+      setExportingVac(null);
+      setExportQuantity("");
+      setExportErrors({});
+      fetchInventoryData();
+    } catch (err: any) {
+      if (err !== "Unauthorized") triggerToast(err.message);
     }
   };
 
@@ -378,8 +370,43 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     }
   };
 
+  // --- HÀM NẠP DỮ LIỆU ĐỂ CHỈNH SỬA ---
+  const handleEditClick = (v: KhoVacXin) => {
+    setEditingVacId(v.soLo);
+    setImportForm({
+      maVacXin: v.maVacXin,
+      tenVacXin: v.tenVacXin,
+      loaiVacXin: v.loaiVacXin,
+      ngayNhan: v.ngayNhan,
+      giayPhep: v.giayPhep,
+      nuocSanXuat: v.nuocSanXuat,
+      hamLuong: v.hamLuong,
+      hanSuDung: v.hanSuDung,
+      dieuKienBaoQuan: v.dieuKienBaoQuan,
+      doTuoiTiemChung: v.doTuoiTiemChung,
+      tinhTrang: v.tinhTrang,
+      soLuong: v.soLuong,
+      donGia: v.donGia,
+      maNhaCungCap: v.maNhaCungCap,
+      tenNhaCungCap: v.tenNhaCungCap,
+      tongTien: v.tongTien,
+    });
+    setIsNewVaccine(false);
+    setIsNewSupplier(false);
+    setImportErrors({});
+    setActiveTab("import");
+  };
+
   const renderImportForm = () => (
     <form onSubmit={handleSaveSubmit} noValidate className="space-y-6">
+      {editingVacId && (
+        <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm flex items-center justify-between mb-2">
+          <h3 className="font-bold text-blue-800 flex items-center gap-2">
+            <Edit className="w-5 h-5" /> ĐANG CHỈNH SỬA THÔNG TIN LÔ #{editingVacId}
+          </h3>
+        </div>
+      )}
+
       {/* PHẦN 1: THÔNG TIN LÔ */}
       <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 shadow-sm animate-fade-in">
         <h3 className="text-sm font-bold text-blue-700 flex items-center gap-2 mb-4 border-b border-slate-200 pb-2">
@@ -675,7 +702,10 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       <div className="flex justify-end gap-3 sticky bottom-4 bg-white/90 p-4 backdrop-blur-md rounded-xl border shadow-lg border-slate-200 z-50">
         <button
           type="button"
-          onClick={() => setActiveTab("view")}
+          onClick={() => {
+            setActiveTab("view");
+            setEditingVacId(null);
+          }}
           className="px-6 py-2.5 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
         >
           Hủy Bỏ
@@ -710,24 +740,17 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         <button
           onClick={() => {
             setActiveTab("import");
-            setImportForm({ soLuong: 0, donGia: 0, tongTien: 0, tinhTrang: "Bình thường" });
-            setIsNewVaccine(false);
-            setIsNewSupplier(false);
-            setImportErrors({});
+            if (!editingVacId) {
+              setImportForm({ soLuong: 0, donGia: 0, tongTien: 0, tinhTrang: "Bình thường" });
+              setIsNewVaccine(false);
+              setIsNewSupplier(false);
+              setImportErrors({});
+            }
           }}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-1 transition-colors ${activeTab === "import" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
-          <PlusCircle className="w-4 h-4" /> Form Nhập Kho (Mới)
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab("export");
-            setExportErrors({});
-            setExportForm({ soLoId: "", soLuongXuat: "" });
-          }}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 flex items-center gap-1 transition-colors ${activeTab === "export" ? "border-amber-600 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-        >
-          <MinusCircle className="w-4 h-4" /> Xuất vắc-xin
+          {editingVacId ? <Edit className="w-4 h-4" /> : <PlusCircle className="w-4 h-4" />}
+          {editingVacId ? "Sửa Lô Vắc-xin" : "Form Nhập Kho (Mới)"}
         </button>
       </div>
 
@@ -752,13 +775,13 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
             <table className="w-full text-left text-xs table-fixed">
               <thead className="bg-slate-100 text-slate-500 font-bold sticky top-0 z-10 shadow-sm border-b border-slate-200">
                 <tr>
-                  <th className="p-3.5 w-[10%]">Mã Lô</th>
-                  <th className="p-3.5 w-[25%]">Tên Vắc xin</th>
+                  <th className="p-3.5 w-[8%]">Mã Lô</th>
+                  <th className="p-3.5 w-[22%]">Tên Vắc xin</th>
                   <th className="p-3.5 w-[20%]">Loại (Nhóm)</th>
                   <th className="p-3.5 w-[15%] text-center">Hạn SD</th>
                   <th className="p-3.5 w-[10%] text-right">Tồn Kho</th>
                   <th className="p-3.5 w-[10%] text-center">Tình trạng</th>
-                  <th className="p-3.5 w-[10%] text-center">Thao tác</th>
+                  <th className="p-3.5 w-[15%] text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -799,7 +822,31 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
                                 {v.soLuong === 0 ? "Đã hết" : v.soLuong <= 50 ? "Sắp hết" : "Sẵn có"}
                               </span>
                             </td>
-                            <td className="p-3.5 text-center">
+                            
+                            <td className="p-3.5 text-center flex justify-center gap-1.5">
+                              {/* Nút Xuất Kho - Tự động ẩn nếu tồn kho = 0 */}
+                              {v.soLuong > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setExportingVac(v);
+                                    setExportQuantity("");
+                                    setExportErrors({});
+                                  }}
+                                  className="text-amber-600 hover:text-amber-800 p-1.5 bg-amber-50 hover:bg-amber-100 rounded transition-colors"
+                                  title="Xuất Kho (Trừ tồn)"
+                                >
+                                  <MinusCircle className="w-4 h-4" />
+                                </button>
+                              )}
+                              
+                              <button
+                                onClick={() => handleEditClick(v)}
+                                className="text-blue-500 hover:text-blue-700 p-1.5 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                                title="Chỉnh sửa Lô"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              
                               <button
                                 onClick={() => setItemToDelete(v.soLo)}
                                 className="text-red-500 hover:text-red-700 p-1.5 bg-red-50 hover:bg-red-100 rounded transition-colors"
@@ -828,63 +875,66 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
 
       {activeTab === "import" && renderImportForm()}
 
-      {activeTab === "export" && (
-        <form onSubmit={handleExportSubmit} className="bg-slate-50 p-6 rounded-xl border border-slate-200 space-y-5 animate-fade-in shadow-sm">
-          <h3 className="font-bold text-amber-700 mb-4 text-sm border-b border-slate-200 pb-2 flex items-center gap-2">
-            <MinusCircle className="w-5 h-5" /> XUẤT KHO VẮC-XIN (TRỪ TỒN)
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Chọn Lô vắc-xin cần xuất <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={exportForm.soLoId}
-                onChange={(e) => {
-                  setExportForm({ ...exportForm, soLoId: e.target.value });
-                  setExportErrors({ ...exportErrors, soLoId: "" });
-                }}
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm outline-none cursor-pointer transition-colors ${exportErrors.soLoId ? "border-red-500 bg-red-50 focus:border-red-500" : "border-slate-300 focus:border-amber-500"}`}
-              >
-                <option value="">-- Chọn Lô vắc xin --</option>
-                {vaccines
-                  .filter((v) => v.soLuong > 0)
-                  .map((v) => (
-                    <option key={v.soLo} value={v.soLo}>
-                      Lô #{v.soLo} - {v.tenVacXin} (Tồn: {v.soLuong} liều)
-                    </option>
-                  ))}
-              </select>
-              {exportErrors.soLoId && <p className="text-[10px] text-red-500 font-bold mt-1">{exportErrors.soLoId}</p>}
+      {/* Modal Xuất kho trực tiếp */}
+      {exportingVac !== null &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+            <div className="bg-white rounded-xl shadow-xl w-[90%] max-w-md p-6 space-y-4">
+              <div className="flex items-center gap-3 text-amber-600 border-b border-slate-100 pb-3">
+                <MinusCircle className="w-6 h-6" />
+                <h3 className="text-lg font-bold uppercase">Xác nhận Xuất Kho</h3>
+              </div>
+              <div className="text-sm text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <p>Đang thao tác trừ số lượng cho:</p>
+                <p className="font-bold text-slate-800 mt-1">Vắc-xin: {exportingVac.tenVacXin}</p>
+                <p className="text-xs mt-1">Lô hệ thống: <span className="font-mono font-bold text-amber-600">#{exportingVac.soLo}</span></p>
+                <p className="text-xs mt-1">Tồn kho khả dụng: <span className="font-bold text-emerald-600">{exportingVac.soLuong} liều</span></p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">
+                  Nhập số lượng cần xuất <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={exportingVac.soLuong}
+                  value={exportQuantity}
+                  onChange={(e) => {
+                    setExportQuantity(e.target.value);
+                    setExportErrors({});
+                  }}
+                  autoFocus
+                  placeholder="VD: Nhập số lượng cần trừ..."
+                  className={`w-full px-4 py-3 border rounded-lg text-sm font-bold outline-none transition-colors ${
+                    exportErrors.quantity ? "border-red-500 bg-red-50 text-red-600 focus:border-red-500" : "border-slate-300 text-amber-700 focus:border-amber-500"
+                  }`}
+                />
+                {exportErrors.quantity && <p className="text-[11px] text-red-500 font-bold mt-1.5">{exportErrors.quantity}</p>}
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+                <button
+                  onClick={() => {
+                    setExportingVac(null);
+                    setExportQuantity("");
+                    setExportErrors({});
+                  }}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  onClick={handleExportSubmit}
+                  className="px-6 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold hover:bg-amber-700 transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <MinusCircle className="w-4 h-4" /> Xuất ngay
+                </button>
+              </div>
             </div>
-            <div className="md:col-span-1">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Số lượng xuất (liều) <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={exportForm.soLuongXuat}
-                onChange={(e) => {
-                  setExportForm({ ...exportForm, soLuongXuat: e.target.value });
-                  setExportErrors({ ...exportErrors, soLuongXuat: "" });
-                }}
-                placeholder="Nhập số lượng..."
-                className={`w-full px-3 py-2.5 border rounded-lg text-sm font-bold outline-none transition-colors ${exportErrors.soLuongXuat ? "border-red-500 text-red-600 bg-red-50 focus:border-red-500" : "border-slate-300 text-amber-700 focus:border-amber-500"}`}
-              />
-              {exportErrors.soLuongXuat && <p className="text-[10px] text-red-500 font-bold mt-1">{exportErrors.soLuongXuat}</p>}
-            </div>
-          </div>
-          <div className="flex justify-end pt-4 border-t border-slate-200 mt-4">
-            <button
-              type="submit"
-              className="px-6 py-2.5 bg-amber-600 text-white rounded-lg font-bold text-sm hover:bg-amber-700 flex items-center gap-2 shadow-sm transition-colors"
-            >
-              <MinusCircle className="w-4 h-4" /> Xác nhận Trừ Kho
-            </button>
-          </div>
-        </form>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* Modal Xóa chung */}
       {itemToDelete !== null &&

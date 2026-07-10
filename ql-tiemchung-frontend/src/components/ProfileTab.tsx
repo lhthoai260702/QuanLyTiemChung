@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Save, User, Shield, ArrowLeft } from "lucide-react";
+import { Save, User, Shield, ArrowLeft, KeyRound } from "lucide-react";
 
 interface ProfileForm {
   tenDangNhap: string;
@@ -8,8 +8,13 @@ interface ProfileForm {
   noiO: string;
   moTa: string;
   email: string;
-  namSinh: number | string;
   sdt: string;
+  matKhau: string; // Đổi mật khẩu
+  namSinh: number | string;
+  ngaySinh: string;
+  gioiTinh: string;
+  diaChi: string;
+  nguoiGiamHo: string;
 }
 
 interface ProfileTabProps {
@@ -20,26 +25,18 @@ interface ProfileTabProps {
 
 export default function ProfileTab({ triggerToast, onNameChange, onBack }: ProfileTabProps) {
   const [profile, setProfile] = useState<ProfileForm>({
-    tenDangNhap: "",
-    hoTen: "",
-    cmnd: "",
-    noiO: "",
-    moTa: "",
-    email: "",
-    namSinh: "",
-    sdt: "",
+    tenDangNhap: "", hoTen: "", cmnd: "", noiO: "", moTa: "", email: "", sdt: "",
+    matKhau: "", namSinh: "", ngaySinh: "", gioiTinh: "Nam", diaChi: "", nguoiGiamHo: ""
   });
   
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [userRoleBadge, setUserRoleBadge] = useState<string>("Tài khoản Hệ thống");
+  const [userRole, setUserRole] = useState<number>(1);
 
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
-    const headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
+    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
     return fetch(url, { ...options, headers });
   };
 
@@ -49,7 +46,6 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
       if (res.ok) {
         const data = await res.json();
 
-        // Format số điện thoại khi load lên
         let formattedPhone = data.sdt ? data.sdt.replace(/\D/g, "") : "";
         if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
           formattedPhone = `${formattedPhone.slice(0, 3)} ${formattedPhone.slice(3)}`;
@@ -64,14 +60,19 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
           noiO: data.noiO || "",
           moTa: data.moTa || "",
           email: data.email || "",
-          namSinh: data.namSinh || "",
           sdt: formattedPhone,
+          matKhau: "",
+          namSinh: data.namSinh || "",
+          ngaySinh: data.ngaySinh || "",
+          gioiTinh: data.gioiTinh || "Nam",
+          diaChi: data.diaChi || "",
+          nguoiGiamHo: data.nguoiGiamHo || "",
         });
 
-        // Đọc maQuyen từ LocalStorage hiển thị chức vụ
         const userStr = localStorage.getItem("user");
         if (userStr) {
           const u = JSON.parse(userStr);
+          setUserRole(u.maQuyen);
           if (u.maQuyen === 1) setUserRoleBadge("Administrator");
           else if (u.maQuyen === 2) setUserRoleBadge("Nhân viên Kho");
           else if (u.maQuyen === 3) setUserRoleBadge("Nhân sự Tài chính");
@@ -85,11 +86,9 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
     }
   };
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  useEffect(() => { loadProfile(); }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setProfile({ ...profile, [e.target.name]: e.target.value });
     if (profileErrors[e.target.name]) setProfileErrors({ ...profileErrors, [e.target.name]: "" });
   };
@@ -113,8 +112,6 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // --- VALIDATION ---
     const newErrors: Record<string, string> = {};
 
     if (!profile.hoTen.trim()) newErrors.hoTen = "Vui lòng nhập họ và tên";
@@ -124,8 +121,13 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
     if (!phoneNum) newErrors.sdt = "Vui lòng nhập số điện thoại";
     else if (phoneNum.length < 10) newErrors.sdt = "Số điện thoại phải đủ 10 số";
 
-    if (!profile.namSinh) newErrors.namSinh = "Vui lòng nhập năm sinh";
-    else if (String(profile.namSinh).length < 4) newErrors.namSinh = "Năm sinh không hợp lệ";
+    if (userRole === 6) {
+      if (!profile.ngaySinh) newErrors.ngaySinh = "Vui lòng chọn ngày sinh";
+      if (!profile.diaChi.trim()) newErrors.diaChi = "Vui lòng nhập địa chỉ";
+    } else {
+      if (!profile.namSinh) newErrors.namSinh = "Vui lòng nhập năm sinh";
+      else if (String(profile.namSinh).length < 4) newErrors.namSinh = "Năm sinh không hợp lệ";
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setProfileErrors(newErrors);
@@ -134,7 +136,6 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
     }
 
     setLoading(true);
-    
     const payload = {
       ...profile,
       namSinh: profile.namSinh ? parseInt(String(profile.namSinh)) : null,
@@ -149,9 +150,8 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
       });
       if (res.ok) {
         triggerToast("Cập nhật thông tin thành công!");
-        if (onNameChange) {
-          onNameChange(profile.hoTen);
-        }
+        setProfile({ ...profile, matKhau: "" }); // Reset password field sau khi update thành công
+        if (onNameChange) onNameChange(profile.hoTen);
       } else {
         triggerToast("Lỗi: Cập nhật thông tin thất bại!");
       }
@@ -164,7 +164,6 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
 
   return (
     <div className="space-y-6 animate-fade-in relative h-full flex flex-col">
-      {/* Header Module */}
       <div className="shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-4">
           {onBack && (
@@ -172,7 +171,6 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
               type="button"
               onClick={onBack}
               className="p-2 border border-slate-200 bg-white rounded-lg text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors shadow-sm cursor-pointer"
-              title="Trở về trang trước"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
@@ -205,111 +203,90 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">Tên đăng nhập (Username)</label>
-              <input
-                type="text"
-                name="tenDangNhap"
-                value={profile.tenDangNhap}
-                disabled
-                className="w-full bg-slate-50 px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none text-slate-500 cursor-not-allowed font-mono font-semibold"
-              />
+              <input type="text" name="tenDangNhap" value={profile.tenDangNhap} disabled className="w-full bg-slate-50 px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none text-slate-500 cursor-not-allowed font-mono font-semibold" />
             </div>
+            
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                Họ và tên <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="hoTen"
-                maxLength={50}
-                value={profile.hoTen}
-                onChange={handleChange}
-                className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.hoTen ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-              />
+              <label className="block text-xs font-bold text-slate-600 mb-1">Đổi Mật khẩu</label>
+              <div className="relative">
+                <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input type="password" name="matKhau" placeholder="Bỏ trống nếu không muốn đổi mật khẩu" value={profile.matKhau} onChange={handleChange} className="w-full bg-white pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 mb-1">Họ và tên <span className="text-red-500">*</span></label>
+              <input type="text" name="hoTen" maxLength={50} value={profile.hoTen} onChange={handleChange} className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.hoTen ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`} />
               {profileErrors.hoTen && <p className="text-xs text-red-500 font-bold mt-1">{profileErrors.hoTen}</p>}
             </div>
+
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                CMND / CCCD <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="cmnd"
-                value={profile.cmnd}
-                onChange={handleNumberOnlyChange("cmnd", 12)}
-                placeholder="Chỉ nhập số..."
-                className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.cmnd ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-              />
+              <label className="block text-xs font-bold text-slate-600 mb-1">CMND / CCCD <span className="text-red-500">*</span></label>
+              <input type="text" name="cmnd" value={profile.cmnd} onChange={handleNumberOnlyChange("cmnd", 12)} className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.cmnd ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`} />
               {profileErrors.cmnd && <p className="text-xs text-red-500 font-bold mt-1">{profileErrors.cmnd}</p>}
             </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-600 mb-1">Email</label>
-              <input
-                type="email"
-                name="email"
-                maxLength={255}
-                value={profile.email}
-                onChange={handleChange}
-                className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
-              />
+              <input type="email" name="email" maxLength={255} value={profile.email} onChange={handleChange} className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors" />
             </div>
+
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                Năm sinh <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="namSinh"
-                placeholder="YYYY"
-                value={profile.namSinh}
-                onChange={handleNumberOnlyChange("namSinh", 4)}
-                className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.namSinh ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-              />
-              {profileErrors.namSinh && <p className="text-xs text-red-500 font-bold mt-1">{profileErrors.namSinh}</p>}
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">
-                Số điện thoại liên hệ <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                name="sdt"
-                placeholder="090 123 4567"
-                value={profile.sdt}
-                onChange={handlePhoneChange}
-                className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors font-mono ${profileErrors.sdt ? "border-red-500 focus:border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`}
-              />
+              <label className="block text-xs font-bold text-slate-600 mb-1">Số điện thoại liên hệ <span className="text-red-500">*</span></label>
+              <input type="text" name="sdt" value={profile.sdt} onChange={handlePhoneChange} className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none font-mono ${profileErrors.sdt ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`} />
               {profileErrors.sdt && <p className="text-xs text-red-500 font-bold mt-1">{profileErrors.sdt}</p>}
             </div>
-            <div className="md:col-span-2 pt-2 border-t border-slate-100">
-              <label className="block text-xs font-bold text-slate-600 mb-1">Địa chỉ / Nơi cư trú hiện tại</label>
-              <input
-                type="text"
-                name="noiO"
-                maxLength={255}
-                value={profile.noiO}
-                onChange={handleChange}
-                className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
-              />
-            </div>
+
+            {/* Các trường động tùy vào Role */}
+            {userRole === 6 ? (
+              <>
+                <div className="flex gap-4">
+                  <div className="w-1/2">
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Ngày sinh <span className="text-red-500">*</span></label>
+                    <input type="date" name="ngaySinh" value={profile.ngaySinh} onChange={handleChange} className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.ngaySinh ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`} />
+                    {profileErrors.ngaySinh && <p className="text-xs text-red-500 font-bold mt-1">{profileErrors.ngaySinh}</p>}
+                  </div>
+                  <div className="w-1/2">
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Giới tính <span className="text-red-500">*</span></label>
+                    <select name="gioiTinh" value={profile.gioiTinh} onChange={handleChange} className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 cursor-pointer">
+                      <option value="Nam">Nam</option>
+                      <option value="Nữ">Nữ</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Người giám hộ (Nếu có)</label>
+                  <input type="text" name="nguoiGiamHo" value={profile.nguoiGiamHo} onChange={handleChange} className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Địa chỉ thường trú <span className="text-red-500">*</span></label>
+                  <input type="text" name="diaChi" value={profile.diaChi} onChange={handleChange} className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.diaChi ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`} />
+                  {profileErrors.diaChi && <p className="text-xs text-red-500 font-bold mt-1">{profileErrors.diaChi}</p>}
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Năm sinh <span className="text-red-500">*</span></label>
+                  <input type="text" name="namSinh" value={profile.namSinh} onChange={handleNumberOnlyChange("namSinh", 4)} className={`w-full bg-white px-3 py-2 border rounded-lg text-sm outline-none transition-colors ${profileErrors.namSinh ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-blue-500"}`} />
+                  {profileErrors.namSinh && <p className="text-xs text-red-500 font-bold mt-1">{profileErrors.namSinh}</p>}
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Địa chỉ / Nơi cư trú hiện tại</label>
+                  <input type="text" name="noiO" value={profile.noiO} onChange={handleChange} className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 transition-colors" />
+                </div>
+              </>
+            )}
+
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-slate-600 mb-1">Mô tả thêm (Kỹ năng, Ghi chú y tế...)</label>
-              <textarea
-                name="moTa"
-                maxLength={1000}
-                value={profile.moTa}
-                onChange={handleChange}
-                rows={3}
-                className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none resize-none focus:border-blue-500 transition-colors font-sans"
-              />
+              <textarea name="moTa" maxLength={1000} value={profile.moTa} onChange={handleChange} rows={3} className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none resize-none focus:border-blue-500 transition-colors font-sans" />
             </div>
           </div>
 
           <div className="flex justify-end pt-5 border-t border-slate-100">
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 flex items-center gap-2 transition-colors disabled:opacity-50 cursor-pointer"
-            >
+            <button type="submit" disabled={loading} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 flex items-center gap-2 transition-colors disabled:opacity-50 cursor-pointer">
               <Save className="w-4 h-4" /> {loading ? "Đang xử lý..." : "Lưu thay đổi"}
             </button>
           </div>

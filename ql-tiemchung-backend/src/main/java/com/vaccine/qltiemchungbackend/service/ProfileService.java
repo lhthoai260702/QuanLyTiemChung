@@ -5,31 +5,19 @@ import com.vaccine.qltiemchungbackend.dto.ProfileProjection;
 import com.vaccine.qltiemchungbackend.entity.TaiKhoan;
 import com.vaccine.qltiemchungbackend.repository.TaiKhoanRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * ProfileService
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @Service
 public class ProfileService {
 
     @Autowired
     private TaiKhoanRepository taiKhoanRepository;
 
-    /**
-     * Lấy thông tin profile
-     *
-     * @param username
-     * @return
-     */
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     public ProfileDTO getProfile(String username) {
         ProfileProjection proj = taiKhoanRepository.findProfileByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin cá nhân"));
@@ -41,17 +29,17 @@ public class ProfileService {
         dto.setNoiO(proj.getNoiO());
         dto.setMoTa(proj.getMoTa());
         dto.setEmail(proj.getEmail());
+
         dto.setNamSinh(proj.getNamSinh());
         dto.setSdt(proj.getSdt());
+        dto.setNgaySinh(proj.getNgaySinh());
+        dto.setGioiTinh(proj.getGioiTinh());
+        dto.setDiaChi(proj.getDiaChi());
+        dto.setNguoiGiamHo(proj.getNguoiGiamHo());
+
         return dto;
     }
 
-    /**
-     * Cập nhật thông tin profile
-     *
-     * @param username
-     * @param dto
-     */
     @Transactional
     public void updateProfile(String username, ProfileDTO dto) {
         TaiKhoan tk = taiKhoanRepository.findByTenDangNhapAndFlagDeleteFalseOrFlagDeleteIsNull(username)
@@ -63,14 +51,33 @@ public class ProfileService {
         tk.setNoiO(dto.getNoiO());
         tk.setMoTa(dto.getMoTa());
         tk.setEmail(dto.getEmail());
+
+        // Đổi mật khẩu nếu có nhập
+        if (dto.getMatKhau() != null && !dto.getMatKhau().trim().isEmpty()) {
+            tk.setMatKhau(passwordEncoder.encode(dto.getMatKhau()));
+        }
         taiKhoanRepository.save(tk);
 
-        // Cập nhật bảng NHANVIEN (Cập nhật đồng thời tên hiển thị, sdt, năm sinh)
-        int rows = taiKhoanRepository.updateNhanVien(tk.getMaTaiKhoan(), dto.getHoTen(), dto.getNamSinh(), dto.getSdt());
+        Long maQuyen = taiKhoanRepository.findMaQuyenByMaTaiKhoan(tk.getMaTaiKhoan());
 
-        // Nếu user này chưa có bản ghi trong bảng NHANVIEN thì thêm mới vào
-        if (rows == 0) {
-            taiKhoanRepository.insertNhanVien(tk.getMaTaiKhoan(), dto.getHoTen(), dto.getNamSinh(), dto.getSdt());
+        // Nếu là Khách hàng (Role 6) thì Cập nhật BENHNHAN
+        if (maQuyen != null && maQuyen == 6L) {
+            int rows = taiKhoanRepository.updateBenhNhan(
+                    tk.getMaTaiKhoan(), dto.getHoTen(), dto.getNgaySinh(),
+                    dto.getDiaChi(), dto.getNguoiGiamHo(), dto.getSdt(), dto.getGioiTinh()
+            );
+            if (rows == 0) {
+                taiKhoanRepository.insertBenhNhan(
+                        tk.getMaTaiKhoan(), dto.getHoTen(), dto.getNgaySinh(),
+                        dto.getDiaChi(), dto.getNguoiGiamHo(), dto.getSdt(), dto.getGioiTinh()
+                );
+            }
+        } else {
+            // Nếu là Nhân viên / Quản lý thì Cập nhật NHANVIEN
+            int rows = taiKhoanRepository.updateNhanVien(tk.getMaTaiKhoan(), dto.getHoTen(), dto.getNamSinh(), dto.getSdt());
+            if (rows == 0) {
+                taiKhoanRepository.insertNhanVien(tk.getMaTaiKhoan(), dto.getHoTen(), dto.getNamSinh(), dto.getSdt());
+            }
         }
     }
 }

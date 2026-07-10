@@ -20,4 +20,6 @@ public interface LichSuTiemProjection {
     String getVaccineType();
 
     String getDosage();
+
+    String getGhiChu();
 }

@@ -352,7 +352,7 @@ export default function App() {
               )}
 
               {/* Card 6: Customer */}
-              {(userRole === 1 || userRole === 6) && (
+              {(userRole === 6) && (
                 <button onClick={() => { setActiveRole('Customer'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-amber-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
                   <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-amber-200 text-white relative z-10"><Users className="w-7 h-7" /></div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-amber-700 transition-colors">Khách hàng</h3>

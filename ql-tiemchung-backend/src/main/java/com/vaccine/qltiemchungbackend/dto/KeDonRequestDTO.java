@@ -13,6 +13,8 @@ public class KeDonRequestDTO {
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
 
-    // THÊM GIỜ TIÊM
     private String time;
+
+    // THÊM TRƯỜNG GHI CHÚ
+    private String ghiChu;
 }

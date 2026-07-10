@@ -1,15 +1,10 @@
-// src/components/CustomerModule.tsx
-
 import React, { useState, useEffect } from "react";
 import {
-  User,
   Syringe,
   CalendarDays,
   Bug,
   MessageSquare,
   Search,
-  Edit,
-  Save,
   X,
   PlusCircle,
   Send,
@@ -18,6 +13,7 @@ import {
   ChevronRight,
   HelpCircle,
   History,
+  Activity,
 } from "lucide-react";
 
 interface CustomerModuleProps {
@@ -25,7 +21,6 @@ interface CustomerModuleProps {
   onNameChange?: (name: string) => void;
 }
 
-// --- ĐỊNH NGHĨA KIỂU DỮ LIỆU VẮC XIN THEO BACKEND ---
 export interface VaccineCatalog {
   maVacXin: number;
   tenVacXin: string;
@@ -52,20 +47,13 @@ export interface MyFeedbackType {
 }
 
 export default function CustomerModule({ triggerToast, onNameChange }: CustomerModuleProps) {
-  // --- STATES: ĐIỀU HƯỚNG TABS ---
-  const [activeTab, setActiveTab] = useState<"profile" | "vaccines" | "schedules" | "diseases" | "feedback" | "faqs" | "my_feedbacks">("profile");
+  // --- STATES: ĐIỀU HƯỚNG TABS (Mặc định là lịch sử) ---
+  const [activeTab, setActiveTab] = useState<"history" | "vaccines" | "schedules" | "diseases" | "feedback" | "faqs" | "my_feedbacks">("history");
 
-  // =========================================================================
-  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
-  // =========================================================================
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
-    const headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
+    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
     const response = await fetch(url, { ...options, headers });
-
     if (response.status === 401 || response.status === 403) {
       triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
       return Promise.reject("Unauthorized");
@@ -73,143 +61,99 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
     return response;
   };
 
-  // --- DỮ LIỆU THẬT LẤY TỪ DATABASE ---
-  // Đã gỡ bỏ hardcode ID = 1 ở đây
-  const [profile, setProfile] = useState({
-    id: "",
-    name: "",
-    dob: "",
-    gender: "Nam",
-    phone: "",
-    address: "",
-  });
-
+  const [profile, setProfile] = useState({ id: "" });
   const [history, setHistory] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
   const [diseases, setDiseases] = useState<any[]>([]);
   const [faqs, setFaqs] = useState<FaqType[]>([]);
   const [myFeedbacks, setMyFeedbacks] = useState<MyFeedbackType[]>([]);
+  const [vaccines, setVaccines] = useState<VaccineCatalog[]>([]);
 
+  // Lấy danh sách bệnh
   const fetchDiseases = async () => {
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/diseases`);
-      if (response.ok) {
-        const data = await response.json();
-        setDiseases(data);
-      }
+      if (response.ok) setDiseases(await response.json());
     } catch (error) {
-      if (error !== "Unauthorized") console.error("Lỗi lấy thông tin dịch bệnh:", error);
-      triggerToast("Không thể kết nối tải thông tin dịch bệnh!");
+      if (error !== "Unauthorized") console.error(error);
     }
   };
 
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [profileForm, setProfileForm] = useState({ ...profile });
-  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
-  const [vaccines, setVaccines] = useState<VaccineCatalog[]>([]);
-
-  // Fetch FAQs
+  // Lấy danh sách FAQ
   const fetchFaqs = async () => {
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/faqs`);
-      if (res.ok) {
-        const data = await res.json();
-        setFaqs(data);
-      }
+      if (res.ok) setFaqs(await res.json());
     } catch (e) {
       if (e !== "Unauthorized") console.error(e);
     }
   };
 
-  // Fetch My Feedbacks
+  // Lấy lịch sử phản hồi
   const fetchMyFeedbacks = async () => {
-    if (!profile.id) return; // Chỉ gọi nếu profile id đã có
+    if (!profile.id) return;
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/my-feedbacks/${profile.id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMyFeedbacks(data);
-      }
+      if (res.ok) setMyFeedbacks(await res.json());
     } catch (e) {
       if (e !== "Unauthorized") console.error(e);
     }
   };
 
-  // --- HÀM TẢI DỮ LIỆU CÁ NHÂN TỪ API ---
-  const fetchProfile = async () => {
+  // Lấy dữ liệu cá nhân & Lịch sử tiêm
+  const fetchPatientData = async () => {
     try {
-      // Dùng endpoint mới không cần tham số ID (Lấy từ Token của Backend)
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/profile`);
       if (response.ok) {
         const data = await response.json();
-        const profileData = {
-          id: data.id,
-          name: data.fullName || "",
-          dob: data.dob || "",
-          gender: data.gender || "Nam",
-          phone: data.phone || "",
-          address: data.address || "",
-        };
+        setProfile({ id: data.id });
 
-        setProfile(profileData);
-        setProfileForm(profileData);
-
-        // Map đầy đủ lịch sử tiêm theo các trường mở rộng
+        // Map đầy đủ lịch sử tiêm
         const formattedHistory = data.history.map((h: any, i: number) => ({
           id: h.recordId || i,
           date: h.date || "---",
+          time: h.time || "",
           place: h.place || "Chưa xác định",
           vacName: h.vaccineName || "---",
           vacType: h.vaccineType || "Chưa xác định",
           dosage: h.dosage || "Chưa xác định",
-          status: h.nextDose || "Chưa xác định",
+          status: h.status || "Chưa xác định",
+          sideEffect: h.sideEffect || "",
+          thoiGianTacDung: h.thoiGianTacDung || "",
         }));
         setHistory(formattedHistory);
       }
     } catch (error) {
-      if (error !== "Unauthorized") console.error("Lỗi lấy thông tin:", error);
-      triggerToast("Không thể tải thông tin hồ sơ từ máy chủ!");
+      if (error !== "Unauthorized") console.error(error);
     }
   };
 
+  // Lấy danh sách Vắc-xin
   const fetchVaccines = async () => {
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
-      if (response.ok) {
-        const data = await response.json();
-        setVaccines(data);
-      } else {
-        triggerToast("Lỗi tải danh mục vắc-xin từ máy chủ!");
-      }
+      if (response.ok) setVaccines(await response.json());
     } catch (error) {
       if (error !== "Unauthorized") console.error(error);
-      triggerToast("Không thể kết nối đến Backend Server!");
     }
   };
 
+  // Lấy danh sách lịch tiêm trung tâm
   const fetchSchedules = async () => {
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
-      if (response.ok) {
-        const data = await response.json();
-        setSchedules(data);
-      } else {
-        triggerToast("Lỗi: Không thể lấy dữ liệu lịch tiêm chủng!");
-      }
+      if (response.ok) setSchedules(await response.json());
     } catch (error) {
-      if (error !== "Unauthorized") console.error("Lỗi kết nối Backend:", error);
-      triggerToast("Không thể kết nối đến Máy chủ Backend!");
+      if (error !== "Unauthorized") console.error(error);
     }
   };
 
-  // 1. Luôn ưu tiên fetch ID User vào lần đầu tải để dùng cho toàn bộ component
   useEffect(() => {
-    fetchProfile();
+    fetchPatientData();
   }, []);
 
-  // 2. Chuyển đổi tab sẽ fetch lại
   useEffect(() => {
-    if (activeTab === "profile") fetchProfile();
+    if (activeTab === "history") fetchPatientData();
     if (activeTab === "vaccines") fetchVaccines();
     if (activeTab === "schedules") fetchSchedules();
     if (activeTab === "diseases") fetchDiseases();
@@ -217,8 +161,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
     if (activeTab === "my_feedbacks" && profile.id) fetchMyFeedbacks();
   }, [activeTab, profile.id]);
 
-  // --- STATES: FORMS & VALIDATION ---
-  // 2. Phản hồi
+  // States cho Form Feedback
   const [feedbackType, setFeedbackType] = useState<"after_vaccine" | "high_level">("after_vaccine");
   const [feedbackForm, setFeedbackForm] = useState({
     vacName: "",
@@ -231,94 +174,27 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   });
   const [feedbackErrors, setFeedbackErrors] = useState<Record<string, string>>({});
 
-  // 3. Đăng ký Tiêm (Modal)
+  // States cho Form Modal Booking
   const [bookModal, setBookModal] = useState<{ isOpen: boolean; type: "vaccine" | "schedule"; data: any }>({
     isOpen: false,
     type: "vaccine",
     data: null,
   });
-
-  // --- HÀM TIỆN ÍCH CHO FORMS ---
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>, setter: Function, formState: any, errorState: any, setErrorState: Function) => {
-    let val = e.target.value.replace(/\D/g, ""); // Chỉ lấy số
-    if (val.length > 10) val = val.substring(0, 10); // Giới hạn 10 số
-    let formatted = val;
-    if (val.length > 3 && val.length <= 6) formatted = `${val.slice(0, 3)} ${val.slice(3)}`;
-    else if (val.length > 6) formatted = `${val.slice(0, 3)} ${val.slice(3, 6)} ${val.slice(6)}`;
-
-    setter({ ...formState, phone: formatted });
-    if (errorState.phone) setErrorState({ ...errorState, phone: "" });
-  };
+  const [bookingDate, setBookingDate] = useState<string>("");
+  const [bookingTime, setBookingTime] = useState<string>("");
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN").format(amount) + " ₫";
   };
 
-  // --- XỬ LÝ SUBMIT HỒ SƠ QUA API ---
-  const handleProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const errors: Record<string, string> = {};
-
-    if (!profileForm.name.trim()) errors.name = "Vui lòng nhập họ và tên";
-    if (!profileForm.dob) errors.dob = "Vui lòng chọn ngày sinh";
-
-    const phoneNum = profileForm.phone.replace(/\s/g, "");
-    if (!phoneNum) errors.phone = "Vui lòng nhập số điện thoại";
-    else if (phoneNum.length < 10) errors.phone = "Số điện thoại phải đủ 10 số";
-
-    if (!profileForm.address.trim()) errors.address = "Vui lòng nhập địa chỉ";
-
-    if (Object.keys(errors).length > 0) {
-      setProfileErrors(errors);
-      triggerToast("Vui lòng kiểm tra lại các trường thông tin bị lỗi!");
-      return;
-    }
-
-    try {
-      const payload = {
-        fullName: profileForm.name,
-        dob: profileForm.dob,
-        gender: profileForm.gender,
-        phone: profileForm.phone,
-        address: profileForm.address,
-      };
-
-      // Đổi sang endpoint mới, Backend sẽ tự tìm user từ Token
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/profile`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Có lỗi xảy ra");
-      }
-
-      setProfile({ ...profileForm });
-      setIsEditingProfile(false);
-      triggerToast("Cập nhật thông tin cá nhân lên hệ thống thành công!");
-
-      if (onNameChange) {
-        onNameChange(profileForm.name);
-      }
-    } catch (error: any) {
-      if (error !== "Unauthorized") triggerToast("Lỗi cập nhật: " + error.message);
-    }
-  };
-
-  // --- XỬ LÝ SUBMIT PHẢN HỒI ---
-  // Hàm xử lý Hủy bỏ (Xóa trắng Form)
   const handleCancelFeedback = () => {
     setFeedbackForm({ vacName: "", time: "", place: "", doctor: "", normalContent: "", highLevelType: "Phàn nàn", highLevelContent: "" });
     setFeedbackErrors({});
   };
 
-  // Hàm xử lý Submit Phản hồi lên DB
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
-
     if (feedbackType === "after_vaccine") {
       if (!feedbackForm.vacName.trim()) errors.vacName = "Vui lòng nhập tên vắc-xin";
       if (!feedbackForm.time) errors.time = "Vui lòng nhập/chọn thời gian tiêm";
@@ -337,90 +213,60 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
     try {
       const endpoint = feedbackType === "after_vaccine" ? "/api/customer/feedback/normal" : "/api/customer/feedback/high-level";
-
-      const payload = {
-        maBenhNhan: profile.id, // Dùng ID linh động
-        vacName: feedbackForm.vacName,
-        time: feedbackForm.time,
-        place: feedbackForm.place,
-        doctor: feedbackForm.doctor,
-        normalContent: feedbackForm.normalContent,
-        highLevelType: feedbackForm.highLevelType,
-        highLevelContent: feedbackForm.highLevelContent,
-      };
-
+      const payload = { ...feedbackForm, maBenhNhan: profile.id };
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) {
-        throw new Error("API trả về lỗi");
-      }
-
-      // Thông báo đúng như SRS yêu cầu
+      if (!res.ok) throw new Error("API trả về lỗi");
       triggerToast(feedbackType === "after_vaccine" ? "Gửi thành công" : "Phản hồi gửi đi thành công.");
-      handleCancelFeedback(); // Reset form sau khi gửi
+      handleCancelFeedback();
     } catch (error) {
       if (error !== "Unauthorized") triggerToast(feedbackType === "after_vaccine" ? "Gửi thất bại" : "Phản hồi gửi thất bại");
     }
   };
 
-  // --- XỬ LÝ ĐĂNG KÝ (XÁC NHẬN) ---
-  const [bookingDate, setBookingDate] = useState<string>("");
-
   const handleConfirmBooking = async () => {
-    if (bookModal.type === "vaccine" && !bookingDate) {
-      triggerToast("Vui lòng chọn ngày mong muốn tiêm!");
-      return;
+    if (bookModal.type === "vaccine") {
+      if (!bookingDate) return triggerToast("Vui lòng chọn ngày mong muốn tiêm!");
+      if (!bookingTime.trim()) return triggerToast("Vui lòng nhập giờ mong muốn tiêm!");
     }
 
     try {
-      const payload: any = {
-        maBenhNhan: profile.id, // Dùng ID linh động
-      };
-
+      const payload: any = { maBenhNhan: profile.id };
       if (bookModal.type === "vaccine") {
         payload.maVacXin = bookModal.data.maVacXin;
         payload.ngayMongMuon = bookingDate;
+        payload.gioMongMuon = bookingTime;
       } else {
         const rawId = bookModal.data.maLichTiem;
-        const numericId = typeof rawId === "string" ? parseInt(rawId.replace(/\D/g, ""), 10) : rawId;
-        payload.maLichTiem = numericId;
-
-        if (bookModal.data.ngay && bookModal.data.thang && bookModal.data.nam) {
-          payload.ngayMongMuon = `${bookModal.data.nam}-${bookModal.data.thang}-${bookModal.data.ngay}`;
-        } else {
-          payload.ngayMongMuon = bookingDate || new Date().toISOString().split("T")[0];
-        }
+        payload.maLichTiem = typeof rawId === "string" ? parseInt(rawId.replace(/\D/g, ""), 10) : rawId;
+        payload.ngayMongMuon =
+          bookModal.data.ngay && bookModal.data.thang && bookModal.data.nam
+            ? `${bookModal.data.nam}-${bookModal.data.thang}-${bookModal.data.ngay}`
+            : bookingDate || new Date().toISOString().split("T")[0];
       }
-
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/book`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Có lỗi xảy ra khi đăng ký");
-      }
-
+      if (!res.ok) throw new Error((await res.json()).error || "Có lỗi xảy ra khi đăng ký");
       triggerToast("Đăng ký thành công! Hệ thống đã lưu phiếu đăng ký lịch tiêm vào CSDL.");
       setBookModal({ isOpen: false, type: "vaccine", data: null });
       setBookingDate("");
+      setBookingTime("");
     } catch (err: any) {
       if (err !== "Unauthorized") triggerToast("Lỗi: " + err.message);
     }
   };
 
-  // --- TÌM KIẾM, LỌC & PHÂN TRANG VẮC XIN TỪ DATABASE ---
+  // State lọc Vắc xin
   const [vacSearchType, setVacSearchType] = useState("Tất cả");
   const [vacSearchName, setVacSearchName] = useState("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 8;
-
   const uniqueTypes = ["Tất cả", ...Array.from(new Set(vaccines.map((v) => v.loaiVacXin).filter(Boolean)))];
 
   useEffect(() => {
@@ -432,14 +278,9 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       (vacSearchType === "Tất cả" || (v.loaiVacXin && v.loaiVacXin === vacSearchType)) &&
       v.tenVacXin.toLowerCase().includes(vacSearchName.toLowerCase()),
   );
-
   const totalPages = Math.ceil(filteredVaccines.length / ITEMS_PER_PAGE) || 1;
   const currentVaccines = filteredVaccines.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-
-  const getVaccineTypeCount = (type: string) => {
-    if (type === "Tất cả") return vaccines.length;
-    return vaccines.filter((v) => v.loaiVacXin === type).length;
-  };
+  const getVaccineTypeCount = (type: string) => (type === "Tất cả" ? vaccines.length : vaccines.filter((v) => v.loaiVacXin === type).length);
 
   return (
     <>
@@ -447,13 +288,13 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
         {/* HEADER CHUẨN */}
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">Hệ thống Tiêm chủng VaccineFlow Pro</h2>
-          <p className="text-sm text-slate-500 mt-1">Tra cứu thông tin, đăng ký tiêm chủng và quản lý hồ sơ cá nhân.</p>
+          <p className="text-sm text-slate-500 mt-1">Tra cứu thông tin, đăng ký tiêm chủng và theo dõi hồ sơ.</p>
         </div>
 
         {/* MENU TABS */}
         <div className="border-b border-slate-200 flex space-x-2 overflow-x-auto no-scrollbar">
           {[
-            { id: "profile", icon: User, label: "Hồ sơ cá nhân" },
+            { id: "history", icon: Activity, label: "Lịch sử tiêm chủng" },
             { id: "vaccines", icon: Syringe, label: "Xem thông tin Vắc-xin" },
             { id: "schedules", icon: CalendarDays, label: "Tra cứu lịch tiêm" },
             { id: "diseases", icon: Bug, label: "Tình hình dịch bệnh" },
@@ -476,250 +317,89 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
         {/* NỘI DUNG TABS */}
         <div className="flex-1 overflow-y-auto pb-6">
-          {/* ======================= TAB 1: HỒ SƠ CÁ NHÂN ======================= */}
-          {activeTab === "profile" && (
-            <div className="space-y-6 animate-fade-in">
-              {/* KHỐI 1: THÔNG TIN CÁ NHÂN / FORM CHỈNH SỬA */}
-              <div className="w-full">
-                {!isEditingProfile ? (
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                    {/* Header thông tin - Thay đổi thiết kế phẳng, đồng bộ, cân đối */}
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-5 flex flex-wrap md:items-center md:justify-between gap-4">
-                      <div>
-                        <h3 className="text-2xl font-black text-white tracking-tight">{profile.name || "Chưa cập nhật tên"}</h3>
-                        <p className="text-[11px] font-bold text-indigo-100 uppercase tracking-wider mt-0.5 opacity-90">
-                          Mã Bệnh Nhân: BN{String(profile.id).padStart(4, "0")}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setProfileForm({ ...profile });
-                          setProfileErrors({});
-                          setIsEditingProfile(true);
-                        }}
-                        className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2.5 rounded-xl text-xs font-bold transition-all backdrop-blur-sm flex items-center gap-2 cursor-pointer shadow-sm self-start md:self-center"
-                      >
-                        <Edit className="w-3.5 h-3.5" /> Chỉnh sửa hồ sơ
-                      </button>
-                    </div>
-
-                    {/* Lưới thông tin chi tiết */}
-                    <div className="px-8 py-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5 bg-white">
-                      <div className="bg-slate-50/70 px-4 py-3.5 rounded-xl border border-slate-100 flex flex-col justify-center">
-                        <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Ngày sinh</span>
-                        <span className="text-sm font-bold text-slate-700">{profile.dob || "---"}</span>
-                      </div>
-                      <div className="bg-slate-50/70 px-4 py-3.5 rounded-xl border border-slate-100 flex flex-col justify-center">
-                        <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Giới tính</span>
-                        <span className="text-sm font-bold text-slate-700">{profile.gender || "---"}</span>
-                      </div>
-                      <div className="bg-slate-50/70 px-4 py-3.5 rounded-xl border border-slate-100 flex flex-col justify-center">
-                        <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Điện thoại</span>
-                        <span className="text-sm font-extrabold font-mono text-blue-600">{profile.phone || "---"}</span>
-                      </div>
-                      <div className="bg-slate-50/70 px-4 py-3.5 rounded-xl border border-slate-100 flex flex-col justify-center">
-                        <span className="block text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-1">Địa chỉ thường trú</span>
-                        <span className="text-sm font-bold text-slate-700 truncate block" title={profile.address}>
-                          {profile.address || "---"}
-                        </span>
-                      </div>
-                    </div>
+          {/* ======================= TAB 1: LỊCH SỬ TIÊM CHỦNG ======================= */}
+          {activeTab === "history" && (
+            <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col animate-fade-in h-full">
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+                    <Activity className="w-5 h-5" />
                   </div>
-                ) : (
-                  <form
-                    onSubmit={handleProfileSubmit}
-                    className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col animate-fade-in"
-                  >
-                    <div className="p-5 border-b border-slate-100 bg-slate-50/80 flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                        <Edit className="w-5 h-5" />
-                      </div>
-                      <h3 className="font-bold text-slate-800 text-lg">Cập nhật thông tin hồ sơ cá nhân</h3>
-                    </div>
-
-                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Họ và tên bệnh nhân <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          maxLength={50}
-                          value={profileForm.name}
-                          onChange={(e) => {
-                            setProfileForm({ ...profileForm, name: e.target.value });
-                            setProfileErrors({ ...profileErrors, name: "" });
-                          }}
-                          className={`w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none transition-all ${profileErrors.name ? "border-red-500 bg-red-50 focus:ring-4 focus:ring-red-500/10" : "border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"}`}
-                        />
-                        {profileErrors.name && <p className="text-[11px] text-red-500 font-bold mt-1.5">{profileErrors.name}</p>}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                            Ngày sinh <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="date"
-                            value={profileForm.dob}
-                            onChange={(e) => {
-                              setProfileForm({ ...profileForm, dob: e.target.value });
-                              setProfileErrors({ ...profileErrors, dob: "" });
-                            }}
-                            className={`w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none transition-all ${profileErrors.dob ? "border-red-500 bg-red-50 focus:ring-4 focus:ring-red-500/10" : "border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"}`}
-                          />
-                          {profileErrors.dob && <p className="text-[11px] text-red-500 font-bold mt-1.5">{profileErrors.dob}</p>}
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                            Giới tính <span className="text-red-500">*</span>
-                          </label>
-                          <div className="flex gap-4 items-center h-[42px] px-3 bg-white border border-slate-300 rounded-xl">
-                            <label className="flex items-center gap-2 text-sm cursor-pointer font-medium text-slate-700">
-                              <input
-                                type="radio"
-                                checked={profileForm.gender === "Nam"}
-                                onChange={() => setProfileForm({ ...profileForm, gender: "Nam" })}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                              />{" "}
-                              Nam
-                            </label>
-                            <label className="flex items-center gap-2 text-sm cursor-pointer font-medium text-slate-700">
-                              <input
-                                type="radio"
-                                checked={profileForm.gender === "Nữ"}
-                                onChange={() => setProfileForm({ ...profileForm, gender: "Nữ" })}
-                                className="w-4 h-4 text-blue-600 focus:ring-blue-500"
-                              />{" "}
-                              Nữ
-                            </label>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Số điện thoại liên lạc <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={profileForm.phone}
-                          placeholder="090 123 4567"
-                          onChange={(e) => handlePhoneChange(e, setProfileForm, profileForm, profileErrors, setProfileErrors)}
-                          className={`w-full px-3.5 py-2.5 border rounded-xl font-mono text-sm outline-none transition-all ${profileErrors.phone ? "border-red-500 bg-red-50 focus:ring-4 focus:ring-red-500/10" : "border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"}`}
-                        />
-                        {profileErrors.phone && <p className="text-[11px] text-red-500 font-bold mt-1.5">{profileErrors.phone}</p>}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                          Địa chỉ thường trú <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          maxLength={255}
-                          value={profileForm.address}
-                          onChange={(e) => {
-                            setProfileForm({ ...profileForm, address: e.target.value });
-                            setProfileErrors({ ...profileErrors, address: "" });
-                          }}
-                          className={`w-full px-3.5 py-2.5 border rounded-xl text-sm outline-none transition-all ${profileErrors.address ? "border-red-500 bg-red-50 focus:ring-4 focus:ring-red-500/10" : "border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"}`}
-                        />
-                        {profileErrors.address && <p className="text-[11px] text-red-500 font-bold mt-1.5">{profileErrors.address}</p>}
-                      </div>
-
-                      <div className="col-span-1 md:col-span-2 flex justify-end gap-3 pt-2 border-t border-slate-100 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => setIsEditingProfile(false)}
-                          className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-bold text-slate-600 bg-white cursor-pointer hover:bg-slate-100 transition-colors"
-                        >
-                          Hủy bỏ
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold cursor-pointer flex items-center gap-2 hover:bg-blue-700 shadow-md shadow-blue-600/20 transition-all"
-                        >
-                          <Save className="w-4 h-4" /> Lưu
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                )}
+                  <h3 className="font-bold text-lg text-slate-800">Lịch sử và Nhật ký tiêm chủng cá nhân</h3>
+                </div>
+                <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-extrabold border border-blue-100">
+                  {history.length} bản ghi
+                </span>
               </div>
 
-              {/* KHỐI 2: BẢNG LỊCH SỬ TIÊM PHÒNG */}
-              <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
-                      <Syringe className="w-5 h-5" />
-                    </div>
-                    <h3 className="font-bold text-lg text-slate-800">Lịch sử và Nhật ký tiêm chủng chi tiết</h3>
-                  </div>
-                  <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-extrabold border border-blue-100">
-                    {history.length} bản ghi
-                  </span>
-                </div>
-
-                <div className="overflow-x-auto p-5">
-                  <table className="w-full text-left text-sm border-collapse min-w-[900px]">
-                    <thead>
-                      <tr className="border-b-2 border-slate-200 text-slate-500 uppercase tracking-wider text-[11px] font-black bg-slate-50/50">
-                        <th className="px-4 py-3 w-[5%]">STT</th>
-                        <th className="px-4 py-3 w-[14%]">Thời gian</th>
-                        <th className="px-4 py-3 w-[18%]">Địa điểm</th>
-                        <th className="px-4 py-3 w-[26%]">Tên Vắc-xin</th>
-                        <th className="px-4 py-3 w-[17%]">Loại Vắc-xin</th>
-                        <th className="px-4 py-3 w-[8%]">Liều</th>
-                        <th className="px-4 py-3 w-[12%] text-center">Kết quả</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {history.length > 0 ? (
-                        history.map((h, i) => (
-                          <tr key={h.id} className="hover:bg-slate-50/60 transition-colors group">
-                            <td className="px-4 py-3.5 font-mono text-slate-400 font-medium">{i + 1}</td>
-                            <td className="px-4 py-3.5 font-mono text-slate-600 font-medium">{h.date}</td>
-                            <td className="px-4 py-3.5 text-slate-600">{h.place}</td>
-                            <td className="px-4 py-3.5 font-black text-slate-800 group-hover:text-blue-700 transition-colors">{h.vacName}</td>
-                            <td className="px-4 py-3.5 text-slate-600">{h.vacType}</td>
-                            <td className="px-4 py-3.5 font-mono font-bold text-slate-500">{h.dosage}</td>
-                            <td className="px-4 py-3.5 text-center">
-                              <span
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center justify-center border shadow-sm ${
-                                  h.status === "Hoàn thành"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                    : "bg-amber-50 text-amber-700 border-amber-200"
-                                }`}
-                              >
-                                {h.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7} className="text-center py-12">
-                            <div className="flex flex-col items-center justify-center text-slate-400">
-                              <CalendarDays className="w-12 h-12 mb-3 text-slate-300" />
-                              <p className="font-medium">Chưa ghi nhận lịch sử tiêm chủng nào của bệnh nhân trên hệ thống.</p>
-                            </div>
+              <div className="overflow-x-auto p-5 flex-1">
+                <table className="w-full text-left text-sm border-collapse min-w-[900px]">
+                  <thead>
+                    <tr className="border-b-2 border-slate-200 text-slate-500 uppercase tracking-wider text-[11px] font-black bg-slate-50/50">
+                      <th className="px-4 py-3 w-[5%]">STT</th>
+                      <th className="px-4 py-3 w-[15%]">Thời gian</th>
+                      <th className="px-4 py-3 w-[18%]">Địa điểm</th>
+                      <th className="px-4 py-3 w-[22%]">Tên Vắc-xin</th>
+                      <th className="px-4 py-3 w-[15%]">Loại Vắc-xin</th>
+                      <th className="px-4 py-3 w-[13%] text-center">Kết quả</th>
+                      <th className="px-4 py-3 w-[12%] text-center">Tác dụng phụ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {history.length > 0 ? (
+                      history.map((h, i) => (
+                        <tr key={h.id} className="hover:bg-slate-50/60 transition-colors group">
+                          <td className="px-4 py-3.5 font-mono text-slate-400 font-medium">{i + 1}</td>
+                          <td className="px-4 py-3.5 font-mono text-slate-600 font-medium">
+                            {h.date} {h.time ? `| ${h.time}` : ""}
+                          </td>
+                          <td className="px-4 py-3.5 text-slate-600">{h.place}</td>
+                          <td className="px-4 py-3.5 font-black text-slate-800 group-hover:text-blue-700 transition-colors">
+                            {h.vacName}
+                            <div className="text-[10px] text-slate-500 font-normal mt-0.5">Liều: {h.dosage}</div>
+                          </td>
+                          <td className="px-4 py-3.5 text-slate-600">{h.vacType}</td>
+                          <td className="px-4 py-3.5 text-center">
+                            <span
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold inline-flex items-center justify-center border shadow-sm ${
+                                h.status === "Đã tiêm"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : h.status === "Bị hoãn"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : "bg-blue-50 text-blue-700 border-blue-200"
+                              }`}
+                            >
+                              {h.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 text-center text-xs">
+                            {h.sideEffect ? (
+                              <span className="text-red-500 font-semibold">{h.sideEffect}</span>
+                            ) : (
+                              <span className="text-slate-400 italic">Không có</span>
+                            )}
                           </td>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="text-center py-12">
+                          <div className="flex flex-col items-center justify-center text-slate-400">
+                            <CalendarDays className="w-12 h-12 mb-3 text-slate-300" />
+                            <p className="font-medium">Chưa ghi nhận lịch sử tiêm chủng nào trên hệ thống.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
 
-          {/* ======================= TAB 2: XEM THÔNG TIN VẮC-XIN LẤY TỪ DB ======================= */}
+          {/* ======================= TAB 2: XEM THÔNG TIN VẮC-XIN ======================= */}
           {activeTab === "vaccines" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0">
-              {/* Thanh Tìm kiếm và Lọc */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 animate-fade-in">
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
                 <div className="flex-1 flex gap-2">
                   <select
@@ -746,12 +426,11 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                 </div>
               </div>
 
-              {/* Bảng Hiển thị Vắc Xin chuẩn Inventory, Fix Cột, Break-Words */}
               <div className="overflow-y-auto overflow-x-hidden flex-1">
                 <table className="w-full text-left text-xs border-collapse table-fixed">
                   <thead className="sticky top-0 bg-slate-50 z-10 shadow-sm">
                     <tr className="text-slate-500 font-bold border-b border-slate-200 uppercase tracking-wider">
-                      <th className="px-2 sm:px-3 py-3 w-[8%]">Mã VX</th>
+                      <th className="px-2 sm:px-3 py-3 w-[8%] text-center">STT</th>
                       <th className="px-2 sm:px-3 py-3 w-[20%]">Tên Vắc-xin</th>
                       <th className="px-2 sm:px-3 py-3 w-[15%]">Phân loại</th>
                       <th className="px-2 sm:px-3 py-3 w-[17%]">Phòng bệnh</th>
@@ -763,55 +442,59 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {currentVaccines.length > 0 ? (
-                      currentVaccines.map((v) => (
-                        <tr key={v.maVacXin} className="hover:bg-slate-50/50">
-                          <td className="px-2 sm:px-3 py-3.5 font-mono text-slate-400 break-words">VX{String(v.maVacXin).padStart(3, "0")}</td>
-                          <td className="px-2 sm:px-3 py-3.5 font-bold text-slate-800 break-words">{v.tenVacXin}</td>
-                          <td className="px-2 sm:px-3 py-3.5 break-words">{v.loaiVacXin || "Chưa phân loại"}</td>
-                          <td className="px-2 sm:px-3 py-3.5 text-[11px] text-slate-600 break-words">{v.phongNguaBenh}</td>
-                          <td className="px-2 sm:px-3 py-3.5 text-slate-600 break-words">{v.doTuoiTiemChung}</td>
-                          <td className="px-2 sm:px-3 py-3.5 text-right font-extrabold text-blue-700 break-words">{formatCurrency(v.donGia)}</td>
-                          <td className="px-2 sm:px-3 py-3.5 text-center">
-                            {v.tonKho > 0 ? (
-                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-1 rounded-md text-[10px] font-bold">
-                                Sẵn có
-                              </span>
-                            ) : (
-                              <span className="bg-red-50 text-red-700 border border-red-200 px-1.5 py-1 rounded-md text-[10px] font-bold">
-                                Đã hết
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-2 sm:px-3 py-3.5 text-center">
-                            <button
-                              title="Đăng ký"
-                              disabled={v.tonKho <= 0}
-                              onClick={() => {
-                                setBookModal({ isOpen: true, type: "vaccine", data: v });
-                              }}
-                              className="bg-blue-600 text-white p-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center justify-center transition-colors"
-                            >
-                              <PlusCircle className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      currentVaccines.map(
+                        (
+                          v,
+                          index, // THÊM index Ở ĐÂY
+                        ) => (
+                          <tr key={v.maVacXin} className="hover:bg-slate-50/50">
+                            {/* SỬA CỘT NÀY THÀNH STT */}
+                            <td className="px-2 sm:px-3 py-3.5 font-mono text-slate-400 break-words text-center font-bold">
+                              {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+                            </td>
+                            <td className="px-2 sm:px-3 py-3.5 font-bold text-slate-800 break-words">{v.tenVacXin}</td>
+                            <td className="px-2 sm:px-3 py-3.5 break-words">{v.loaiVacXin || "Chưa phân loại"}</td>
+                            <td className="px-2 sm:px-3 py-3.5 text-[11px] text-slate-600 break-words">{v.phongNguaBenh}</td>
+                            <td className="px-2 sm:px-3 py-3.5 text-slate-600 break-words">{v.doTuoiTiemChung}</td>
+                            <td className="px-2 sm:px-3 py-3.5 text-right font-extrabold text-blue-700 break-words">{formatCurrency(v.donGia)}</td>
+                            <td className="px-2 sm:px-3 py-3.5 text-center">
+                              {v.tonKho > 0 ? (
+                                <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-1 rounded-md text-[10px] font-bold">
+                                  Sẵn có
+                                </span>
+                              ) : (
+                                <span className="bg-red-50 text-red-700 border border-red-200 px-1.5 py-1 rounded-md text-[10px] font-bold">
+                                  Đã hết
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-2 sm:px-3 py-3.5 text-center">
+                              <button
+                                title="Đăng ký"
+                                disabled={v.tonKho <= 0}
+                                onClick={() => setBookModal({ isOpen: true, type: "vaccine", data: v })}
+                                className="bg-blue-600 text-white p-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center transition-colors"
+                              >
+                                <PlusCircle className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ),
+                      )
                     ) : (
                       <tr>
                         <td colSpan={8} className="text-center py-8 text-slate-400">
-                          Không tìm thấy dữ liệu hoặc chưa kết nối đến Database.
+                          Không tìm thấy dữ liệu.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-
-              {/* Pagination Footer */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/50 shrink-0">
                   <span className="text-[11px] font-semibold text-slate-500">
-                    Đang hiển thị {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredVaccines.length)} /{" "}
+                    Hiển thị {(currentPage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(currentPage * ITEMS_PER_PAGE, filteredVaccines.length)} /{" "}
                     {filteredVaccines.length}
                   </span>
                   <div className="flex items-center gap-1">
@@ -822,7 +505,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <span className="text-[11px] font-bold px-3 py-1 bg-white border border-slate-200 rounded shadow-sm">
+                    <span className="text-[11px] font-bold px-3 py-1 bg-white border border-slate-200 rounded">
                       {currentPage} / {totalPages}
                     </span>
                     <button
@@ -840,17 +523,16 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
           {/* ======================= TAB 3: TRA CỨU LỊCH TIÊM ======================= */}
           {activeTab === "schedules" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col animate-fade-in">
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                 <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Lịch tiêm phòng trung tâm</h3>
                 <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{schedules.length} bản ghi</span>
               </div>
-
               <div className="p-4 overflow-x-auto">
                 <table className="w-full text-left text-sm border-collapse table-fixed min-w-[1000px]">
                   <thead>
                     <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
-                      <th className="px-4 py-3 w-[10%]">Mã Lịch</th>
+                      <th className="px-4 py-3 w-[10%] text-center">STT</th>
                       <th className="px-4 py-3 w-[15%]">Ngày & Thời gian</th>
                       <th className="px-4 py-3 w-[15%]">Địa điểm</th>
                       <th className="px-4 py-3 w-[18%]">Tên Vắc-xin</th>
@@ -862,13 +544,13 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
-                    {schedules.map((s) => (
+                    {schedules.map((s, index) => (
                       <tr key={s.maLichTiem} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-mono text-xs text-slate-400 break-words">{s.maLichTiem}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-400 break-words text-center font-bold">{index + 1}</td>
                         <td className="px-4 py-3 text-xs text-slate-600 break-words">
                           <span className="font-bold text-red-600">
                             {s.ngay}/{s.thang}/{s.nam}
-                          </span>{" "}
+                          </span>
                           <br />
                           <span className="text-[11px]">{s.thoiGian}</span>
                         </td>
@@ -880,9 +562,8 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                         <td className="px-4 py-3 text-xs text-slate-600 break-words">{s.ghiChu}</td>
                         <td className="px-4 py-3 text-center">
                           <button
-                            title="Đăng ký"
                             onClick={() => setBookModal({ isOpen: true, type: "schedule", data: s })}
-                            className="bg-blue-600 text-white p-2 rounded-lg font-semibold hover:bg-blue-700 cursor-pointer inline-flex items-center justify-center mx-auto transition-colors"
+                            className="bg-blue-600 text-white p-2 rounded-lg font-semibold hover:bg-blue-700 inline-flex items-center mx-auto cursor-pointer"
                           >
                             <PlusCircle className="w-4 h-4" />
                           </button>
@@ -904,12 +585,11 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
           {/* ======================= TAB 4: TÌNH HÌNH DỊCH BỆNH ======================= */}
           {activeTab === "diseases" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col animate-fade-in">
               <div className="p-4 bg-slate-50 border-b border-slate-200">
                 <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Bảng tra cứu dịch bệnh tại địa phương</h3>
               </div>
               <div className="p-4 overflow-x-auto">
-                {/* Đã thêm table-fixed và bỏ min-w để bảng co giãn vừa màn hình */}
                 <table className="w-full table-fixed text-left text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200 text-xs">
@@ -921,14 +601,12 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                       <th className="px-2 py-3 w-[18%]">Đường lây nhiễm</th>
                       <th className="px-2 py-3 w-[18%]">Tác hại sức khoẻ</th>
                       <th className="px-2 py-3 w-[14%]">Vắc-xin phòng</th>
-                      {/* Đã xóa cột Ghi chú */}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700 text-xs">
                     {diseases.length > 0 ? (
                       diseases.map((d, idx) => (
                         <tr key={d.id || idx} className="hover:bg-slate-50 align-top">
-                          {/* Bổ sung break-words để text quá dài sẽ tự xuống dòng */}
                           <td className="px-2 py-3 font-mono text-center font-bold text-slate-400 break-words">{idx + 1}</td>
                           <td className="px-2 py-3 font-mono text-slate-600 break-words">{d.thoiDiemKhaoSat || "---"}</td>
                           <td className="px-2 py-3 text-slate-600 break-words">{d.diaChi || "---"}</td>
@@ -944,7 +622,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                                 {d.vacXinPhong}
                               </span>
                             ) : (
-                              <span className="text-slate-400 font-normal italic">Chưa có dữ liệu</span>
+                              <span className="text-slate-400 italic">Chưa có dữ liệu</span>
                             )}
                           </td>
                         </tr>
@@ -953,7 +631,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                       <tr>
                         <td colSpan={8} className="text-center py-10 text-slate-400">
                           <Bug className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-                          Chưa có dữ liệu dịch bệnh nào được ghi nhận trên hệ thống.
+                          Chưa có dữ liệu.
                         </td>
                       </tr>
                     )}
@@ -963,16 +641,15 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
             </div>
           )}
 
-          {/* ======================= TAB MỚI: TƯ VẤN TIÊM CHỦNG (CHỈ XEM) ======================= */}
+          {/* ======================= TAB 5: FAQS ======================= */}
           {activeTab === "faqs" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-w-4xl mx-auto h-[600px]">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-w-4xl mx-auto h-[600px] animate-fade-in">
               <div className="p-4 bg-slate-50 border-b border-slate-200">
                 <h3 className="font-bold text-slate-800 text-sm">Câu hỏi thường gặp (FAQ)</h3>
-                <p className="text-xs text-slate-500 mt-1">Tra cứu nhanh các vấn đề y khoa đã được bác sĩ giải đáp</p>
               </div>
               <div className="overflow-y-auto p-6 space-y-4">
                 {faqs.length > 0 ? (
-                  faqs.map((faq, idx) => (
+                  faqs.map((faq) => (
                     <div key={faq.id} className="border border-slate-200 rounded-xl overflow-hidden group">
                       <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex gap-3 items-start">
                         <div className="bg-blue-100 text-blue-600 font-bold rounded px-2 py-0.5 text-xs mt-0.5 shrink-0">Hỏi</div>
@@ -991,9 +668,9 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
             </div>
           )}
 
-          {/* ======================= TAB 5: GỬI PHẢN HỒI ======================= */}
+          {/* ======================= TAB 6: FEEDBACK ======================= */}
           {activeTab === "feedback" && (
-            <div className="max-w-3xl mx-auto space-y-6">
+            <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
               <div className="flex gap-4">
                 <label
                   className={`flex-1 border p-4 rounded-xl cursor-pointer transition-colors ${feedbackType === "after_vaccine" ? "border-blue-500 bg-blue-50 shadow-sm" : "border-slate-200 bg-white hover:bg-slate-50"}`}
@@ -1102,7 +779,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                       <textarea
                         maxLength={1000}
                         value={feedbackForm.normalContent}
-                        placeholder="Nhập tình trạng sức khỏe, phản ứng sau tiêm hoặc ý kiến đóng góp của bạn..."
+                        placeholder="Nhập tình trạng sức khỏe..."
                         onChange={(e) => {
                           setFeedbackForm({ ...feedbackForm, normalContent: e.target.value });
                           setFeedbackErrors({ ...feedbackErrors, normalContent: "" });
@@ -1155,13 +832,13 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                   <button
                     type="button"
                     onClick={handleCancelFeedback}
-                    className="px-6 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-semibold cursor-pointer hover:bg-slate-50 transition-colors"
+                    className="px-6 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-50 cursor-pointer"
                   >
                     Hủy bỏ
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold cursor-pointer flex items-center gap-1.5 hover:bg-blue-700"
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 hover:bg-blue-700 cursor-pointer"
                   >
                     <Send className="w-4 h-4" /> Gửi
                   </button>
@@ -1170,17 +847,16 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
             </div>
           )}
 
-          {/* ======================= TAB MỚI: LỊCH SỬ GIẢI ĐÁP (CỦA BẢN THÂN) ======================= */}
+          {/* ======================= TAB 7: MY FEEDBACKS ======================= */}
           {activeTab === "my_feedbacks" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col max-w-5xl mx-auto h-[600px]">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col max-w-5xl mx-auto h-[600px] animate-fade-in">
               <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm">Thắc mắc của tôi</h3>
-                  <p className="text-xs text-slate-500 mt-1">Theo dõi quá trình trung tâm giải quyết khiếu nại/thắc mắc</p>
+                  <p className="text-xs text-slate-500 mt-1">Theo dõi quá trình giải quyết khiếu nại</p>
                 </div>
                 <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{myFeedbacks.length} bản ghi</span>
               </div>
-
               <div className="overflow-y-auto p-6 space-y-4">
                 {myFeedbacks.length > 0 ? (
                   myFeedbacks.map((fb) => (
@@ -1189,26 +865,22 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                         <div className="flex gap-2 items-center">
                           <span className="font-mono text-xs text-slate-500">{fb.id}</span>
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${fb.type === "Cấp cao" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${fb.type === "Cấp cao" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}
                           >
                             {fb.type}
                           </span>
                         </div>
                         <span
-                          className={`text-xs font-bold px-2.5 py-1 rounded-md border ${
-                            fb.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"
-                          }`}
+                          className={`text-xs font-bold px-2.5 py-1 rounded-md border ${fb.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"}`}
                         >
                           {fb.status}
                         </span>
                       </div>
-
                       <div className="p-4 bg-white space-y-4">
                         <div>
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Nội dung tôi đã gửi:</p>
                           <p className="text-sm text-slate-800 italic bg-slate-50 p-3 rounded-lg border border-slate-100">"{fb.content}"</p>
                         </div>
-
                         <div>
                           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Trung tâm phản hồi:</p>
                           {fb.status === "Đã trả lời" ? (
@@ -1216,7 +888,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                               {fb.responseText}
                             </p>
                           ) : (
-                            <p className="text-sm text-slate-400 italic">Đang chờ nhân viên hỗ trợ hoặc cấp quản lý xét duyệt phản hồi...</p>
+                            <p className="text-sm text-slate-400 italic">Đang chờ nhân viên hỗ trợ xét duyệt...</p>
                           )}
                         </div>
                       </div>
@@ -1238,7 +910,6 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       {bookModal.isOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-blue-100 flex flex-col max-h-[90vh]">
-            {/* Header */}
             <div className="p-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white flex justify-between items-center shrink-0">
               <h3 className="font-bold text-sm flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5" /> Đăng ký tiêm phòng Vắc-xin
@@ -1247,173 +918,167 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                 onClick={() => {
                   setBookModal({ isOpen: false, type: "vaccine", data: null });
                   setBookingDate("");
+                  setBookingTime("");
                 }}
-                className="hover:bg-blue-800 p-1 rounded-full cursor-pointer transition-colors"
+                className="hover:bg-blue-800 p-1 rounded-full cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* Body */}
             <div className="p-6 overflow-y-auto space-y-5">
               <div className="text-center border-b border-slate-100 pb-4">
-                <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase mb-2 inline-block">
+                <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase mb-2 inline-block">
                   Thông tin vắc-xin
                 </span>
-                <h4 className="text-xl font-extrabold text-slate-800 leading-tight">{bookModal.data.tenVacXin}</h4>
+                <h4 className="text-xl font-extrabold text-slate-800">{bookModal.data.tenVacXin}</h4>
               </div>
-
-              {/* Bảng Hiển thị chi tiết trọn vẹn thông tin đối tượng đăng ký */}
               {bookModal.type === "vaccine" ? (
-                <div className="grid grid-cols-2 gap-3 text-sm animate-fade-in">
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Mã Vắc-xin</span>
+                    <span className="block text-[10px] uppercase font-bold text-slate-400">Mã Vắc-xin</span>
                     <span className="font-mono text-slate-700 font-semibold">VX{String(bookModal.data.maVacXin).padStart(3, "0")}</span>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Nhóm (Phân loại)</span>
+                    <span className="block text-[10px] uppercase font-bold text-slate-400">Nhóm</span>
                     <span className="text-slate-700 font-semibold">{bookModal.data.loaiVacXin || "Chưa phân loại"}</span>
                   </div>
                   <div className="col-span-2 bg-blue-50/50 p-3 rounded-lg border border-blue-100/50">
-                    <span className="block text-[10px] uppercase font-bold text-blue-400 mb-1">Phòng bệnh</span>
+                    <span className="block text-[10px] uppercase font-bold text-blue-400">Phòng bệnh</span>
                     <span className="text-blue-900 font-medium text-xs">{bookModal.data.phongNguaBenh}</span>
                   </div>
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                    <span className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Độ tuổi khuyên dùng</span>
+                    <span className="block text-[10px] uppercase font-bold text-slate-400">Độ tuổi</span>
                     <span className="text-slate-700 font-medium text-xs">{bookModal.data.doTuoiTiemChung}</span>
                   </div>
-                  <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 text-right flex flex-col justify-center">
-                    <span className="block text-[10px] uppercase font-bold text-emerald-500 mb-0.5">Đơn giá niêm yết</span>
+                  <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 text-right">
+                    <span className="block text-[10px] uppercase font-bold text-emerald-500">Đơn giá</span>
                     <span className="font-extrabold text-emerald-700 text-base">
                       {new Intl.NumberFormat("vi-VN").format(bookModal.data.donGia)} ₫
                     </span>
                   </div>
                 </div>
               ) : (
-                /* HIỂN THỊ ĐẦY ĐỦ THÔNG TIN TOÀN BỘ CỦA LỊCH TIÊM TRUNG TÂM */
-                <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-inner animate-fade-in">
+                <div className="space-y-3 text-xs bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Mã Lịch Tiêm</span>
-                      <span className="font-mono text-slate-800 font-bold text-sm">{bookModal.data.maLichTiem}</span>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Mã Lịch</span>
+                      <span className="font-mono text-slate-800 font-bold">{bookModal.data.maLichTiem}</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Thời Gian Tiêm Cố Định</span>
-                      <span className="text-red-600 font-extrabold text-sm">
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Thời Gian Tiêm</span>
+                      <span className="text-red-600 font-extrabold">
                         {bookModal.data.ngay}/{bookModal.data.thang}/{bookModal.data.nam}
                       </span>
                     </div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-2">
                     <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Nhóm phân loại</span>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Phân loại</span>
                       <span className="text-slate-700 font-semibold">{bookModal.data.loaiVacXin}</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Khung giờ hoạt động</span>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Khung giờ</span>
                       <span className="text-slate-700 font-medium font-mono">{bookModal.data.thoiGian}</span>
                     </div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-2">
                     <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Đối tượng chỉ định</span>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Đối tượng</span>
                       <span className="text-slate-700 font-medium">{bookModal.data.doTuoi || "Mọi đối tượng"}</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Số lượng dự kiến</span>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">SL dự kiến</span>
                       <span className="text-slate-700 font-bold font-mono">{bookModal.data.soLuong} người</span>
                     </div>
                   </div>
-
                   <div className="border-t border-slate-200 pt-2">
-                    <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Địa điểm tổ chức</span>
-                    <p className="text-slate-700 font-medium flex items-center gap-1">📍 {bookModal.data.diaDiem}</p>
+                    <span className="block text-[10px] font-bold uppercase text-slate-400">Địa điểm tổ chức</span>
+                    <p className="text-slate-700 font-medium">📍 {bookModal.data.diaDiem}</p>
                   </div>
-
                   {bookModal.data.danhSachBacSi && bookModal.data.danhSachBacSi.length > 0 && (
                     <div className="border-t border-slate-200 pt-2">
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Đội ngũ y tế phụ trách</span>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Đội ngũ y tế</span>
                       <div className="flex flex-wrap gap-1.5 mt-1">
                         {bookModal.data.danhSachBacSi.map((doc: string, idx: number) => (
-                          <span
-                            key={idx}
-                            className="bg-blue-100/70 text-blue-800 border border-blue-200/50 px-2 py-0.5 rounded text-[11px] font-medium"
-                          >
+                          <span key={idx} className="bg-blue-100/70 text-blue-800 px-2 py-0.5 rounded text-[11px]">
                             {doc}
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
-
                   {bookModal.data.ghiChu && (
                     <div className="border-t border-slate-200 pt-2">
-                      <span className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">Ghi chú lưu ý</span>
+                      <span className="block text-[10px] font-bold uppercase text-slate-400">Ghi chú lưu ý</span>
                       <p className="text-slate-500 italic leading-tight">{bookModal.data.ghiChu}</p>
                     </div>
                   )}
                 </div>
               )}
-
-              {/* ============================================================================= */}
-              {/* KHU VỰC ĐIỀU CHỈNH Ô NHẬP NGÀY / THÔNG BÁO THEO TỪNG PHÂN HỆ ĐĂNG KÝ            */}
-              {/* ============================================================================= */}
               {bookModal.type === "vaccine" ? (
-                /* 1. TRƯỜNG HỢP ĐĂNG KÝ VẮC XIN TỰ DO */
-                <div className="pt-2 animate-fade-in">
-                  <label className="block text-xs font-bold text-slate-700 mb-2">
-                    Ngày mong muốn tiêm <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={bookingDate}
-                    onChange={(e) => setBookingDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-blue-500 outline-none shadow-sm cursor-pointer"
-                  />
+                <div className="pt-2 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-2">
+                      Ngày mong muốn tiêm <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={bookingDate}
+                      onChange={(e) => setBookingDate(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-blue-500 outline-none shadow-sm cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-2">
+                      Giờ tiêm <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="VD: 08:30 Sáng"
+                      value={bookingTime}
+                      onChange={(e) => setBookingTime(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:border-blue-500 outline-none shadow-sm"
+                    />
+                  </div>
                 </div>
               ) : (
-                /* 2. TRƯỜNG HỢP ĐĂNG KÝ LỊCH TRUNG TÂM */
-                <div className="pt-2 space-y-3 animate-fade-in">
+                <div className="pt-2 space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-2">Ngày tiêm chỉ định (Cố định theo lịch trung tâm)</label>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">Ngày tiêm chỉ định</label>
                     <input
                       type="date"
                       disabled
                       value={bookModal.data ? `${bookModal.data.nam}-${bookModal.data.thang}-${bookModal.data.ngay}` : ""}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-500 text-sm cursor-not-allowed outline-none font-medium"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-100 text-slate-500 text-sm cursor-not-allowed font-medium"
                     />
                   </div>
                   <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-blue-700 leading-relaxed">
-                      Hệ thống tự động đồng bộ ngày tiêm{" "}
+                    <p className="text-[11px] text-blue-700">
+                      Hệ thống đồng bộ ngày tiêm{" "}
                       <span className="font-bold">
                         {bookModal.data?.ngay}/{bookModal.data?.thang}/{bookModal.data?.nam}
-                      </span>{" "}
-                      vào phiếu đăng ký của bạn. Vui lòng đến đúng khung giờ <span className="font-bold">{bookModal.data?.thoiGian}</span> tại địa
-                      điểm để được phục vụ tốt nhất.
+                      </span>
+                      . Vui lòng đến đúng giờ <span className="font-bold">{bookModal.data?.thoiGian}</span>.
                     </p>
                   </div>
                 </div>
               )}
             </div>
-
-            {/* Footer Buttons */}
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
               <button
                 onClick={() => {
                   setBookModal({ isOpen: false, type: "vaccine", data: null });
                   setBookingDate("");
+                  setBookingTime("");
                 }}
-                className="px-5 py-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
+                className="px-5 py-2.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Hủy bỏ
               </button>
               <button
                 onClick={handleConfirmBooking}
-                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 shadow-md shadow-blue-600/20 cursor-pointer transition-colors flex items-center gap-1.5"
+                className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 flex items-center gap-1.5 cursor-pointer"
               >
                 <PlusCircle className="w-4 h-4" /> Xác nhận
               </button>

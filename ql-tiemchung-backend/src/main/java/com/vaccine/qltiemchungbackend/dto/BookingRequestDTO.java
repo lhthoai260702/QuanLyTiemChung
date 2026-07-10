@@ -20,4 +20,5 @@ public class BookingRequestDTO {
     private Long maVacXin;
     private Long maLichTiem;
     private LocalDate ngayMongMuon;
+    private String gioMongMuon;
 }

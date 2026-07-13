@@ -24,28 +24,49 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * CustomerController
+ * * Version 1.0
+ * * Date: 13-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE       AUTHOR    DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 13-07-2026 lhthoai   Create, Format and add JavaDoc
+ */
 @RestController
 @RequestMapping("/api/customer")
 public class CustomerController {
 
     @Autowired
     private VacXinRepository vacXinRepository;
+
     @Autowired
     private CustomerService customerService;
+
     @Autowired
     private BenhNhanService benhNhanService;
+
     @Autowired
     private DichBenhRepository dichBenhRepository;
+
     @Autowired
     private PhanHoiRepository phanHoiRepository;
+
     @Autowired
     private PhanHoiCCRepository phanHoiCCRepository;
+
     @Autowired
     private SupportService supportService;
 
-    // ============================================
-    // HELPER METHOD: TẠO CHUỖI JSON LỊCH SỬ CHAT
-    // ============================================
+    /**
+     * Helper Method: Tạo chuỗi JSON lịch sử chat
+     *
+     * @param historyJson chuỗi JSON lịch sử hiện tại
+     * @param sender      người gửi
+     * @param message     nội dung tin nhắn
+     * @return String     chuỗi JSON lịch sử đã được cập nhật
+     */
     private String appendMessage(String historyJson, String sender, String message) {
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -66,14 +87,22 @@ public class CustomerController {
         }
     }
 
-    // ============================================
-    // API CŨ ĐƯỢC GIỮ NGUYÊN (CHỈ RÚT GỌN HIỂN THỊ Ở ĐÂY)
-    // ============================================
+    /**
+     * Lấy danh sách vắc xin cho khách hàng
+     *
+     * @return ResponseEntity danh sách vắc xin
+     */
     @GetMapping("/vaccines")
     public ResponseEntity<List<CustomerVaccineProjection>> getVaccinesCatalog() {
         return ResponseEntity.ok(vacXinRepository.findAllVaccinesForCustomer());
     }
 
+    /**
+     * Xử lý yêu cầu đăng ký tiêm phòng
+     *
+     * @param request dữ liệu đăng ký tiêm
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PostMapping("/book")
     public ResponseEntity<?> bookVaccine(@RequestBody BookingRequestDTO request) {
         try {
@@ -84,11 +113,24 @@ public class CustomerController {
         }
     }
 
+    /**
+     * Lấy thông tin hồ sơ của khách hàng hiện tại
+     *
+     * @param authentication thông tin xác thực
+     * @return ResponseEntity hồ sơ bệnh nhân
+     */
     @GetMapping("/profile")
     public ResponseEntity<BenhNhanDTO> getMyProfile(Authentication authentication) {
         return ResponseEntity.ok(benhNhanService.getPatientByUsername(authentication.getName()));
     }
 
+    /**
+     * Cập nhật thông tin hồ sơ khách hàng
+     *
+     * @param authentication thông tin xác thực
+     * @param request        dữ liệu hồ sơ cần cập nhật
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PutMapping("/profile")
     public ResponseEntity<?> updateMyProfile(Authentication authentication, @RequestBody BenhNhanDTO request) {
         try {
@@ -99,19 +141,32 @@ public class CustomerController {
         }
     }
 
+    /**
+     * Lấy thông tin các dịch bệnh
+     *
+     * @return ResponseEntity danh sách dịch bệnh
+     */
     @GetMapping("/diseases")
     public ResponseEntity<List<DichBenhProjection>> getDiseasesInfo() {
         return ResponseEntity.ok(dichBenhRepository.findAllDichBenh());
     }
 
+    /**
+     * Lấy danh sách các câu hỏi thường gặp (FAQs)
+     *
+     * @return ResponseEntity danh sách FAQs
+     */
     @GetMapping("/faqs")
     public ResponseEntity<List<FaqDTO>> getCustomerFaqs() {
         return ResponseEntity.ok(supportService.getAllFaqs());
     }
 
-    // ============================================
-    // API: TẠO TICKET VÀ PHẢN HỒI (CẬP NHẬT LƯU CHAT)
-    // ============================================
+    /**
+     * Gửi phản hồi thường
+     *
+     * @param request thông tin phản hồi
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PostMapping("/feedback/normal")
     public ResponseEntity<?> submitNormalFeedback(@RequestBody FeedbackRequestDTO request) {
         try {
@@ -133,6 +188,12 @@ public class CustomerController {
         }
     }
 
+    /**
+     * Gửi phản hồi cấp cao
+     *
+     * @param request thông tin phản hồi cấp cao
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PostMapping("/feedback/high-level")
     public ResponseEntity<?> submitHighLevelFeedback(@RequestBody FeedbackRequestDTO request) {
         try {
@@ -149,9 +210,12 @@ public class CustomerController {
         }
     }
 
-    // ============================================
-    // API: TRẢ LỜI VÀ ĐÁNH DẤU HOÀN THÀNH (MỚI THÊM)
-    // ============================================
+    /**
+     * Trả lời phản hồi
+     *
+     * @param request nội dung trả lời
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PostMapping("/feedback/reply")
     public ResponseEntity<?> replyFeedback(@RequestBody FeedbackRequestDTO request) {
         try {
@@ -175,6 +239,12 @@ public class CustomerController {
         }
     }
 
+    /**
+     * Đánh dấu hoàn thành phản hồi
+     *
+     * @param feedbackId ID của phản hồi
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PutMapping("/feedback/complete/{feedbackId}")
     public ResponseEntity<?> completeFeedback(@PathVariable String feedbackId) {
         try {
@@ -195,9 +265,11 @@ public class CustomerController {
         }
     }
 
-    // ============================================
-    // API CŨ: ĐƯỢC CẬP NHẬT ĐỂ TÍCH HỢP TRƯỜNG CHAT
-    // ============================================
+    /**
+     * Lấy danh sách toàn bộ phản hồi thường
+     *
+     * @return ResponseEntity danh sách phản hồi
+     */
     @GetMapping("/feedback/list")
     public ResponseEntity<List<PhanHoiDTO>> getFeedbackList() {
         List<PhanHoiProjection> projections = phanHoiRepository.layDanhSachPhanHoiProjection();
@@ -222,6 +294,11 @@ public class CustomerController {
         return ResponseEntity.ok(dtoList);
     }
 
+    /**
+     * Lấy danh sách toàn bộ phản hồi cấp cao (Dành cho Admin)
+     *
+     * @return ResponseEntity danh sách phản hồi cấp cao
+     */
     @GetMapping("/admin/feedback/high-level")
     public ResponseEntity<List<SupportTicketDTO>> getAllHighLevelFeedbacks() {
         List<Object[]> phanHoiCC = phanHoiCCRepository.layTatCaPhanHoiCC();
@@ -248,6 +325,12 @@ public class CustomerController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * Lấy danh sách phản hồi của một bệnh nhân cụ thể
+     *
+     * @param patientId mã bệnh nhân
+     * @return ResponseEntity danh sách phản hồi của khách hàng
+     */
     @GetMapping("/my-feedbacks/{patientId}")
     public ResponseEntity<List<CustomerFeedbackDTO>> getMyFeedbacks(@PathVariable Long patientId) {
         List<CustomerFeedbackDTO> result = new ArrayList<>();
@@ -294,6 +377,13 @@ public class CustomerController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * Giải quyết phản hồi thường
+     *
+     * @param id      mã phản hồi
+     * @param request dữ liệu trả lời
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PostMapping("/feedback/resolve/{id}")
     public ResponseEntity<?> resolveFeedback(@PathVariable Long id, @RequestBody FeedbackRequestDTO request) {
         try {
@@ -307,6 +397,13 @@ public class CustomerController {
         }
     }
 
+    /**
+     * Giải quyết phản hồi cấp cao
+     *
+     * @param id      mã phản hồi
+     * @param request dữ liệu trả lời
+     * @return ResponseEntity trạng thái xử lý
+     */
     @PostMapping("/admin/feedback/high-level/resolve/{id}")
     public ResponseEntity<?> resolveHighLevelFeedback(@PathVariable Long id, @RequestBody FeedbackRequestDTO request) {
         try {

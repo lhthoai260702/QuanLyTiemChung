@@ -9,6 +9,16 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * ProfileService
+ * * Version 1.0
+ * * Date: 13-07-2026
+ * * Copyright
+ * * Modification Logs:
+ * DATE        AUTHOR      DESCRIPTION
+ * -----------------------------------------------------------------------
+ * 13-07-2026  lhthoai     Create
+ */
 @Service
 public class ProfileService {
 
@@ -18,6 +28,13 @@ public class ProfileService {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    /**
+     * Lấy thông tin hồ sơ cá nhân của người dùng dựa trên tên đăng nhập.
+     *
+     * @param username tên đăng nhập của tài khoản
+     * @return ProfileDTO đối tượng chứa dữ liệu chi tiết hồ sơ cá nhân
+     * @throws RuntimeException nếu không tìm thấy thông tin cá nhân
+     */
     public ProfileDTO getProfile(String username) {
         ProfileProjection proj = taiKhoanRepository.findProfileByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thông tin cá nhân"));
@@ -40,6 +57,15 @@ public class ProfileService {
         return dto;
     }
 
+    /**
+     * Cập nhật thông tin hồ sơ cá nhân của người dùng.
+     * Cập nhật thông tin chung trong bảng TAIKHOAN và tự động đồng bộ sang bảng BENHNHAN (nếu là khách hàng)
+     * hoặc bảng NHANVIEN (nếu là quản lý hoặc nhân viên y tế).
+     *
+     * @param username tên đăng nhập của tài khoản cần cập nhật
+     * @param dto      đối tượng chứa các trường dữ liệu cần thay đổi
+     * @throws RuntimeException nếu không tìm thấy tài khoản hợp lệ
+     */
     @Transactional
     public void updateProfile(String username, ProfileDTO dto) {
         TaiKhoan tk = taiKhoanRepository.findByTenDangNhapAndFlagDeleteFalseOrFlagDeleteIsNull(username)

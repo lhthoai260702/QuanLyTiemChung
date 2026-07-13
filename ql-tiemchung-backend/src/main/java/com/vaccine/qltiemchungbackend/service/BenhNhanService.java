@@ -209,6 +209,7 @@ public class BenhNhanService {
             h.setPlace(p.getPlace());
             h.setVaccineType(p.getVaccineType());
             h.setDosage(p.getDosage());
+            h.setGhiChu(p.getGhiChu());
             return h;
         }).collect(Collectors.toList());
 

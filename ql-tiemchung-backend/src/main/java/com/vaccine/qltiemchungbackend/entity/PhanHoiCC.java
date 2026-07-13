@@ -3,16 +3,6 @@ package com.vaccine.qltiemchungbackend.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
-/**
- * PhanHoiCC
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @Entity
 @Table(name = "PHANHOICC")
 @Data
@@ -34,6 +24,12 @@ public class PhanHoiCC {
 
     @Column(name = "NoiDungTraLoi", columnDefinition = "TEXT")
     private String noiDungTraLoi;
+
+    @Column(name = "TrangThai")
+    private String trangThai = "Đang xử lý";
+
+    @Column(name = "ChiTietPhanHoi", columnDefinition = "TEXT")
+    private String chiTietPhanHoi;
 
     @Column(name = "flag_delete")
     private Boolean flagDelete = false;

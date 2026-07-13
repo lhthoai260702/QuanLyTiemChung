@@ -1,9 +1,11 @@
 package com.vaccine.qltiemchungbackend.repository;
 
+import com.vaccine.qltiemchungbackend.dto.NguoiDangKyProjection;
 import com.vaccine.qltiemchungbackend.dto.ReminderProjection;
 import com.vaccine.qltiemchungbackend.entity.ChiTietDkTiem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -47,4 +49,20 @@ public interface ChiTietDkTiemRepository extends JpaRepository<ChiTietDkTiem, Lo
             "  AND dk.ThoiGianCanTiem >= CURRENT_DATE " +
             "ORDER BY dk.ThoiGianCanTiem ASC", nativeQuery = true)
     List<ReminderProjection> findDanhSachNhacNho();
+
+    /**
+     * Lấy danh sách bệnh nhân đã đăng ký theo mã lịch tiêm trung tâm
+     */
+    @Query(value = "SELECT " +
+            "CONCAT('BN', LPAD(CAST(bn.MaBenhNhan AS VARCHAR), 3, '0')) AS maBenhNhan, " +
+            "bn.TenBenhNhan AS tenBenhNhan, " +
+            "CAST(bn.NgaySinh AS VARCHAR) AS ngaySinh, " +
+            "bn.GioiTinh AS gioiTinh, " +
+            "bn.SDT AS sdt, " +
+            "dk.TrangThai AS trangThaiTiem " +
+            "FROM CHITIET_DK_TIEM dk " +
+            "JOIN BENHNHAN bn ON dk.MaBenhNhan = bn.MaBenhNhan " +
+            "WHERE dk.MaLichTiem = :maLichTiem " +
+            "AND (dk.flag_delete = FALSE OR dk.flag_delete IS NULL)", nativeQuery = true)
+    List<NguoiDangKyProjection> findDanhSachNguoiDangKyByLichTiem(@Param("maLichTiem") Long maLichTiem);
 }

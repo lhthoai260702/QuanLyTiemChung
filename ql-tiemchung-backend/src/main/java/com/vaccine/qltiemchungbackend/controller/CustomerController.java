@@ -1,6 +1,10 @@
 package com.vaccine.qltiemchungbackend.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vaccine.qltiemchungbackend.dto.*;
+import com.vaccine.qltiemchungbackend.entity.PhanHoi;
+import com.vaccine.qltiemchungbackend.entity.PhanHoiCC;
 import com.vaccine.qltiemchungbackend.repository.DichBenhRepository;
 import com.vaccine.qltiemchungbackend.repository.PhanHoiCCRepository;
 import com.vaccine.qltiemchungbackend.repository.PhanHoiRepository;
@@ -13,60 +17,63 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-/**
- * CustomerController
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @RestController
 @RequestMapping("/api/customer")
 public class CustomerController {
 
     @Autowired
     private VacXinRepository vacXinRepository;
-
     @Autowired
     private CustomerService customerService;
-
     @Autowired
     private BenhNhanService benhNhanService;
-
     @Autowired
     private DichBenhRepository dichBenhRepository;
-
     @Autowired
     private PhanHoiRepository phanHoiRepository;
-
     @Autowired
     private PhanHoiCCRepository phanHoiCCRepository;
-
     @Autowired
     private SupportService supportService;
 
-    /**
-     * Lấy danh mục các loại vắc-xin cho khách hàng
-     *
-     * @return ResponseEntity<List<CustomerVaccineProjection>>
-     */
+    // ============================================
+    // HELPER METHOD: TẠO CHUỖI JSON LỊCH SỬ CHAT
+    // ============================================
+    private String appendMessage(String historyJson, String sender, String message) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            List<Map<String, String>> history = new ArrayList<>();
+            if (historyJson != null && !historyJson.trim().isEmpty() && !historyJson.equals("null")) {
+                history = mapper.readValue(historyJson, new TypeReference<List<Map<String, String>>>() {
+                });
+            }
+            Map<String, String> msg = new HashMap<>();
+            msg.put("sender", sender);
+            msg.put("message", message);
+            msg.put("time", LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")));
+            history.add(msg);
+            return mapper.writeValueAsString(history);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return historyJson;
+        }
+    }
+
+    // ============================================
+    // API CŨ ĐƯỢC GIỮ NGUYÊN (CHỈ RÚT GỌN HIỂN THỊ Ở ĐÂY)
+    // ============================================
     @GetMapping("/vaccines")
     public ResponseEntity<List<CustomerVaccineProjection>> getVaccinesCatalog() {
         return ResponseEntity.ok(vacXinRepository.findAllVaccinesForCustomer());
     }
 
-    /**
-     * Xử lý yêu cầu đăng ký tiêm phòng của khách hàng
-     *
-     * @param request thông tin đăng ký
-     * @return ResponseEntity<?>
-     */
     @PostMapping("/book")
     public ResponseEntity<?> bookVaccine(@RequestBody BookingRequestDTO request) {
         try {
@@ -77,222 +84,236 @@ public class CustomerController {
         }
     }
 
-    /**
-     * Lấy chi tiết hồ sơ bệnh nhân cho người dùng đang đăng nhập
-     *
-     * @param authentication
-     * @return
-     */
     @GetMapping("/profile")
     public ResponseEntity<BenhNhanDTO> getMyProfile(Authentication authentication) {
-        String username = authentication.getName();
-        return ResponseEntity.ok(benhNhanService.getPatientByUsername(username));
+        return ResponseEntity.ok(benhNhanService.getPatientByUsername(authentication.getName()));
     }
 
-    /**
-     * Cập nhật thông tin hồ sơ đồng bộ cả 2 bảng
-     *
-     * @param authentication
-     * @param request
-     * @return
-     */
     @PutMapping("/profile")
     public ResponseEntity<?> updateMyProfile(Authentication authentication, @RequestBody BenhNhanDTO request) {
         try {
-            String username = authentication.getName();
-            benhNhanService.updatePatientByUsername(username, request);
+            benhNhanService.updatePatientByUsername(authentication.getName(), request);
             return ResponseEntity.ok().body("{\"message\": \"Cập nhật hồ sơ thành công!\"}");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"" + e.getMessage() + "\"}");
         }
     }
 
-    /**
-     * Lấy danh sách thông tin về các loại dịch bệnh
-     *
-     * @return ResponseEntity<List<DichBenhProjection>>
-     */
     @GetMapping("/diseases")
     public ResponseEntity<List<DichBenhProjection>> getDiseasesInfo() {
         return ResponseEntity.ok(dichBenhRepository.findAllDichBenh());
     }
 
-    /**
-     * Ghi nhận phản hồi thường sau khi tiêm của khách hàng
-     *
-     * @param request thông tin phản hồi
-     * @return ResponseEntity<?>
-     */
+    @GetMapping("/faqs")
+    public ResponseEntity<List<FaqDTO>> getCustomerFaqs() {
+        return ResponseEntity.ok(supportService.getAllFaqs());
+    }
+
+    // ============================================
+    // API: TẠO TICKET VÀ PHẢN HỒI (CẬP NHẬT LƯU CHAT)
+    // ============================================
     @PostMapping("/feedback/normal")
     public ResponseEntity<?> submitNormalFeedback(@RequestBody FeedbackRequestDTO request) {
         try {
-            phanHoiRepository.insertNormalFeedback(
-                    request.getMaBenhNhan(),
-                    request.getVacName(),
-                    request.getTime(),
-                    request.getPlace(),
-                    request.getDoctor(),
-                    request.getNormalContent()
-            );
+            PhanHoi ph = new PhanHoi();
+            ph.setMaBenhNhan(request.getMaBenhNhan());
+            ph.setTenVacXin(request.getVacName());
+            if (request.getTime() != null && !request.getTime().isEmpty()) {
+                ph.setThoiGianTiem(java.time.LocalDate.parse(request.getTime()));
+            }
+            ph.setDiaDiemTiem(request.getPlace());
+            ph.setTenNhanVienPhuTrach(request.getDoctor());
+            ph.setNoiDung(request.getNormalContent());
+            ph.setTrangThai("Đang xử lý");
+            ph.setChiTietPhanHoi(appendMessage("[]", "customer", request.getNormalContent()));
+            phanHoiRepository.save(ph);
             return ResponseEntity.ok().body("{\"message\": \"Gửi thành công\"}");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"Gửi thất bại\"}");
         }
     }
 
-    /**
-     * Ghi nhận phản hồi cấp cao từ khách hàng
-     *
-     * @param request thông tin phản hồi cấp cao
-     * @return ResponseEntity<?>
-     */
     @PostMapping("/feedback/high-level")
     public ResponseEntity<?> submitHighLevelFeedback(@RequestBody FeedbackRequestDTO request) {
         try {
-            phanHoiRepository.insertHighLevelFeedback(
-                    request.getMaBenhNhan(),
-                    request.getHighLevelType(),
-                    request.getHighLevelContent()
-            );
+            PhanHoiCC phcc = new PhanHoiCC();
+            phcc.setMaBenhNhan(request.getMaBenhNhan());
+            phcc.setName(request.getHighLevelType());
+            phcc.setContent(request.getHighLevelContent());
+            phcc.setTrangThai("Đang xử lý");
+            phcc.setChiTietPhanHoi(appendMessage("[]", "customer", request.getHighLevelContent()));
+            phanHoiCCRepository.save(phcc);
             return ResponseEntity.ok().body("{\"message\": \"Phản hồi gửi đi thành công.\"}");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"Phản hồi gửi thất bại\"}");
         }
     }
 
-    /**
-     * Lấy danh sách tất cả các phản hồi thường để quản lý
-     *
-     * @return ResponseEntity<List<PhanHoiDTO>>
-     */
+    // ============================================
+    // API: TRẢ LỜI VÀ ĐÁNH DẤU HOÀN THÀNH (MỚI THÊM)
+    // ============================================
+    @PostMapping("/feedback/reply")
+    public ResponseEntity<?> replyFeedback(@RequestBody FeedbackRequestDTO request) {
+        try {
+            String fId = request.getFeedbackId();
+            if (fId.startsWith("PH-")) {
+                Long id = Long.parseLong(fId.replace("PH-", ""));
+                PhanHoi ph = phanHoiRepository.findById(id).orElseThrow(() -> new Exception("Not found"));
+                ph.setChiTietPhanHoi(appendMessage(ph.getChiTietPhanHoi(), request.getSender(), request.getReplyContent()));
+                ph.setTrangThai(request.getSender().equals("customer") ? "Đang xử lý" : "Đã trả lời");
+                phanHoiRepository.save(ph);
+            } else if (fId.startsWith("PHCC-")) {
+                Long id = Long.parseLong(fId.replace("PHCC-", ""));
+                PhanHoiCC phcc = phanHoiCCRepository.findById(id).orElseThrow(() -> new Exception("Not found"));
+                phcc.setChiTietPhanHoi(appendMessage(phcc.getChiTietPhanHoi(), request.getSender(), request.getReplyContent()));
+                phcc.setTrangThai(request.getSender().equals("customer") ? "Đang xử lý" : "Đã trả lời");
+                phanHoiCCRepository.save(phcc);
+            }
+            return ResponseEntity.ok().body("{\"message\": \"Gửi tin nhắn thành công\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"error\": \"Lỗi gửi tin nhắn\"}");
+        }
+    }
+
+    @PutMapping("/feedback/complete/{feedbackId}")
+    public ResponseEntity<?> completeFeedback(@PathVariable String feedbackId) {
+        try {
+            if (feedbackId.startsWith("PH-")) {
+                Long id = Long.parseLong(feedbackId.replace("PH-", ""));
+                PhanHoi ph = phanHoiRepository.findById(id).orElseThrow(() -> new Exception("Not found"));
+                ph.setTrangThai("Đã hoàn thành");
+                phanHoiRepository.save(ph);
+            } else if (feedbackId.startsWith("PHCC-")) {
+                Long id = Long.parseLong(feedbackId.replace("PHCC-", ""));
+                PhanHoiCC phcc = phanHoiCCRepository.findById(id).orElseThrow(() -> new Exception("Not found"));
+                phcc.setTrangThai("Đã hoàn thành");
+                phanHoiCCRepository.save(phcc);
+            }
+            return ResponseEntity.ok().body("{\"message\": \"Đã đánh dấu hoàn thành\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"error\": \"Lỗi cập nhật trạng thái\"}");
+        }
+    }
+
+    // ============================================
+    // API CŨ: ĐƯỢC CẬP NHẬT ĐỂ TÍCH HỢP TRƯỜNG CHAT
+    // ============================================
     @GetMapping("/feedback/list")
     public ResponseEntity<List<PhanHoiDTO>> getFeedbackList() {
-        // 1. Lấy dữ liệu dạng Projection từ DB
         List<PhanHoiProjection> projections = phanHoiRepository.layDanhSachPhanHoiProjection();
-
-        // 2. Map sang DTO
         List<PhanHoiDTO> dtoList = projections.stream().map(p -> {
             PhanHoiDTO dto = new PhanHoiDTO();
             dto.setId(p.getId());
             dto.setCustomerName(p.getCustomerName());
             dto.setComments(p.getComments());
             dto.setEmail(p.getEmail());
-            dto.setStatus(p.getStatus());
+
+            PhanHoi entity = phanHoiRepository.findById(p.getId()).orElse(null);
+            if (entity != null) {
+                dto.setStatus(entity.getTrangThai());
+                dto.setChiTietPhanHoi(entity.getChiTietPhanHoi());
+            } else {
+                dto.setStatus(p.getStatus());
+            }
             dto.setResponseText(p.getResponseText());
             dto.setTime(p.getThoiGianTiem());
             return dto;
         }).toList();
-
-        // 3. Trả về cho Frontend
         return ResponseEntity.ok(dtoList);
     }
 
-    /**
-     * Cập nhật lời giải đáp cho một phản hồi thường
-     *
-     * @param id      mã phản hồi
-     * @param request nội dung giải đáp
-     * @return ResponseEntity<?>
-     */
-    @PostMapping("/feedback/resolve/{id}")
-    public ResponseEntity<?> resolveFeedback(@PathVariable Long id, @RequestBody FeedbackRequestDTO request) {
-        try {
-            phanHoiRepository.capNhatPhanHoi(id, request.getNormalContent(), "Nhân viên hỗ trợ");
-            return ResponseEntity.ok().body("{\"message\": \"Giải đáp thành công\"}");
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("{\"error\": \"Lỗi gởi email\"}");
-        }
-    }
-
-    /**
-     * Lấy danh sách các câu hỏi thường gặp (FAQ)
-     *
-     * @return ResponseEntity<List<FaqDTO>>
-     */
-    @GetMapping("/faqs")
-    public ResponseEntity<List<FaqDTO>> getCustomerFaqs() {
-        return ResponseEntity.ok(supportService.getAllFaqs());
-    }
-
-    /**
-     * Lấy lịch sử phản hồi của cá nhân, bao gồm cả phản hồi thường và cấp cao
-     *
-     * @param patientId mã bệnh nhân
-     * @return ResponseEntity<List<CustomerFeedbackDTO>>
-     */
-    @GetMapping("/my-feedbacks/{patientId}")
-    public ResponseEntity<List<CustomerFeedbackDTO>> getMyFeedbacks(@PathVariable Long patientId) {
-        List<CustomerFeedbackDTO> result = new ArrayList<>();
-
-        // 1. Phản hồi thường
-        List<Object[]> phanHoiThuong = phanHoiRepository.layDanhSachPhanHoiTheoBenhNhan(patientId);
-        for (Object[] row : phanHoiThuong) {
-            CustomerFeedbackDTO dto = new CustomerFeedbackDTO();
-            dto.setId("PH-" + row[0]);
-            dto.setType("Thường");
-            dto.setContent((String) row[1]);
-            dto.setResponseText((String) row[2]);
-            dto.setStatus(row[2] != null && !((String) row[2]).trim().isEmpty() ? "Đã trả lời" : "Đang chờ");
-            dto.setTime((String) row[3]);
-            result.add(dto);
-        }
-
-        // 2. Phản hồi cấp cao
-        List<Object[]> phanHoiCC = phanHoiCCRepository.layDanhSachPhanHoiCCTheoBenhNhan(patientId);
-        for (Object[] row : phanHoiCC) {
-            CustomerFeedbackDTO dto = new CustomerFeedbackDTO();
-            dto.setId("PHCC-" + row[0]);
-            dto.setType("Cấp cao");
-            dto.setContent((String) row[1]);
-            dto.setResponseText((String) row[2]);
-            dto.setStatus(row[2] != null && !((String) row[2]).trim().isEmpty() ? "Đã trả lời" : "Đang chờ");
-            dto.setTime("---"); // PHCC không lưu ngày tiêm trong query này
-            result.add(dto);
-        }
-
-        return ResponseEntity.ok(result);
-    }
-
-    /**
-     * Lấy toàn bộ danh sách phản hồi cấp cao dành cho Admin quản lý
-     *
-     * @return ResponseEntity<List<SupportTicketDTO>>
-     */
     @GetMapping("/admin/feedback/high-level")
     public ResponseEntity<List<SupportTicketDTO>> getAllHighLevelFeedbacks() {
         List<Object[]> phanHoiCC = phanHoiCCRepository.layTatCaPhanHoiCC();
         List<SupportTicketDTO> result = new ArrayList<>();
-
         for (Object[] row : phanHoiCC) {
             SupportTicketDTO dto = new SupportTicketDTO();
-            dto.setId("PHCC-" + row[0]);
+            Long id = ((Number) row[0]).longValue();
+            dto.setId("PHCC-" + id);
             dto.setCustomerName((String) row[1]);
             dto.setComments((String) row[2]);
             dto.setEmail((String) row[3]);
-            dto.setType((String) row[4]); // Loại (VD: Phàn nàn, Khen ngợi)
+            dto.setType((String) row[4]);
 
-            String response = (String) row[5];
-            dto.setResponseText(response);
-            dto.setStatus(response != null && !response.trim().isEmpty() ? "Đã giải quyết" : "Chưa giải quyết");
-
+            PhanHoiCC entity = phanHoiCCRepository.findById(id).orElse(null);
+            if (entity != null) {
+                dto.setStatus(entity.getTrangThai());
+                dto.setChiTietPhanHoi(entity.getChiTietPhanHoi());
+            } else {
+                dto.setStatus("Chưa giải quyết");
+            }
             dto.setTime((String) row[6]);
             result.add(dto);
         }
         return ResponseEntity.ok(result);
     }
 
-    /**
-     * Quản trị viên xử lý và giải đáp phản hồi cấp cao
-     *
-     * @param id      mã phản hồi cấp cao
-     * @param request nội dung trả lời
-     * @return ResponseEntity<?>
-     */
+    @GetMapping("/my-feedbacks/{patientId}")
+    public ResponseEntity<List<CustomerFeedbackDTO>> getMyFeedbacks(@PathVariable Long patientId) {
+        List<CustomerFeedbackDTO> result = new ArrayList<>();
+
+        List<Object[]> phanHoiThuong = phanHoiRepository.layDanhSachPhanHoiTheoBenhNhan(patientId);
+        for (Object[] row : phanHoiThuong) {
+            CustomerFeedbackDTO dto = new CustomerFeedbackDTO();
+            Long id = ((Number) row[0]).longValue();
+            dto.setId("PH-" + id);
+            dto.setType("Thường");
+            dto.setContent((String) row[1]);
+            dto.setResponseText((String) row[2]);
+            dto.setTime((String) row[3]);
+
+            PhanHoi entity = phanHoiRepository.findById(id).orElse(null);
+            if (entity != null) {
+                dto.setStatus(entity.getTrangThai());
+                dto.setChiTietPhanHoi(entity.getChiTietPhanHoi());
+            } else {
+                dto.setStatus("Đang chờ");
+            }
+            result.add(dto);
+        }
+
+        List<Object[]> phanHoiCC = phanHoiCCRepository.layDanhSachPhanHoiCCTheoBenhNhan(patientId);
+        for (Object[] row : phanHoiCC) {
+            CustomerFeedbackDTO dto = new CustomerFeedbackDTO();
+            Long id = ((Number) row[0]).longValue();
+            dto.setId("PHCC-" + id);
+            dto.setType("Cấp cao");
+            dto.setContent((String) row[1]);
+            dto.setResponseText((String) row[2]);
+            dto.setTime("---");
+
+            PhanHoiCC entity = phanHoiCCRepository.findById(id).orElse(null);
+            if (entity != null) {
+                dto.setStatus(entity.getTrangThai());
+                dto.setChiTietPhanHoi(entity.getChiTietPhanHoi());
+            } else {
+                dto.setStatus("Đang chờ");
+            }
+            result.add(dto);
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/feedback/resolve/{id}")
+    public ResponseEntity<?> resolveFeedback(@PathVariable Long id, @RequestBody FeedbackRequestDTO request) {
+        try {
+            PhanHoi ph = phanHoiRepository.findById(id).orElseThrow(() -> new Exception("Not found"));
+            ph.setChiTietPhanHoi(appendMessage(ph.getChiTietPhanHoi(), "support", request.getNormalContent()));
+            ph.setTrangThai("Đã trả lời");
+            phanHoiRepository.save(ph);
+            return ResponseEntity.ok().body("{\"message\": \"Giải đáp thành công\"}");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("{\"error\": \"Lỗi gửi giải đáp\"}");
+        }
+    }
+
     @PostMapping("/admin/feedback/high-level/resolve/{id}")
     public ResponseEntity<?> resolveHighLevelFeedback(@PathVariable Long id, @RequestBody FeedbackRequestDTO request) {
         try {
-            // Lấy nội dung trả lời (Tái sử dụng trường normalContent cho nhanh, hoặc tạo trường mới trong DTO)
-            phanHoiCCRepository.capNhatPhanHoiCC(id, request.getNormalContent());
+            PhanHoiCC phcc = phanHoiCCRepository.findById(id).orElseThrow(() -> new Exception("Not found"));
+            phcc.setChiTietPhanHoi(appendMessage(phcc.getChiTietPhanHoi(), "admin", request.getNormalContent()));
+            phcc.setTrangThai("Đã trả lời");
+            phanHoiCCRepository.save(phcc);
             return ResponseEntity.ok().body("{\"message\": \"Giải đáp phản hồi cấp cao thành công\"}");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"Lỗi gửi phản hồi\"}");

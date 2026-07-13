@@ -29,7 +29,8 @@ public interface BenhNhanRepository extends JpaRepository<BenhNhan, Long> {
             "  END AS status, " +
             "  COALESCE(ltc.DiaDiem, 'Chưa xác định') AS place, " +
             "  lv.TenLoaiVacXin AS vaccineType, " +
-            "  v.HamLuong AS dosage " +
+            "  v.HamLuong AS dosage, " +
+            "  dk.GhiChu AS ghiChu " +
             "FROM CHITIET_DK_TIEM dk " +
             "JOIN LOVACXIN lo ON dk.MaLo = lo.MaLo " +
             "JOIN VACXIN v ON lo.MaVacXin = v.MaVacXin " +

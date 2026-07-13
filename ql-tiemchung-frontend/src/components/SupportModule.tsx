@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { FAQ, SystemLog } from "../types";
-import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail } from "lucide-react";
+import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail, CheckCircle2, Filter } from "lucide-react";
 
 export interface FAQType {
   id?: string | number | null;
@@ -20,15 +20,22 @@ export interface Reminder {
   status: "Chưa gửi" | "Đã gửi";
 }
 
-// Định nghĩa kiểu dữ liệu Ticket (Giải đáp thắc mắc) chuẩn SRS
+// Định nghĩa kiểu dữ liệu Ticket (Giải đáp thắc mắc)
 export interface SupportTicket {
   id: string | number;
   customerName: string;
   comments: string;
   email: string;
-  status: "Chưa giải quyết" | "Đã giải quyết";
+  status: string; // "Đang xử lý" | "Đã trả lời" | "Đã hoàn thành"
   responseText?: string;
   time?: string;
+  chiTietPhanHoi?: string; // Chuỗi JSON lịch sử chat
+}
+
+interface ChatMessage {
+  sender: "customer" | "admin" | "support";
+  message: string;
+  time: string;
 }
 
 interface SupportModuleProps {
@@ -41,34 +48,26 @@ interface SupportModuleProps {
 
 export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs, triggerToast }: SupportModuleProps) {
   const [activeTab, setActiveTab] = useState<"reminder" | "faq" | "tickets">("tickets");
-  const navigate = useNavigate(); // Hook điều hướng
+  const navigate = useNavigate();
 
   // =========================================================================
   // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
   // =========================================================================
-
-  // 1. Chặn người dùng nếu chưa đăng nhập (Không có token)
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
       triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
-      navigate("/"); // Đẩy về trang Login
+      navigate("/");
     }
   }, [navigate, triggerToast]);
 
-  // 2. Hàm Fetch đính kèm Token tự động cho mọi Request
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
-
-    // Gộp headers cũ với Authorization header mới
     const headers = {
       ...options.headers,
       Authorization: `Bearer ${token}`,
     };
-
     const response = await fetch(url, { ...options, headers });
-
-    // Nếu Backend báo lỗi 401 (Unauthorized) hoặc 403 (Forbidden) -> Token hết hạn/Sai quyền
     if (response.status === 401 || response.status === 403) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -76,7 +75,6 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
       return Promise.reject("Unauthorized");
     }
-
     return response;
   };
 
@@ -148,15 +146,16 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   };
 
   // ==========================================
-  // STATE: MÀN HÌNH 3 - GIẢI ĐÁP THẮC MẮC (TICKETS)
+  // STATE: MÀN HÌNH 3 - GIẢI ĐÁP THẮC MẮC (TICKETS CHAT)
   // ==========================================
   const [ticketsList, setTicketsList] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
-  const [ticketResponse, setTicketResponse] = useState("");
-  const [ticketEmail, setTicketEmail] = useState("");
-  const [ticketErrors, setTicketErrors] = useState<Record<string, string>>({});
+  const [replyMessage, setReplyMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<string>("Tất cả"); // Bổ sung bộ lọc trạng thái
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
+  const [isReplying, setIsReplying] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const fetchTickets = async () => {
     setIsLoadingTickets(true);
@@ -165,12 +164,12 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       if (res.ok) {
         const data = await res.json();
         const mapped = data.map((t: any) => ({
-          id: `PH-${String(t.id).padStart(3, "0")}`,
+          id: `PH-${t.id}`,
           customerName: t.customerName,
           comments: t.comments,
-          email: t.email || "chua_cap_nhat@gmail.com",
-          status: t.responseText && t.responseText.trim() !== "" ? "Đã giải quyết" : "Chưa giải quyết",
-          responseText: t.responseText,
+          email: t.email || "chưa_cập_nhật@gmail.com",
+          status: t.status || "Đang xử lý",
+          chiTietPhanHoi: t.chiTietPhanHoi,
           time: t.time || "Chưa cập nhật",
         }));
         setTicketsList(mapped);
@@ -187,6 +186,19 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     if (activeTab === "faq") fetchFaqs();
     if (activeTab === "tickets") fetchTickets();
   }, [activeTab]);
+
+  // Cập nhật lại màn hình chat nếu danh sách thay đổi (khi có tin nhắn mới)
+  useEffect(() => {
+    if (selectedTicket) {
+      const updated = ticketsList.find((t) => t.id === selectedTicket.id);
+      if (updated) setSelectedTicket(updated);
+    }
+  }, [ticketsList]);
+
+  // Tự động cuộn xuống tin nhắn cuối
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedTicket?.chiTietPhanHoi]);
 
   // ---------- HANDLERS NHẮC NHỞ ----------
   const handleSelectReminder = (rem: Reminder) => {
@@ -219,9 +231,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     setReminderErrors({});
   };
 
-  // ----------------------------------------------------------------------
-  // HANDLERS: TƯ VẤN TIÊM CHỦNG (FAQ)
-  // ----------------------------------------------------------------------
+  // ---------- HANDLERS TƯ VẤN (FAQ) ----------
   const selectFaqForEditing = (faq: FAQType) => {
     setSelectedFaq(faq);
     setFaqQuestion(faq.question);
@@ -277,61 +287,73 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     }
   };
 
-  // ----------------------------------------------------------------------
-  // HANDLERS: GIẢI ĐÁP THẮC MẮC (TICKETS) - SỬA LẠI THEO HỆ THỐNG SRS
-  // ----------------------------------------------------------------------
+  // ---------- HANDLERS GIẢI ĐÁP (TICKETS CHAT) ----------
   const selectTicketForProcessing = (t: SupportTicket) => {
     setSelectedTicket(t);
-    setTicketResponse(t.responseText || "");
-    setTicketEmail(t.email || "");
-    setTicketErrors({});
-  };
-
-  const handleCancelTicket = () => {
-    setSelectedTicket(null);
-    setTicketResponse("");
-    setTicketEmail("");
-    setTicketErrors({});
+    setReplyMessage("");
   };
 
   const handleProcessTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTicket) return;
+    if (!selectedTicket || !replyMessage.trim()) return;
 
-    const errors: Record<string, string> = {};
-    if (!ticketEmail.trim()) {
-      errors.email = "Bắt buộc nhập Email";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ticketEmail)) {
-      errors.email = "Email không hợp lệ";
-    }
-    if (!ticketResponse.trim()) {
-      errors.response = "Bắt buộc nhập nội dung trả lời";
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setTicketErrors(errors);
-      triggerToast("Lỗi gởi email"); // Hiện thông báo lỗi màu đỏ theo SRS
-      return;
-    }
+    // SỬA Ở ĐÂY: Giữ nguyên ID gốc (bao gồm cả PH- hoặc PHCC-) để backend có thể phân loại
+    const realId = String(selectedTicket.id);
 
     try {
-      // Bỏ phần chữ "PH-" để lấy ID gốc truyền cho Endpoint
-      const rawId = String(selectedTicket.id).replace("PH-", "");
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/resolve/${rawId}`, {
+      setIsReplying(true);
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ normalContent: ticketResponse }),
+        body: JSON.stringify({
+          feedbackId: realId,
+          replyContent: replyMessage,
+          sender: "support", // Định danh là CSKH
+        }),
       });
 
       if (res.ok) {
-        triggerToast("Email được gởi đi"); // Thành công: Email được gởi đi
-        setSelectedTicket(null);
-        fetchTickets();
+        setReplyMessage("");
+        await fetchTickets(); // Refresh dữ liệu chat
       } else {
-        triggerToast("Lỗi gởi email");
+        triggerToast("Lỗi gửi phản hồi");
       }
     } catch (err) {
-      if (err !== "Unauthorized") triggerToast("Lỗi gởi email");
+      if (err !== "Unauthorized") triggerToast("Lỗi gửi tin nhắn");
+    } finally {
+      setIsReplying(false);
+    }
+  };
+
+  const renderChatHistory = (jsonStr?: string) => {
+    if (!jsonStr || jsonStr === "null") return null;
+    try {
+      const messages: ChatMessage[] = JSON.parse(jsonStr);
+      return messages.map((msg, idx) => {
+        const isMe = msg.sender === "support" || msg.sender === "admin";
+        return (
+          <div key={idx} className={`flex w-full mb-4 ${isMe ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm text-[13px] ${
+                isMe
+                  ? "bg-blue-600 text-white rounded-tr-none"
+                  : "bg-white text-slate-700 border border-slate-200 rounded-tl-none"
+              }`}
+            >
+              {msg.sender === "customer" && (
+                <p className="text-[10px] font-bold text-slate-400 mb-1">Khách hàng</p>
+              )}
+              <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+              <p className={`text-[10px] mt-1.5 ${isMe ? "text-blue-200 text-right" : "text-slate-400"}`}>
+                {msg.sender === "admin" ? "👨‍💼 Ban Giám Đốc • " : msg.sender === "support" ? "🎧 Bạn (CSKH) • " : ""}
+                {msg.time}
+              </p>
+            </div>
+          </div>
+        );
+      });
+    } catch (e) {
+      return <div className="text-center text-xs text-slate-400">Lỗi hiển thị nội dung chat.</div>;
     }
   };
 
@@ -339,9 +361,42 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " VNĐ";
   };
 
-  const filteredTickets = ticketsList.filter(
-    (t) => t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || String(t.id).toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  // --- LỌC, NHÓM VÀ SẮP XẾP TICKETS ---
+  const uniqueTicketStatuses = ["Tất cả", ...Array.from(new Set(ticketsList.map((t) => t.status).filter(Boolean)))];
+
+  const filteredTickets = ticketsList.filter((t) => {
+    const matchesSearch = t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || String(t.id).toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = ticketStatusFilter === "Tất cả" || t.status === ticketStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const groupedTickets = filteredTickets.reduce((acc, ticket) => {
+    const status = ticket.status || "Chưa xác định";
+    if (!acc[status]) acc[status] = [];
+    acc[status].push(ticket);
+    return acc;
+  }, {} as Record<string, SupportTicket[]>);
+
+  // Sort each group by time (Mới nhất lên trên)
+  Object.keys(groupedTickets).forEach((status) => {
+    groupedTickets[status].sort((a, b) => {
+      const tA = new Date(a.time || "").getTime();
+      const tB = new Date(b.time || "").getTime();
+      if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
+      return (b.time || "").localeCompare(a.time || ""); // Fallback
+    });
+  });
+
+  const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
+  const sortedStatuses = Object.keys(groupedTickets).sort((a, b) => {
+    const indexA = statusOrder.indexOf(a);
+    const indexB = statusOrder.indexOf(b);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA === -1 && indexB !== -1) return 1;
+    if (indexA !== -1 && indexB === -1) return -1;
+    return a.localeCompare(b);
+  });
+
 
   return (
     <div className="space-y-6 animate-fade-in h-full flex flex-col">
@@ -370,7 +425,10 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
           <HelpCircle className="w-4 h-4" /> Tư vấn tiêm chủng (FAQ)
         </button>
         <button
-          onClick={() => setActiveTab("tickets")}
+          onClick={() => {
+            setActiveTab("tickets");
+            setSelectedTicket(null);
+          }}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === "tickets" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
@@ -384,7 +442,6 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       {/* ==================================================================================== */}
       {activeTab === "reminder" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px]">
-          {/* Cột trái: Bảng danh sách */}
           <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
               <h3 className="font-bold text-slate-800 text-sm">Danh sách Bệnh nhân tới hạn tiêm</h3>
@@ -442,7 +499,6 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
             </div>
           </div>
 
-          {/* Cột phải: Khung Action gửi Email */}
           <div className="lg:col-span-4 h-full">
             {!selectedReminder ? (
               <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm h-full flex items-center justify-center">
@@ -518,7 +574,6 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       {/* ==================================================================================== */}
       {activeTab === "faq" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px]">
-          {/* Cột trái: Bảng câu hỏi */}
           <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
             <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
               <h3 className="font-bold text-slate-800 text-sm">Bảng câu hỏi (FAQ)</h3>
@@ -551,7 +606,6 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
             </div>
           </div>
 
-          {/* Cột phải: Bảng trả lời (Textbox) */}
           <div className="lg:col-span-7 h-full">
             {!selectedFaq ? (
               <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm h-full flex items-center justify-center">
@@ -628,14 +682,16 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       )}
 
       {/* ==================================================================================== */}
-      {/* MÀN HÌNH 3: GIẢI ĐÁP THẮC MẮC (TICKETS) - 10.6.3 Screen Giải đáp thắc mắc */}
+      {/* MÀN HÌNH 3: GIẢI ĐÁP THẮC MẮC (CHAT LỊCH SỬ) */}
       {/* ==================================================================================== */}
       {activeTab === "tickets" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px]">
           {/* Cột trái: Danh sách phản ánh & Thắc mắc */}
           <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full">
-            <div className="p-4 bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-800">Đường dây phản ảnh của Khách Hàng</div>
-            <div className="p-3 border-b border-slate-100">
+            <div className="p-4 bg-slate-50 border-b border-slate-200 text-sm font-bold text-slate-800 shrink-0">Đường dây tiếp nhận thông tin</div>
+            
+            {/* Vùng Lọc và Tìm kiếm */}
+            <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-2 shrink-0">
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                 <input
@@ -646,127 +702,135 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
                   className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-400" />
+                <select
+                  value={ticketStatusFilter}
+                  onChange={(e) => setTicketStatusFilter(e.target.value)}
+                  className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-500"
+                >
+                  {uniqueTicketStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {status} ({status === "Tất cả" ? ticketsList.length : ticketsList.filter((t) => t.status === status).length})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+            {/* Danh sách đã nhóm và sắp xếp */}
+            <div className="overflow-y-auto flex-1 p-2 bg-slate-50/20">
               {isLoadingTickets ? (
                 <div className="p-8 text-center text-xs text-slate-400">Đang tải phản ánh từ cơ sở dữ liệu...</div>
-              ) : filteredTickets.length > 0 ? (
-                filteredTickets.map((t) => (
-                  <div
-                    key={t.id}
-                    onClick={() => selectTicketForProcessing(t)}
-                    className={`p-4 cursor-pointer text-sm transition-colors flex flex-col space-y-2 ${
-                      selectedTicket?.id === t.id ? "bg-blue-50/50 border-l-4 border-blue-600 font-semibold" : "hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <span className="font-mono text-xs font-bold text-slate-400 break-words">
-                        {t.id} | {t.customerName}
-                      </span>
-                      <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${
-                          t.status === "Đã giải quyết" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-800"
-                        }`}
-                      >
-                        {t.status}
+              ) : sortedStatuses.length > 0 ? (
+                sortedStatuses.map((status) => (
+                  <div key={status} className="mb-4">
+                    {/* Header Nhóm */}
+                    <div className="sticky top-0 bg-white/95 backdrop-blur py-1.5 px-3 mb-2 border border-slate-100 rounded-lg shadow-sm z-10 flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{status}</span>
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+                        {groupedTickets[status].length}
                       </span>
                     </div>
-                    <div className="text-xs text-slate-600 truncate">{t.comments}</div>
-                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
-                      <div className="text-[10px] text-slate-400 font-mono">{t.email}</div>
-                      <div className="text-[10px] text-slate-500 font-medium font-mono">📅 Ngày tiêm: {t.time}</div>
+                    {/* Các Items trong nhóm */}
+                    <div className="space-y-1.5">
+                      {groupedTickets[status].map((t) => {
+                        const statusColor = 
+                          t.status === "Đã hoàn thành" ? "bg-slate-100 text-slate-500 border-slate-200" :
+                          t.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
+                          "bg-red-50 text-red-600 border-red-200";
+
+                        return (
+                        <div
+                          key={t.id}
+                          onClick={() => selectTicketForProcessing(t)}
+                          className={`p-3 cursor-pointer rounded-xl transition-all flex flex-col space-y-2 ${
+                            selectedTicket?.id === t.id
+                              ? "bg-blue-50/50 border border-blue-200 shadow-sm"
+                              : "bg-white border border-slate-100 hover:border-slate-300 hover:shadow-sm"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-mono text-xs font-bold text-slate-500 break-words">
+                              {t.id} | <span className="text-slate-700">{t.customerName}</span>
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${statusColor}`}>
+                                {t.status}
+                              </span>
+                              <span className="text-[10px] text-slate-400">{t.time?.split(" ")[0]}</span>
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-600 line-clamp-2">{t.comments}</div>
+                          <div className="flex justify-between items-center mt-1 pt-1 border-t border-slate-100/50">
+                            <div className="text-[10px] text-slate-400 font-mono">{t.email}</div>
+                          </div>
+                        </div>
+                      )})}
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="p-8 text-center text-xs text-slate-400">Không có thắc mắc nào được gửi về trung tâm.</div>
+                <div className="p-8 text-center text-xs text-slate-400">Không tìm thấy thắc mắc nào phù hợp.</div>
               )}
             </div>
           </div>
 
-          {/* Cột phải: Giao diện giải đáp thắc mắc */}
-          <div className="lg:col-span-7 h-full">
+          {/* Cột phải: Giao diện Chat Lịch Sử */}
+          <div className="lg:col-span-7 h-full flex-col min-h-0 flex">
             {!selectedTicket ? (
-              <div className="bg-slate-50 rounded-xl border border-slate-200 p-8 text-center text-slate-400 text-sm h-full flex items-center justify-center">
-                Nhấp chọn một thư thắc mắc từ bên trái để soạn hồi đáp.
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-8 text-center text-slate-400 text-sm flex-1 flex items-center justify-center">
+                Nhấp chọn một thư thắc mắc từ bên trái để tham gia hỗ trợ.
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col h-full justify-between">
-                <div>
-                  <div className="border-b border-slate-100 pb-3 flex justify-between items-center">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 font-mono">
-                        CÂU HỎI ID: {selectedTicket.id} • NGÀY TIÊM: {selectedTicket.time}
-                      </span>
-                      <h3 className="text-base font-bold text-slate-900 mt-0.5">Trả lời thắc mắc được gửi về trung tâm</h3>
-                    </div>
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
+                {/* Chat Header */}
+                <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0 z-10">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                      Phiên hỗ trợ {selectedTicket.id}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Khách hàng: <span className="font-semibold text-blue-600">{selectedTicket.customerName}</span> ({selectedTicket.email})
+                    </p>
                   </div>
-
-                  <div className="mt-4 space-y-3">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Nội dung câu hỏi (Câu hỏi):</p>
-                      <p className="text-sm text-slate-700 mt-2 italic font-sans break-words">"{selectedTicket.comments}"</p>
-                    </div>
-                  </div>
+                  {selectedTicket.status === "Đã hoàn thành" && (
+                    <span className="px-3 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Đã đóng
+                    </span>
+                  )}
                 </div>
 
-                <form onSubmit={handleProcessTicket} noValidate className="space-y-4 pt-4 border-t border-slate-100">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Email (Textbox) <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="email"
-                      maxLength={100}
-                      value={ticketEmail}
-                      onChange={(e) => {
-                        setTicketEmail(e.target.value);
-                        setTicketErrors({ ...ticketErrors, email: "" });
-                      }}
-                      className={`w-full border border-slate-200 rounded-lg p-2.5 text-sm outline-none transition-colors ${
-                        ticketErrors.email ? "border-red-500 bg-red-50 focus:border-red-500" : "border-slate-200 focus:border-blue-500"
-                      }`}
-                    />
-                    {ticketErrors.email && <p className="text-[10px] text-red-500 font-bold mt-1">{ticketErrors.email}</p>}
-                  </div>
+                {/* Chat Body */}
+                <div className="flex-1 overflow-y-auto min-h-0 p-4 bg-slate-50/50">
+                  {renderChatHistory(selectedTicket.chiTietPhanHoi)}
+                  <div ref={chatEndRef} />
+                </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Nội dung trả lời (Tra lời Text Field - String) <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      required
-                      maxLength={1000}
-                      value={ticketResponse}
-                      onChange={(e) => {
-                        setTicketResponse(e.target.value);
-                        setTicketErrors({ ...ticketErrors, response: "" });
-                      }}
-                      placeholder="Viết thư hồi đáp cụ thể..."
-                      className={`w-full border rounded-lg p-2.5 text-sm h-32 outline-none transition-colors ${
-                        ticketErrors.response ? "border-red-500 bg-red-50 focus:border-red-500" : "border-slate-200 focus:border-blue-500"
-                      }`}
-                    />
-                    {ticketErrors.response && <p className="text-[10px] text-red-500 font-bold mt-1">{ticketErrors.response}</p>}
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleCancelTicket}
-                      className="px-5 py-2.5 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors"
-                    >
-                      Hủy
-                    </button>
-                    <button
-                      type="submit"
-                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-5 py-2.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-sm transition-colors"
-                    >
-                      <Send className="w-4 h-4" /> Gửi
-                    </button>
-                  </div>
-                </form>
+                {/* Chat Input */}
+                <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                  {selectedTicket.status === "Đã hoàn thành" ? (
+                    <div className="text-center text-xs text-slate-400 italic py-2">Khách hàng đã xác nhận giải quyết xong sự cố này.</div>
+                  ) : (
+                    <form onSubmit={handleProcessTicket} className="flex gap-2">
+                      <input
+                        type="text"
+                        required
+                        value={replyMessage}
+                        onChange={(e) => setReplyMessage(e.target.value)}
+                        placeholder="Nhập nội dung hỗ trợ khách hàng..."
+                        className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 focus:bg-white transition-all"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isReplying || !replyMessage.trim()}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </form>
+                  )}
+                </div>
               </div>
             )}
           </div>

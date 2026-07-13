@@ -34,6 +34,7 @@ public class LichTiemChungDTO {
 
     private List<String> selectedDoctors; // Nhận mảng tên bác sĩ từ checkbox
     private List<String> danhSachBacSi;   // Dùng để trả về hiển thị
+    private List<NguoiDangKyProjection> danhSachNguoiDangKy;
 
     @JsonProperty("flag_delete")
     private Boolean flagDelete;

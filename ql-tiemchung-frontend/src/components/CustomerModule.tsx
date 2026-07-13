@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Syringe,
   CalendarDays,
@@ -14,6 +14,8 @@ import {
   HelpCircle,
   History,
   Activity,
+  ArrowLeft,
+  Filter,
 } from "lucide-react";
 
 interface CustomerModuleProps {
@@ -43,6 +45,13 @@ export interface MyFeedbackType {
   content: string;
   responseText: string;
   status: string;
+  time: string;
+  chiTietPhanHoi?: string; // Bổ sung trường lưu lịch sử chat
+}
+
+interface ChatMessage {
+  sender: "customer" | "admin" | "support";
+  message: string;
   time: string;
 }
 
@@ -174,6 +183,97 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   });
   const [feedbackErrors, setFeedbackErrors] = useState<Record<string, string>>({});
 
+  // --- THÊM STATES CHO TÍNH NĂNG CHAT HAI CHIỀU ---
+  const [selectedFeedbackForChat, setSelectedFeedbackForChat] = useState<MyFeedbackType | null>(null);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [isReplying, setIsReplying] = useState(false);
+  const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<string>("Tất cả"); // Bộ lọc feedback
+  const [showConfirmCompleteModal, setShowConfirmCompleteModal] = useState(false); // Modal xác nhận đóng
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll xuống cuối khung chat mỗi khi nội dung cập nhật
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedFeedbackForChat?.chiTietPhanHoi]);
+
+  // Cập nhật lại khung chat nếu có tin nhắn mới từ API
+  useEffect(() => {
+    if (selectedFeedbackForChat) {
+      const updated = myFeedbacks.find((fb) => fb.id === selectedFeedbackForChat.id);
+      if (updated) setSelectedFeedbackForChat(updated);
+    }
+  }, [myFeedbacks]);
+
+  // Gửi tin nhắn Reply
+  const handleReplyFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyMessage.trim() || !selectedFeedbackForChat) return;
+
+    try {
+      setIsReplying(true);
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          feedbackId: selectedFeedbackForChat.id,
+          replyContent: replyMessage,
+          sender: "customer",
+        }),
+      });
+      if (!res.ok) throw new Error("API lỗi");
+      setReplyMessage("");
+      await fetchMyFeedbacks(); // Reload lại tin nhắn
+    } catch (err) {
+      triggerToast("Lỗi gửi tin nhắn");
+    } finally {
+      setIsReplying(false);
+    }
+  };
+
+  // Đánh dấu hoàn thành
+  const handleCompleteFeedback = async () => {
+    if (!selectedFeedbackForChat) return;
+    try {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/complete/${selectedFeedbackForChat.id}`, {
+        method: "PUT",
+      });
+      if (!res.ok) throw new Error("Lỗi");
+      triggerToast("Đã đánh dấu hoàn thành!");
+      setShowConfirmCompleteModal(false);
+      await fetchMyFeedbacks(); // Reload danh sách
+    } catch (err) {
+      triggerToast("Lỗi cập nhật trạng thái");
+    }
+  };
+
+  const renderChatHistory = (jsonStr?: string) => {
+    if (!jsonStr || jsonStr === "null") return null;
+    try {
+      const messages: ChatMessage[] = JSON.parse(jsonStr);
+      return messages.map((msg, idx) => (
+        <div key={idx} className={`flex w-full mb-4 ${msg.sender === "customer" ? "justify-end" : "justify-start"}`}>
+          <div
+            className={`max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm text-[13px] ${
+              msg.sender === "customer"
+                ? "bg-blue-600 text-white rounded-tr-none"
+                : msg.sender === "admin"
+                  ? "bg-amber-100 text-amber-900 border border-amber-200 rounded-tl-none font-medium"
+                  : "bg-white text-slate-700 border border-slate-200 rounded-tl-none"
+            }`}
+          >
+            <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+            <p className={`text-[10px] mt-1.5 ${msg.sender === "customer" ? "text-blue-200 text-right" : "text-slate-400"}`}>
+              {msg.sender === "admin" ? "👨‍💼 Ban Giám Đốc • " : msg.sender === "support" ? "🎧 CSKH • " : ""}
+              {msg.time}
+            </p>
+          </div>
+        </div>
+      ));
+    } catch (e) {
+      return <div className="text-center text-xs text-slate-400">Lỗi hiển thị nội dung chat.</div>;
+    }
+  };
+
   // States cho Form Modal Booking
   const [bookModal, setBookModal] = useState<{ isOpen: boolean; type: "vaccine" | "schedule"; data: any }>({
     isOpen: false,
@@ -222,6 +322,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       if (!res.ok) throw new Error("API trả về lỗi");
       triggerToast(feedbackType === "after_vaccine" ? "Gửi thành công" : "Phản hồi gửi đi thành công.");
       handleCancelFeedback();
+      setActiveTab("my_feedbacks"); // Tự động chuyển qua tab lịch sử để chat
     } catch (error) {
       if (error !== "Unauthorized") triggerToast(feedbackType === "after_vaccine" ? "Gửi thất bại" : "Phản hồi gửi thất bại");
     }
@@ -282,6 +383,39 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   const currentVaccines = filteredVaccines.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   const getVaccineTypeCount = (type: string) => (type === "Tất cả" ? vaccines.length : vaccines.filter((v) => v.loaiVacXin === type).length);
 
+  // --- LỌC, NHÓM VÀ SẮP XẾP FEEDBACKS ---
+  const uniqueFeedbackStatuses = ["Tất cả", ...Array.from(new Set(myFeedbacks.map((f) => f.status).filter(Boolean)))];
+  const filteredFeedbacks = myFeedbacks.filter(
+    (fb) => feedbackStatusFilter === "Tất cả" || fb.status === feedbackStatusFilter
+  );
+
+  const groupedFeedbacks = filteredFeedbacks.reduce((acc, fb) => {
+    const status = fb.status || "Chưa xác định";
+    if (!acc[status]) acc[status] = [];
+    acc[status].push(fb);
+    return acc;
+  }, {} as Record<string, MyFeedbackType[]>);
+
+  // Sort each group by time (Mới nhất lên trên)
+  Object.keys(groupedFeedbacks).forEach((status) => {
+    groupedFeedbacks[status].sort((a, b) => {
+      const tA = new Date(a.time).getTime();
+      const tB = new Date(b.time).getTime();
+      if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
+      return (b.time || "").localeCompare(a.time || ""); // Fallback
+    });
+  });
+
+  const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
+  const sortedStatuses = Object.keys(groupedFeedbacks).sort((a, b) => {
+    const indexA = statusOrder.indexOf(a);
+    const indexB = statusOrder.indexOf(b);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA === -1 && indexB !== -1) return 1;
+    if (indexA !== -1 && indexB === -1) return -1;
+    return a.localeCompare(b);
+  });
+
   return (
     <>
       <div className="space-y-6 animate-fade-in h-full flex flex-col">
@@ -304,7 +438,10 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => {
+                setActiveTab(tab.id as any);
+                if (tab.id !== "my_feedbacks") setSelectedFeedbackForChat(null);
+              }}
               className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
                 activeTab === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
               }`}
@@ -445,10 +582,9 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                       currentVaccines.map(
                         (
                           v,
-                          index, // THÊM index Ở ĐÂY
+                          index,
                         ) => (
                           <tr key={v.maVacXin} className="hover:bg-slate-50/50">
-                            {/* SỬA CỘT NÀY THÀNH STT */}
                             <td className="px-2 sm:px-3 py-3.5 font-mono text-slate-400 break-words text-center font-bold">
                               {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                             </td>
@@ -847,59 +983,209 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
             </div>
           )}
 
-          {/* ======================= TAB 7: MY FEEDBACKS ======================= */}
+          {/* ======================= TAB 7: MY FEEDBACKS (TÍCH HỢP CHAT) ======================= */}
           {activeTab === "my_feedbacks" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col max-w-5xl mx-auto h-[600px] animate-fade-in">
-              <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[600px] max-w-6xl mx-auto animate-fade-in overflow-hidden">
+              <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
                 <div>
                   <h3 className="font-bold text-slate-800 text-sm">Thắc mắc của tôi</h3>
                   <p className="text-xs text-slate-500 mt-1">Theo dõi quá trình giải quyết khiếu nại</p>
                 </div>
                 <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">{myFeedbacks.length} bản ghi</span>
               </div>
-              <div className="overflow-y-auto p-6 space-y-4">
-                {myFeedbacks.length > 0 ? (
-                  myFeedbacks.map((fb) => (
-                    <div key={fb.id} className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                      <div className="bg-slate-50 px-4 py-3 flex justify-between items-center border-b border-slate-100">
-                        <div className="flex gap-2 items-center">
-                          <span className="font-mono text-xs text-slate-500">{fb.id}</span>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${fb.type === "Cấp cao" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}
-                          >
-                            {fb.type}
-                          </span>
+
+              <div className="flex flex-1 min-h-0">
+                {/* --- CỘT TRÁI: DANH SÁCH THẮC MẮC --- */}
+                <div className={`w-full lg:w-2/5 border-r border-slate-100 flex-col bg-white ${selectedFeedbackForChat ? "hidden lg:flex" : "flex"}`}>
+                  
+                  {/* Filter Header */}
+                  <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2 shrink-0">
+                    <Filter className="w-4 h-4 text-slate-400" />
+                    <select
+                      value={feedbackStatusFilter}
+                      onChange={(e) => setFeedbackStatusFilter(e.target.value)}
+                      className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-500"
+                    >
+                      {uniqueFeedbackStatuses.map((status) => (
+                        <option key={status} value={status}>
+                          {status} ({status === "Tất cả" ? myFeedbacks.length : myFeedbacks.filter((f) => f.status === status).length})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Lọc, nhóm theo status & Sắp xếp */}
+                  <div className="overflow-y-auto flex-1 p-2 bg-slate-50/20">
+                    {sortedStatuses.length > 0 ? (
+                      sortedStatuses.map((status) => (
+                        <div key={status} className="mb-4">
+                          <div className="sticky top-0 bg-white/95 backdrop-blur py-1.5 px-3 mb-2 border border-slate-100 rounded-lg shadow-sm z-10 flex justify-between items-center">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{status}</span>
+                            <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+                              {groupedFeedbacks[status].length}
+                            </span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {groupedFeedbacks[status].map((fb) => {
+                              // Thêm màu sắc cho trạng thái
+                              const statusColor = 
+                                fb.status === "Đã hoàn thành" ? "bg-slate-100 text-slate-500 border-slate-200" :
+                                fb.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
+                                "bg-red-50 text-red-600 border-red-200";
+
+                              return (
+                                <div
+                                  key={fb.id}
+                                  onClick={() => setSelectedFeedbackForChat(fb)}
+                                  className={`p-3 cursor-pointer rounded-xl transition-all border ${
+                                    selectedFeedbackForChat?.id === fb.id
+                                      ? "bg-blue-50 border-blue-300 shadow-md"
+                                      : "bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm"
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-center mb-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-mono text-[11px] font-bold text-slate-500">{fb.id}</span>
+                                      <span
+                                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                          fb.type === "Cấp cao" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+                                        }`}
+                                      >
+                                        {fb.type}
+                                      </span>
+                                    </div>
+                                    {/* Thay đổi màu trạng thái ở góc trên bên phải của card */}
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${statusColor}`}>
+                                      {fb.status}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">{fb.content}</p>
+                                  <div className="text-[10px] text-slate-400 mt-1.5 flex justify-end">
+                                    {fb.time?.split(" ")[0]}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <span
-                          className={`text-xs font-bold px-2.5 py-1 rounded-md border ${fb.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-red-50 text-red-600 border-red-200"}`}
-                        >
-                          {fb.status}
-                        </span>
+                      ))
+                    ) : (
+                      <div className="text-center py-16 flex flex-col items-center justify-center">
+                        <MessageSquare className="w-10 h-10 text-slate-200 mb-3" />
+                        <p className="text-slate-400 text-sm">Không tìm thấy thắc mắc nào.</p>
                       </div>
-                      <div className="p-4 bg-white space-y-4">
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Nội dung tôi đã gửi:</p>
-                          <p className="text-sm text-slate-800 italic bg-slate-50 p-3 rounded-lg border border-slate-100">"{fb.content}"</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* --- CỘT PHẢI: KHUNG CHAT LỊCH SỬ --- */}
+                <div className={`w-full lg:w-3/5 flex-col bg-slate-50/50 min-h-0 ${!selectedFeedbackForChat ? "hidden lg:flex" : "flex"}`}>
+                  {!selectedFeedbackForChat ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+                      <MessageSquare className="w-12 h-12 mb-3 text-slate-200" />
+                      <p className="text-sm">Chọn một thắc mắc để xem chi tiết và trao đổi</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col h-full min-h-0 relative">
+                      {/* Chat Header */}
+                      <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center shrink-0 shadow-sm z-10">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => setSelectedFeedbackForChat(null)}
+                            className="lg:hidden p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                          >
+                            <ArrowLeft className="w-4 h-4" />
+                          </button>
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                              Phiên trao đổi #{selectedFeedbackForChat.id}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 mt-0.5">Mở ngày: {selectedFeedbackForChat.time}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Trung tâm phản hồi:</p>
-                          {fb.status === "Đã trả lời" ? (
-                            <p className="text-sm text-blue-800 bg-blue-50 p-3 rounded-lg border border-blue-100 whitespace-pre-wrap">
-                              {fb.responseText}
-                            </p>
-                          ) : (
-                            <p className="text-sm text-slate-400 italic">Đang chờ nhân viên hỗ trợ xét duyệt...</p>
-                          )}
+
+                        {selectedFeedbackForChat.status !== "Đã hoàn thành" ? (
+                          <button
+                            onClick={() => setShowConfirmCompleteModal(true)}
+                            className="px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Hài lòng & Đóng
+                          </button>
+                        ) : (
+                          // Trạng thái disable không đổi nội dung text
+                          <button
+                            disabled
+                            className="px-3 py-1.5 bg-slate-100 text-slate-400 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-not-allowed opacity-70"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Hài lòng & Đóng
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Modal Xác nhận Đóng Ticket */}
+                      {showConfirmCompleteModal && (
+                        <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+                          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col">
+                            <div className="p-5 text-center">
+                              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <CheckCircle2 className="w-6 h-6" />
+                              </div>
+                              <h3 className="font-bold text-lg text-slate-800 mb-1">Xác nhận đóng phiên hỗ trợ</h3>
+                              <p className="text-sm text-slate-500">
+                                Bạn đã hài lòng với câu trả lời và muốn đóng thắc mắc <span className="font-semibold text-slate-700">#{selectedFeedbackForChat.id}</span> này lại?
+                              </p>
+                            </div>
+                            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+                              <button
+                                onClick={() => setShowConfirmCompleteModal(false)}
+                                className="px-4 py-2 bg-white border border-slate-300 text-slate-600 font-semibold text-xs rounded-lg hover:bg-slate-100 transition-colors"
+                              >
+                                Hủy bỏ
+                              </button>
+                              <button
+                                onClick={handleCompleteFeedback}
+                                className="px-4 py-2 bg-emerald-600 text-white font-semibold text-xs rounded-lg hover:bg-emerald-700 transition-colors"
+                              >
+                                Xác nhận đóng
+                              </button>
+                            </div>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Chat Messages */}
+                      <div className="flex-1 overflow-y-auto min-h-0 p-4 bg-slate-50">
+                        {renderChatHistory(selectedFeedbackForChat.chiTietPhanHoi)}
+                        <div ref={chatEndRef} />
+                      </div>
+
+                      {/* Chat Input */}
+                      <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                        {selectedFeedbackForChat.status === "Đã hoàn thành" ? (
+                          <div className="text-center text-xs text-slate-400 italic py-2">Cuộc trao đổi này đã kết thúc.</div>
+                        ) : (
+                          <form onSubmit={handleReplyFeedback} className="flex gap-2">
+                            <input
+                              type="text"
+                              required
+                              value={replyMessage}
+                              onChange={(e) => setReplyMessage(e.target.value)}
+                              placeholder="Nhập phản hồi thêm của bạn..."
+                              className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-500 focus:bg-white transition-all"
+                            />
+                            <button
+                              type="submit"
+                              disabled={isReplying || !replyMessage.trim()}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm cursor-pointer"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                          </form>
+                        )}
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-16">
-                    <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                    <p className="text-slate-500 font-medium">Bạn chưa gửi thắc mắc hay khiếu nại nào.</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
           )}

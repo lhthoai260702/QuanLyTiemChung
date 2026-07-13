@@ -1,6 +1,6 @@
 // src/components/FinanceModule.tsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Invoice, Vaccine, SystemLog } from "../types";
@@ -33,11 +33,10 @@ interface FinanceModuleProps {
   triggerToast: (msg: string) => void;
 }
 
-// Model tương ứng với DTO CustomerTransactionProjection
 export interface CustomerTransaction {
   id: string;
   date: string;
-  vaccineCode: string; // Bản chất là Tên vắc-xin do query SQL gán Alias
+  vaccineCode: string;
   quantity: number;
   customerName: string;
   price: number;
@@ -75,6 +74,7 @@ interface ItemDB {
   id: number;
   name: string;
 }
+
 interface VacXinDB extends ItemDB {
   loaiVacXin?: any;
   hamLuong: string;
@@ -85,10 +85,11 @@ interface VacXinDB extends ItemDB {
 }
 
 export default function FinanceModule({ invoices, setInvoices, vaccines, systemLogs, setSystemLogs, triggerToast }: FinanceModuleProps) {
-  // Thay đổi tab mặc định thành customer_tx và xóa 'account_info'
-  const [activeTab, setActiveTab] = useState<"customer_tx" | "supplier_tx" | "pricing">("customer_tx");
+  // --- STATE: TABS ---
+  const [activeTab, setActiveTab] = useState<"overview" | "customer_tx" | "supplier_tx" | "pricing">("overview");
   const navigate = useNavigate();
 
+  // --- FORMAT CURRENCY ---
   const formatCurrencyInput = (value: number | undefined) => {
     if (!value || value === 0) return "";
     return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
@@ -100,6 +101,24 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   const [loaiVacXinList, setLoaiVacXinList] = useState<ItemDB[]>([]);
   const [vacXinCatalog, setVacXinCatalog] = useState<VacXinDB[]>([]);
   const [supplierList, setSupplierList] = useState<ItemDB[]>([]);
+
+  // ==========================================
+  // STATE: BÁO CÁO THU CHI (OVERVIEW)
+  // ==========================================
+  const [summaryStartDate, setSummaryStartDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}-01`;
+  });
+  
+  const [summaryEndDate, setSummaryEndDate] = useState(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+    return `${y}-${m}-${lastDay}`;
+  });
 
   // ==========================================
   // STATE: POPUP XÁC NHẬN XÓA (MODAL)
@@ -267,13 +286,39 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   };
 
   useEffect(() => {
-    if (activeTab === "pricing") fetchVaccinePrices();
-    else if (activeTab === "customer_tx") fetchCustomerTransactions();
-    else if (activeTab === "supplier_tx") {
+    if (activeTab === "pricing") {
+      fetchVaccinePrices();
+    } else if (activeTab === "customer_tx") {
+      fetchCustomerTransactions();
+    } else if (activeTab === "supplier_tx") {
       fetchSupplierTransactions();
       fetchMetadata();
+    } else if (activeTab === "overview") {
+      fetchCustomerTransactions();
+      fetchSupplierTransactions();
     }
   }, [activeTab]);
+
+  // ==========================================
+  // LOGIC TÍNH TỔNG THU - CHI (OVERVIEW)
+  // ==========================================
+  const summaryRevenue = useMemo(() => {
+    return customerTxs.reduce((total, tx) => {
+      if (tx.date >= summaryStartDate && tx.date <= summaryEndDate) {
+        return total + (tx.price || 0);
+      }
+      return total;
+    }, 0);
+  }, [customerTxs, summaryStartDate, summaryEndDate]);
+
+  const summaryExpenditure = useMemo(() => {
+    return supplierTxs.reduce((total, tx) => {
+      if (tx.ngayNhan >= summaryStartDate && tx.ngayNhan <= summaryEndDate) {
+        return total + (tx.tongTien || 0);
+      }
+      return total;
+    }, 0);
+  }, [supplierTxs, summaryStartDate, summaryEndDate]);
 
   // ==========================================
   // HANDLER POPUP XÓA CHUNG
@@ -367,7 +412,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   };
 
   // ==========================================
-  // HANDLERS: NHÀ CUNG CẤP (SỬ DỤNG FORM NHƯ INVENTORY)
+  // HANDLERS: NHÀ CUNG CẤP
   // ==========================================
   const resetSupplierForm = () => {
     setSupplierForm({ soLuong: 0, donGia: 0, tongTien: 0, tinhTrang: "Bình thường" });
@@ -545,7 +590,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   };
 
   // ==========================================
-  // HANDLERS: QUẢN LÝ GIÁ VẮC XIN (CONNECT DB)
+  // HANDLERS: QUẢN LÝ GIÁ VẮC XIN
   // ==========================================
   const resetPriceForm = () => {
     setPriceForm({ id: "", name: "", dosage: "", year: "", price: 0 });
@@ -622,8 +667,14 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         <p className="text-sm text-slate-500 mt-1">Quản lý thống kê các giao dịch với khách hàng, nhà cung cấp và niêm yết giá vắc-xin.</p>
       </div>
 
-      {/* Tabs list - Đã bỏ tab account_info */}
+      {/* Tabs list */}
       <div className="border-b border-slate-200 flex space-x-2">
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "overview" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+        >
+          <Activity className="w-4 h-4" /> Báo cáo Thu Chi
+        </button>
         <button
           onClick={() => setActiveTab("customer_tx")}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "customer_tx" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
@@ -646,6 +697,77 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
           <Tag className="w-4 h-4" /> Quản lý giá vắc xin
         </button>
       </div>
+
+      {/* ========================================================================= */}
+      {/* TAB: BÁO CÁO THU CHI (OVERVIEW) */}
+      {/* ========================================================================= */}
+      {activeTab === "overview" && (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-end">
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-bold text-slate-700 mb-1">Từ ngày</label>
+              <input 
+                type="date" 
+                value={summaryStartDate} 
+                onChange={(e) => setSummaryStartDate(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500"
+              />
+            </div>
+            <div className="flex-1 w-full">
+              <label className="block text-xs font-bold text-slate-700 mb-1">Đến ngày</label>
+              <input 
+                type="date" 
+                value={summaryEndDate} 
+                onChange={(e) => setSummaryEndDate(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg">
+                  <TrendingUp className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Tổng Thu (Khách hàng)</h3>
+              </div>
+              <p className="text-2xl font-extrabold text-emerald-600">{formatCurrency(summaryRevenue)} VNĐ</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 bg-rose-100 text-rose-600 rounded-lg">
+                  <Banknote className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Tổng Chi (Nhập kho)</h3>
+              </div>
+              <p className="text-2xl font-extrabold text-rose-600">{formatCurrency(summaryExpenditure)} VNĐ</p>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 bg-blue-100 text-blue-600 rounded-lg">
+                  <DollarSign className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Lợi Nhuận</h3>
+              </div>
+              <p className={`text-2xl font-extrabold ${summaryRevenue - summaryExpenditure >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                {formatCurrency(summaryRevenue - summaryExpenditure)} VNĐ
+              </p>
+            </div>
+          </div>
+          
+          {/* <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
+            <p className="font-semibold flex items-center gap-2"><Activity className="w-4 h-4"/> Ghi chú dữ liệu:</p>
+            <ul className="list-disc ml-5 mt-2 space-y-1">
+              <li><strong>Tổng Thu:</strong> Tính từ các hóa đơn giao dịch với khách hàng dựa trên "Ngày xuất/tiêm".</li>
+              <li><strong>Tổng Chi:</strong> Tính từ các hóa đơn nhập kho vắc-xin với nhà cung cấp dựa trên "Ngày nhận lô".</li>
+              <li>Sử dụng thanh chọn thời gian bên trên để tùy chỉnh giới hạn khoảng thời gian muốn xem báo cáo.</li>
+            </ul>
+          </div> */}
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* TAB 1: GIAO DỊCH KHÁCH HÀNG */}

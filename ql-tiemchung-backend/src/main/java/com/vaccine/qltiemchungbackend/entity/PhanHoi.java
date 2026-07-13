@@ -5,16 +5,6 @@ import lombok.Data;
 
 import java.time.LocalDate;
 
-/**
- * PhanHoi
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @Entity
 @Table(name = "PHANHOI")
 @Data
@@ -25,11 +15,9 @@ public class PhanHoi {
     @Column(name = "MaPhanHoi")
     private Long maPhanHoi;
 
-    // Khóa ngoại trỏ tới bảng LOAIPHANHOI (dùng Long để đơn giản hóa quá trình Insert Native Query)
     @Column(name = "MaLoaiPhanHoi")
     private Long maLoaiPhanHoi;
 
-    // Khóa ngoại trỏ tới bảng BENHNHAN
     @Column(name = "MaBenhNhan")
     private Long maBenhNhan;
 
@@ -47,6 +35,12 @@ public class PhanHoi {
 
     @Column(name = "DiaDiemTiem")
     private String diaDiemTiem;
+
+    @Column(name = "TrangThai")
+    private String trangThai = "Đang xử lý";
+
+    @Column(name = "ChiTietPhanHoi", columnDefinition = "TEXT")
+    private String chiTietPhanHoi;
 
     @Column(name = "flag_delete")
     private Boolean flagDelete = false;

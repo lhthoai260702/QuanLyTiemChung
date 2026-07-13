@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
@@ -18,6 +18,8 @@ import {
   MessageSquare,
   Send,
   AlertCircle,
+  CheckCircle2,
+  Filter
 } from "lucide-react";
 
 // --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
@@ -41,13 +43,12 @@ export interface TaiKhoan {
 }
 
 export interface NguoiDangKy {
-  stt: number;
   maBenhNhan: string;
   tenBenhNhan: string;
   ngaySinh: string;
   gioiTinh: string;
   sdt: string;
-  trangThaiTiem: "Chờ khám sàng lọc" | "Đủ điều kiện tiêm" | "Đã tiêm" | "Đã hủy";
+  trangThaiTiem: "Chưa tiêm" | "Chờ khám sàng lọc" | "Đủ điều kiện tiêm" | "Đã tiêm" | "Đã hủy";
 }
 
 export interface SupportTicket {
@@ -55,10 +56,17 @@ export interface SupportTicket {
   customerName: string;
   comments: string;
   email: string;
-  status: "Chưa giải quyết" | "Đã giải quyết";
+  status: string;
   type?: string;
   responseText?: string;
   time?: string;
+  chiTietPhanHoi?: string; // Bổ sung trường này để lưu lịch sử Chat
+}
+
+interface ChatMessage {
+  sender: "customer" | "admin" | "support";
+  message: string;
+  time: string;
 }
 
 export interface LichTiemChungSRS {
@@ -94,44 +102,77 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   // --- STATE CHO POPUP XÓA ---
   const [itemToDelete, setItemToDelete] = useState<{ id: string | number; type: "account" | "schedule"; name?: string } | null>(null);
 
-  // --- STATE CHO TAB PHẢN HỒI CẤP CAO ---
+  // --- STATE CHO TAB PHẢN HỒI CẤP CAO (DẠNG CHAT) ---
   const [ticketsList, setTicketsList] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [ticketResponse, setTicketResponse] = useState("");
   const [ticketErrors, setTicketErrors] = useState<Record<string, string>>({});
   const [isTicketsLoading, setIsTicketsLoading] = useState(false);
+  const [isReplying, setIsReplying] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   // --- STATE TÌM KIẾM, LỌC & PHÂN TRANG (Tài khoản) ---
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 20;
 
+  // THÊM ĐOẠN STATE MỚI NÀY VÀO ĐỂ LỌC TRẠNG THÁI:
+  const [ticketStatusFilter, setTicketStatusFilter] = useState<string>("Tất cả");
+
+  // --- LOGIC LỌC, NHÓM VÀ SẮP XẾP TICKETS (GIỐNG SUPPORT) ---
+  const uniqueTicketStatuses = ["Tất cả", ...Array.from(new Set(ticketsList.map((t) => t.status).filter(Boolean)))];
+
+  const filteredTickets = ticketsList.filter((t) => {
+    const matchesSearch = t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || String(t.id).toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = ticketStatusFilter === "Tất cả" || t.status === ticketStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const groupedTickets = filteredTickets.reduce((acc, ticket) => {
+    const status = ticket.status || "Chưa xác định";
+    if (!acc[status]) acc[status] = [];
+    acc[status].push(ticket);
+    return acc;
+  }, {} as Record<string, SupportTicket[]>);
+
+  // Sắp xếp mỗi nhóm theo thời gian (Mới nhất lên trên)
+  Object.keys(groupedTickets).forEach((status) => {
+    groupedTickets[status].sort((a, b) => {
+      const tA = new Date(a.time || "").getTime();
+      const tB = new Date(b.time || "").getTime();
+      if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
+      return (b.time || "").localeCompare(a.time || "");
+    });
+  });
+
+  const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
+  const sortedStatuses = Object.keys(groupedTickets).sort((a, b) => {
+    const indexA = statusOrder.indexOf(a);
+    const indexB = statusOrder.indexOf(b);
+    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+    if (indexA === -1 && indexB !== -1) return 1;
+    if (indexA !== -1 && indexB === -1) return -1;
+    return a.localeCompare(b);
+  });
+
   // =========================================================================
   // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
   // =========================================================================
-
-  // 1. Chặn người dùng nếu chưa đăng nhập (Không có token)
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
       triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
-      navigate("/"); // Đẩy về trang Login
+      navigate("/");
     }
   }, [navigate, triggerToast]);
 
-  // 2. Hàm Fetch đính kèm Token tự động cho mọi Request
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
-
-    // Gộp headers cũ với Authorization header mới
     const headers = {
       ...options.headers,
       Authorization: `Bearer ${token}`,
     };
-
     const response = await fetch(url, { ...options, headers });
-
-    // Nếu Backend báo lỗi 401 (Unauthorized) hoặc 403 (Forbidden) -> Token hết hạn/Sai quyền
     if (response.status === 401 || response.status === 403) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
@@ -139,11 +180,12 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
       return Promise.reject("Unauthorized");
     }
-
     return response;
   };
 
-  // HÀM CALL API LẤY DANH SÁCH USER
+  // =========================================================================
+  // API FETCH: ACCOUNTS
+  // =========================================================================
   const fetchAccounts = async () => {
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts`);
@@ -163,9 +205,11 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (activeTab === "accounts") fetchAccounts();
   }, [activeTab]);
 
+  // =========================================================================
+  // API FETCH: SCHEDULES
+  // =========================================================================
   const [schedules, setSchedules] = useState<LichTiemChungSRS[]>([]);
 
-  // HÀM CALL API LẤY DANH SÁCH LỊCH TIÊM
   const fetchSchedules = async () => {
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
@@ -187,7 +231,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     }
   }, [activeTab]);
 
-  // HÀM CALL API LẤY DANH SÁCH PHẢN HỒI CẤP CAO
+  // =========================================================================
+  // API FETCH: TICKETS CẤP CAO
+  // =========================================================================
   const fetchHighLevelTickets = async () => {
     setIsTicketsLoading(true);
     try {
@@ -212,6 +258,22 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     }
   }, [activeTab]);
 
+  // Cập nhật Chat View khi có tin nhắn mới
+  useEffect(() => {
+    if (selectedTicket) {
+      const updated = ticketsList.find((t) => t.id === selectedTicket.id);
+      if (updated) setSelectedTicket(updated);
+    }
+  }, [ticketsList]);
+
+  // Tự động cuộn xuống tin nhắn cuối
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedTicket?.chiTietPhanHoi]);
+
+  // =========================================================================
+  // XỬ LÝ GIAO DIỆN LỊCH TIÊM CHỦNG
+  // =========================================================================
   const [selectedSchedule, setSelectedSchedule] = useState<LichTiemChungSRS | null>(null);
   const [scheduleSearchStartDate, setScheduleSearchStartDate] = useState<string>("");
   const [scheduleSearchEndDate, setScheduleSearchEndDate] = useState<string>("");
@@ -250,6 +312,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const [editingAccountId, setEditingAccountId] = useState<number | string | null>(null);
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
 
+  // =========================================================================
+  // XỬ LÝ FORM TÀI KHOẢN
+  // =========================================================================
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [accForm, setAccForm] = useState({
     tenDangNhap: "",
@@ -346,6 +411,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE) || 1;
   const currentAccounts = filteredAccounts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
+  // =========================================================================
+  // XỬ LÝ FORM LỊCH TIÊM CHỦNG
+  // =========================================================================
   const [showAddSchedule, setShowAddSchedule] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
     dateInput: "",
@@ -419,7 +487,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const [scheduleErrors, setScheduleErrors] = useState<Record<string, string>>({});
   const handleDateChange = (dateStr: string) => setScheduleForm({ ...scheduleForm, dateInput: dateStr });
 
-  // --- LOGIC XỬ LÝ CLICK XÓA MỞ POPUP ---
+  // =========================================================================
+  // LOGIC XÓA (DELETE)
+  // =========================================================================
   const handleDeleteScheduleClick = (sch: LichTiemChungSRS) => {
     setItemToDelete({
       id: sch.maLichTiem,
@@ -442,7 +512,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (itemToDelete.type === "schedule") {
       const numericId = String(itemToDelete.id).replace("LTC", "");
       try {
-        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}api/admin/schedules/${numericId}`, {
+        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules/${numericId}`, {
           method: "DELETE",
         });
         if (response.ok) {
@@ -473,25 +543,16 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       }
     }
 
-    setItemToDelete(null); // Đóng popup dù thành công hay thất bại
+    setItemToDelete(null); 
   };
 
+  // =========================================================================
+  // RESET FORMS
+  // =========================================================================
   const resetAccountForm = () => {
     setAccForm({
-      tenDangNhap: "",
-      matKhau: "",
-      maQuyen: 5,
-      hoTen: "",
-      cmnd: "",
-      noiO: "",
-      moTa: "",
-      email: "",
-      namSinh: "",
-      sdt: "",
-      ngaySinh: "",
-      diaChi: "",
-      nguoiGiamHo: "",
-      gioiTinh: "Nam",
+      tenDangNhap: "", matKhau: "", maQuyen: 5, hoTen: "", cmnd: "", noiO: "", moTa: "",
+      email: "", namSinh: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
     });
     setAccErrors({});
     setEditingAccountId(null);
@@ -500,22 +561,17 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
 
   const resetScheduleForm = () => {
     setScheduleForm({
-      dateInput: "",
-      thoiGian: "",
-      maLoaiVacXin: 0,
-      loaiVacXinName: "",
-      maVacXin: 0,
-      soLuong: 0,
-      doTuoi: "",
-      diaDiem: "",
-      ghiChu: "",
-      selectedDoctors: [],
+      dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
+      soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [],
     });
     setScheduleErrors({});
     setEditingScheduleId(null);
     setShowAddSchedule(false);
   };
 
+  // =========================================================================
+  // EDIT FORMS
+  // =========================================================================
   const handleEditAccount = (acc: TaiKhoan) => {
     let formattedPhone = acc.sdt ? acc.sdt.replace(/\D/g, "") : "";
     if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
@@ -562,6 +618,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     setShowAddSchedule(true);
   };
 
+  // =========================================================================
+  // SAVE FORMS
+  // =========================================================================
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
@@ -577,7 +636,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (!accForm.hoTen.trim()) newErrors.hoTen = "Vui lòng nhập họ và tên";
     if (!accForm.cmnd) newErrors.cmnd = "Vui lòng nhập CCCD/CMND";
 
-    // Validate Email
     if (!accForm.email.trim()) {
       newErrors.email = "Vui lòng nhập email";
     } else if (!/^\S+@\S+\.\S+$/.test(accForm.email)) {
@@ -624,7 +682,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
           if (currentUserStr) {
             try {
               const currentUser = JSON.parse(currentUserStr);
-              // Đối chiếu tenDangNhap của tài khoản đang sửa với tenDangNhap đang đăng nhập
               if (currentUser.tenDangNhap === accForm.tenDangNhap || currentUser.username === accForm.tenDangNhap) {
                 if (onNameChange) {
                   onNameChange(accForm.hoTen);
@@ -702,50 +759,81 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     }
   };
 
+  // =========================================================================
+  // XỬ LÝ CHAT ADMIN CHO PHẢN HỒI CẤP CAO
+  // =========================================================================
   const selectTicketForProcessing = (t: SupportTicket) => {
     setSelectedTicket(t);
-    setTicketResponse(t.responseText || "");
-    setTicketErrors({});
-  };
-
-  const handleCancelTicket = () => {
-    setSelectedTicket(null);
     setTicketResponse("");
     setTicketErrors({});
   };
 
   const handleProcessTicket = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTicket) return;
-
-    const errors: Record<string, string> = {};
-    if (!ticketResponse.trim()) {
-      errors.response = "Bắt buộc nhập nội dung trả lời";
-    }
-    if (Object.keys(errors).length > 0) {
-      setTicketErrors(errors);
-      return;
-    }
+    if (!selectedTicket || !ticketResponse.trim()) return;
 
     try {
-      const rawId = String(selectedTicket.id).replace("PHCC-", "");
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/admin/feedback/high-level/resolve/${rawId}`, {
+      setIsReplying(true);
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ normalContent: ticketResponse }),
+        body: JSON.stringify({
+          feedbackId: selectedTicket.id, 
+          replyContent: ticketResponse,
+          sender: "admin", 
+        }),
       });
 
       if (res.ok) {
-        triggerToast("Đã gửi câu trả lời thành công!");
-        setSelectedTicket(null);
-        fetchHighLevelTickets();
+        setTicketResponse("");
+        await fetchHighLevelTickets(); 
       } else {
         triggerToast("Lỗi gửi phản hồi.");
       }
     } catch (err) {
       if (err !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ.");
+    } finally {
+      setIsReplying(false);
     }
   };
+
+  const handleCompleteTicket = async () => {
+    if (!selectedTicket) return;
+    try {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/complete/${selectedTicket.id}`, { method: "PUT" });
+      if (res.ok) {
+        triggerToast("Đã đóng phản hồi thành công!");
+        await fetchHighLevelTickets();
+      }
+    } catch (err) {
+      triggerToast("Lỗi cập nhật trạng thái");
+    }
+  };
+
+  const renderChatHistory = (jsonStr?: string) => {
+    if (!jsonStr || jsonStr === "null") return null;
+    try {
+      const messages: ChatMessage[] = JSON.parse(jsonStr);
+      return messages.map((msg, idx) => {
+        const isMe = msg.sender === "admin";
+        return (
+          <div key={idx} className={`flex w-full mb-4 ${isMe ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm text-[13px] ${isMe ? "bg-amber-600 text-white rounded-tr-none" : "bg-white text-slate-700 border border-slate-200 rounded-tl-none"}`}>
+              {msg.sender === "customer" && <p className="text-[10px] font-bold text-slate-400 mb-1">Khách hàng VIP</p>}
+              <p className="whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+              <p className={`text-[10px] mt-1.5 ${isMe ? "text-amber-200 text-right" : "text-slate-400"}`}>
+                {msg.sender === "admin" ? "👨‍💼 Bạn (Ban Giám Đốc) • " : msg.sender === "support" ? "🎧 Nhân viên CSKH • " : ""}
+                {msg.time}
+              </p>
+            </div>
+          </div>
+        );
+      });
+    } catch (e) {
+      return <div className="text-center text-xs text-slate-400">Lỗi hiển thị nội dung chat.</div>;
+    }
+  };
+
 
   return (
     <div className="space-y-6 animate-fade-in relative h-full flex flex-col">
@@ -770,7 +858,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
           <CalendarDays className="w-4 h-4" /> Quản lý Lịch tiêm chủng
         </button>
         <button
-          onClick={() => setActiveTab("feedback")}
+          onClick={() => { setActiveTab("feedback"); setSelectedTicket(null); }}
           className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === "feedback" ? "border-amber-500 text-amber-600" : "border-transparent text-slate-500 hover:text-slate-800"}`}
         >
           <MessageSquare className="w-4 h-4" /> Duyệt phản hồi cấp cao
@@ -1502,10 +1590,58 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
                       )}
                     </div>
                   </div>
+
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold text-slate-500 uppercase">📝 Nhật ký (Ghi chú)</label>
                     <div className="bg-amber-50/50 border border-amber-200/60 p-3 rounded-lg text-xs text-slate-700 leading-relaxed whitespace-pre-line">
                       {selectedSchedule.ghiChu || "Không có ghi chú."}
+                    </div>
+                  </div>
+
+                  {/* BẢNG DANH SÁCH BỆNH NHÂN ĐĂNG KÝ (MỚI THÊM) */}
+                  <div className="mt-6 pt-4 border-t border-slate-200">
+                    <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center justify-between">
+                        Danh sách khách hàng đăng ký 
+                        <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">{selectedSchedule.danhSachNguoiDangKy?.length || 0} lượt ĐK</span>
+                    </h4>
+                    
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                              <thead className="bg-slate-50 border-b border-slate-200">
+                                  <tr className="text-slate-500 font-bold uppercase tracking-wider">
+                                      <th className="px-4 py-2.5">STT</th>
+                                      <th className="px-4 py-2.5">Mã KH</th>
+                                      <th className="px-4 py-2.5">Họ và Tên</th>
+                                      <th className="px-4 py-2.5">Ngày sinh</th>
+                                      <th className="px-4 py-2.5">Giới tính</th>
+                                      <th className="px-4 py-2.5">Liên hệ</th>
+                                      <th className="px-4 py-2.5 text-center">Trạng thái</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                  {selectedSchedule.danhSachNguoiDangKy && selectedSchedule.danhSachNguoiDangKy.length > 0 ? (
+                                      selectedSchedule.danhSachNguoiDangKy.map((kh, idx) => (
+                                          <tr key={idx} className="hover:bg-slate-50/50 text-slate-700 font-medium">
+                                              <td className="px-4 py-2 text-slate-400">{idx + 1}</td>
+                                              <td className="px-4 py-2 font-mono text-blue-600">{kh.maBenhNhan}</td>
+                                              <td className="px-4 py-2">{kh.tenBenhNhan}</td>
+                                              <td className="px-4 py-2">{kh.ngaySinh}</td>
+                                              <td className="px-4 py-2">{kh.gioiTinh}</td>
+                                              <td className="px-4 py-2">{formatDisplayPhone(kh.sdt)}</td>
+                                              <td className="px-4 py-2 text-center">
+                                                  <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${kh.trangThaiTiem === 'Đã tiêm' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                      {kh.trangThaiTiem}
+                                                  </span>
+                                              </td>
+                                          </tr>
+                                      ))
+                                  ) : (
+                                      <tr><td colSpan={7} className="px-4 py-6 text-center text-slate-400 italic">Chưa có khách hàng nào đăng ký vào lịch này.</td></tr>
+                                  )}
+                              </tbody>
+                          </table>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1519,10 +1655,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
         </div>
       )}
 
-      {/* ========================================= TAB PHẢN HỒI CẤP CAO ========================================= */}
-      {activeTab === "feedback" && (
+      {/* ========================================= TAB PHẢN HỒI CẤP CAO (GIAO DIỆN CHAT) ========================================= */}
+      {/* {activeTab === "feedback" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px] pb-4">
-          {/* Cột trái: Danh sách phản hồi */}
           <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full">
             <div className="p-4 bg-amber-50/50 border-b border-slate-200">
               <h3 className="font-bold text-slate-800 text-sm">Hòm thư Góp ý / Khiếu nại</h3>
@@ -1558,7 +1693,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
                         <p className="font-bold text-slate-800 text-sm mt-0.5">{t.customerName}</p>
                       </div>
                       <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${t.status === "Đã giải quyết" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}
+                        className={`text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${
+                          t.status === "Đã hoàn thành" ? "bg-slate-100 text-slate-500" : t.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                        }`}
                       >
                         {t.status}
                       </span>
@@ -1575,76 +1712,234 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
             </div>
           </div>
 
-          {/* Cột phải: Khung xử lý */}
-          <div className="lg:col-span-7 h-full flex flex-col">
+          <div className="lg:col-span-7 h-full flex-col min-h-0 flex">
+            {!selectedTicket ? (
+              <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm flex-1 flex items-center justify-center">
+                Vui lòng chọn một thư bên trái để xem nội dung và trả lời.
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
+                <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0 z-10">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                      Hỗ trợ VIP {selectedTicket.id}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Khách hàng: <span className="font-semibold text-blue-600">{selectedTicket.customerName}</span> ({selectedTicket.email})
+                    </p>
+                  </div>
+                  {selectedTicket.status === "Đã hoàn thành" ? (
+                    <span className="px-3 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Đã đóng
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleCompleteTicket}
+                      className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+                    >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Đánh dấu Hoàn thành
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex-1 overflow-y-auto min-h-0 p-4 bg-slate-50/50">
+                  {renderChatHistory(selectedTicket.chiTietPhanHoi)}
+                  <div ref={chatEndRef} />
+                </div>
+
+                <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                  {selectedTicket.status === "Đã hoàn thành" ? (
+                    <div className="text-center text-xs text-slate-400 italic py-2">Khách hàng đã xác nhận giải quyết xong sự cố này.</div>
+                  ) : (
+                    <form onSubmit={handleProcessTicket} className="flex gap-2">
+                      <input
+                        type="text"
+                        required
+                        value={ticketResponse}
+                        onChange={(e) => setTicketResponse(e.target.value)}
+                        placeholder="Nhập nội dung trả lời (Đại diện BGD)..."
+                        className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-amber-500 focus:bg-white transition-all"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isReplying || !ticketResponse.trim()}
+                        className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )} */}
+
+      {/* ========================================= TAB PHẢN HỒI CẤP CAO (GIAO DIỆN CHAT ĐỒNG BỘ SUPPORT) ========================================= */}
+      {activeTab === "feedback" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px] pb-4">
+          {/* Cột trái: Danh sách phản hồi */}
+          <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full">
+            <div className="p-4 bg-amber-50/50 border-b border-slate-200 shrink-0">
+              <h3 className="font-bold text-slate-800 text-sm">Hòm thư Góp ý / Khiếu nại</h3>
+              <p className="text-xs text-slate-500 mt-1">Dành riêng cho Ban Giám Đốc xử lý</p>
+            </div>
+
+            {/* Vùng Lọc và Tìm kiếm */}
+            <div className="p-3 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-2 shrink-0">
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Tìm kiếm theo ID, Tên..."
+                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:ring-1 focus:ring-amber-500 bg-white"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-400" />
+                <select
+                  value={ticketStatusFilter}
+                  onChange={(e) => setTicketStatusFilter(e.target.value)}
+                  className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  {uniqueTicketStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {status} ({status === "Tất cả" ? ticketsList.length : ticketsList.filter((t) => t.status === status).length})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Danh sách đã nhóm và sắp xếp */}
+            <div className="overflow-y-auto flex-1 p-2 bg-slate-50/20">
+              {isTicketsLoading ? (
+                <div className="p-8 text-center text-xs text-slate-400">Đang tải phản ánh từ cơ sở dữ liệu...</div>
+              ) : sortedStatuses.length > 0 ? (
+                sortedStatuses.map((status) => (
+                  <div key={status} className="mb-4">
+                    {/* Header Nhóm */}
+                    <div className="sticky top-0 bg-white/95 backdrop-blur py-1.5 px-3 mb-2 border border-slate-100 rounded-lg shadow-sm z-10 flex justify-between items-center">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{status}</span>
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">
+                        {groupedTickets[status].length}
+                      </span>
+                    </div>
+                    {/* Các Items trong nhóm */}
+                    <div className="space-y-1.5">
+                      {groupedTickets[status].map((t) => {
+                        const statusColor = 
+                          t.status === "Đã hoàn thành" ? "bg-slate-100 text-slate-500 border-slate-200" :
+                          t.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
+                          "bg-red-50 text-red-600 border-red-200";
+
+                        return (
+                        <div
+                          key={t.id}
+                          onClick={() => selectTicketForProcessing(t)}
+                          className={`p-3 cursor-pointer rounded-xl transition-all flex flex-col space-y-2 ${
+                            selectedTicket?.id === t.id
+                              ? "bg-amber-50/50 border border-amber-200 shadow-sm"
+                              : "bg-white border border-slate-100 hover:border-slate-300 hover:shadow-sm"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-mono text-xs font-bold text-slate-500 break-words">
+                              {t.id} | <span className="text-slate-700">{t.customerName}</span>
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${statusColor}`}>
+                                {t.status}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-xs text-slate-600 line-clamp-2">{t.comments}</div>
+                          <div className="flex justify-between items-center mt-1 pt-1 border-t border-slate-100/50">
+                            <div className="text-[10px] text-slate-400 font-mono">{t.email}</div>
+                          </div>
+                        </div>
+                      )})}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-xs text-slate-400">Không tìm thấy phản hồi nào phù hợp.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Cột phải: Khung xử lý Chat */}
+          <div className="lg:col-span-7 h-full flex flex-col min-h-0">
             {!selectedTicket ? (
               <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm h-full flex items-center justify-center">
                 Vui lòng chọn một thư bên trái để xem nội dung và trả lời.
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col h-full">
-                <div className="border-b border-slate-100 pb-4 mb-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 font-mono tracking-widest uppercase">TICKET: {selectedTicket.id}</span>
-                      <h3 className="text-lg font-bold text-slate-900 mt-1">Chi tiết thư góp ý</h3>
-                    </div>
-                    <span className="text-[10px] text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded">{selectedTicket.email}</span>
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
+                {/* Chat Header */}
+                <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0 z-10">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                      Phản hồi cấp cao: {selectedTicket.id}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Khách hàng: <span className="font-semibold text-blue-600">{selectedTicket.customerName}</span> ({selectedTicket.email})
+                    </p>
                   </div>
-
-                  <div className="mt-5 space-y-3">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Nội dung khách hàng gửi:</p>
-                        <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">{selectedTicket.type}</span>
-                      </div>
-                      <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">"{selectedTicket.comments}"</p>
-                    </div>
-                  </div>
+                  {selectedTicket.status === "Đã hoàn thành" ? (
+                    <span className="px-3 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Đã đóng
+                    </span>
+                  ) : (
+                    <button
+                      onClick={handleCompleteTicket}
+                      className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+                    >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Đánh dấu Hoàn thành
+                    </button>
+                  )}
                 </div>
 
-                <form onSubmit={handleProcessTicket} className="flex-1 flex flex-col">
-                  <div className="flex-1 flex flex-col">
-                    <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wide">
-                      Phản hồi từ Ban Quản Trị <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      required
-                      maxLength={2000}
-                      value={ticketResponse}
-                      onChange={(e) => {
-                        setTicketResponse(e.target.value);
-                        setTicketErrors({});
-                      }}
-                      placeholder="Nhập nội dung giải quyết khiếu nại, thư xin lỗi hoặc thư cảm ơn..."
-                      className={`w-full flex-1 p-3 border rounded-xl text-sm resize-none outline-none transition-colors leading-relaxed ${ticketErrors.response ? "border-red-500 bg-red-50" : "border-slate-200 focus:border-amber-500"}`}
-                    />
-                    {ticketErrors.response && <p className="text-[10px] text-red-500 font-bold mt-1.5">{ticketErrors.response}</p>}
-                  </div>
+                {/* Chat Body */}
+                <div className="flex-1 overflow-y-auto min-h-0 p-4 bg-slate-50/50">
+                  {renderChatHistory(selectedTicket.chiTietPhanHoi)}
+                  <div ref={chatEndRef} />
+                </div>
 
-                  <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
-                    <button
-                      type="button"
-                      onClick={handleCancelTicket}
-                      className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors"
-                    >
-                      Đóng
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl flex items-center gap-2 shadow-md shadow-amber-600/20 transition-all"
-                    >
-                      <Send className="w-4 h-4" /> Gửi
-                    </button>
-                  </div>
-                </form>
+                {/* Chat Input */}
+                <div className="p-4 bg-white border-t border-slate-200 shrink-0">
+                  {selectedTicket.status === "Đã hoàn thành" ? (
+                    <div className="text-center text-xs text-slate-400 italic py-2">Khách hàng đã xác nhận giải quyết xong sự cố này.</div>
+                  ) : (
+                    <form onSubmit={handleProcessTicket} className="flex gap-2">
+                      <input
+                        type="text"
+                        required
+                        value={ticketResponse}
+                        onChange={(e) => setTicketResponse(e.target.value)}
+                        placeholder="Nhập nội dung trả lời (Đại diện BGD)..."
+                        className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-amber-500 focus:bg-white transition-all"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isReplying || !ticketResponse.trim()}
+                        className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </form>
+                  )}
+                </div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* --- CUSTOM CONFIRM DELETE POPUP DÙNG PORTAL CHUNG --- */}
+      {/* --- CUSTOM CONFIRM DELETE POPUP --- */}
       {itemToDelete !== null &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm animate-fade-in">

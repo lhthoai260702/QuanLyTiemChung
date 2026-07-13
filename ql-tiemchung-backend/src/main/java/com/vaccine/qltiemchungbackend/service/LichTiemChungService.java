@@ -2,6 +2,7 @@ package com.vaccine.qltiemchungbackend.service;
 
 import com.vaccine.qltiemchungbackend.dto.LichTiemChungDTO;
 import com.vaccine.qltiemchungbackend.entity.LichTiemChung;
+import com.vaccine.qltiemchungbackend.repository.ChiTietDkTiemRepository;
 import com.vaccine.qltiemchungbackend.repository.LichTiemChungRepository;
 import com.vaccine.qltiemchungbackend.repository.LoaiVacXinRepository;
 import com.vaccine.qltiemchungbackend.repository.VacXinRepository;
@@ -34,6 +35,9 @@ public class LichTiemChungService {
 
     @Autowired
     private VacXinRepository vacXinRepository;
+
+    @Autowired
+    private ChiTietDkTiemRepository chiTietDkTiemRepository;
 
     /**
      * Lấy danh sách toàn bộ các lịch tiêm chủng trung tâm kèm theo dữ liệu loại vắc-xin và bác sĩ.
@@ -81,6 +85,8 @@ public class LichTiemChungService {
             // Lấy danh sách bác sĩ
             dto.setDanhSachBacSi(lichTiemChungRepository.findDanhSachBacSiByLichTiem(ltc.getMaLichTiem()));
             dto.setFlagDelete(ltc.getFlagDelete());
+
+            dto.setDanhSachNguoiDangKy(chiTietDkTiemRepository.findDanhSachNguoiDangKyByLichTiem(ltc.getMaLichTiem()));
 
             return dto;
         }).collect(Collectors.toList());

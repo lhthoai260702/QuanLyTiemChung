@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   initialUsers,
   initialVaccines,
@@ -159,7 +159,7 @@ export default function App() {
     }
   }, []);
 
-  const triggerToast = (message: string) => {
+  const triggerToast = useCallback((message: string) => {
     let type: 'success' | 'error' = 'success';
     const lowerMsg = message.toLowerCase();
     
@@ -179,9 +179,9 @@ export default function App() {
     setTimeout(() => {
       setToastMessage(null);
     }, 4500);
-  };
+  }, []);
 
-  const handleNameChange = (newName: string) => {
+  const handleNameChange = useCallback((newName: string) => {
     setLoggedInName(newName);
     const userStr = localStorage.getItem('user');
     if (userStr) {
@@ -194,7 +194,7 @@ export default function App() {
         localStorage.setItem('user', newName); 
       }
     }
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-sky-50 flex flex-col font-sans select-none antialiased overflow-x-hidden">
@@ -342,7 +342,7 @@ export default function App() {
               {(userRole === 1 || userRole === 5) && (
                 <button onClick={() => { setActiveRole('Medical'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-rose-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
                   <div className="w-14 h-14 bg-rose-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-rose-200 text-white relative z-10"><Activity className="w-7 h-7" /></div>
-                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-rose-700 transition-colors">Nhân viên y tế</h3>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-rose-700 transition-colors">Quản lý khách hàng</h3>
                   <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Là người trực tiếp khám chữa bệnh cho bệnh nhân, có chức năng cập nhật thông tình trạng của bệnh nhân, kê đơn thuốc.</p>
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-rose-600">
                     <span>Quản lý hồ sơ bệnh án</span>
@@ -391,7 +391,6 @@ export default function App() {
                   setPatients={setPatients}
                   vaccines={vaccines}
                   triggerToast={triggerToast}
-                  onNameChange={handleNameChange}
                 />
               )}
 
@@ -409,7 +408,6 @@ export default function App() {
                   systemLogs={systemLogs}
                   setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
-                  onNameChange={handleNameChange}
                 />
               )}
 
@@ -421,7 +419,6 @@ export default function App() {
                   systemLogs={systemLogs}
                   setSystemLogs={setSystemLogs}
                   triggerToast={triggerToast}
-                  onNameChange={handleNameChange}
                 />
               )}
             </div>

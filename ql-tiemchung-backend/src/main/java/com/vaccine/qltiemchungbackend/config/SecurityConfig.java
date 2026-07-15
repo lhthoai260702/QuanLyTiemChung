@@ -24,7 +24,7 @@ import java.util.Arrays;
  * * Date: 03-07-2026
  * * Copyright
  * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
+ * DATE        AUTHOR    DESCRIPTION
  * -----------------------------------------------------------------------
  * 03-07-2026 lhthoai   Create
  */
@@ -95,7 +95,11 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000"));
+        // Đã thêm link Vercel vào danh sách cho phép (bên cạnh localhost)
+        configuration.setAllowedOrigins(Arrays.asList(
+                "http://localhost:3000",
+                "https://quan-ly-tiem-chung.vercel.app"
+        ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);

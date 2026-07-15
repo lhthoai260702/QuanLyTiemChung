@@ -2,7 +2,7 @@
 FROM maven:3.8.5-openjdk-17 AS build
 WORKDIR /app
 # Copy toàn bộ mã nguồn backend vào trong môi trường docker
-COPY . .
+COPY .. .
 # Chạy lệnh build ra file .war (bỏ qua bước test để build nhanh hơn)
 RUN mvn clean package -DskipTests
 

@@ -27,6 +27,7 @@ import java.util.Arrays;
  * DATE        AUTHOR    DESCRIPTION
  * -----------------------------------------------------------------------
  * 03-07-2026 lhthoai   Create
+ * 21-07-2026 lhthoai   Update permitAll cho API Google Auth
  */
 @Configuration
 @EnableWebSecurity
@@ -70,13 +71,13 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable()) // Stateless JWT không cần CSRF
                 .authorizeHttpRequests(auth -> auth
-                        // Cho phép truy cập tự do vào API Đăng nhập / Đăng ký
-                        .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                        // Cho phép truy cập tự do vào TOÀN BỘ API thuộc nhóm Auth (login, register, google...)
+                        .requestMatchers("/api/auth/**").permitAll()
 
                         // Mở thêm các endpoints public nếu cần (VD: Swagger, ảnh, v.v...)
                         // .requestMatchers("/v3/api-docs/**", "/swagger-ui/**").permitAll()
 
-                        // TẤT CẢ các API còn lại đều phải có JWT Token mới được vào
+                        // TẤT CẢ các API còn lại đều phải có JWT Token nội bộ mới được vào
                         .anyRequest().authenticated()
                 )
                 // Cấu hình không lưu session (Stateless)
@@ -98,6 +99,7 @@ public class SecurityConfig {
         // Đã thêm link Vercel vào danh sách cho phép (bên cạnh localhost)
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:3000",
+                "http://localhost:5173", // Thêm cả cổng mặc định của Vite đề phòng trường hợp bạn chạy port này
                 "https://quan-ly-tiem-chung.vercel.app"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));

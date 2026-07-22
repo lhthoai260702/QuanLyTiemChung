@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Syringe,
   CalendarDays,
@@ -59,7 +59,11 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   // --- STATES: ĐIỀU HƯỚNG TABS (Mặc định là lịch sử) ---
   const [activeTab, setActiveTab] = useState<"history" | "vaccines" | "schedules" | "diseases" | "feedback" | "faqs" | "my_feedbacks">("history");
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  // --- CACHE SYSTEM CHO FRONTEND ---
+  const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
+  const CACHE_TTL = 5 * 60 * 1000; // 5 phút
+
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
     const headers = { ...options.headers, Authorization: `Bearer ${token}` };
     const response = await fetch(url, { ...options, headers });
@@ -68,8 +72,25 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       return Promise.reject("Unauthorized");
     }
     return response;
-  };
+  }, [triggerToast]);
 
+  const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
+    if (!forceRefetch && apiCache.current[url]) {
+      const cached = apiCache.current[url];
+      if (Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data; // Trả về dữ liệu từ cache
+      }
+    }
+    const response = await fetchWithAuth(url);
+    if (response.ok) {
+      const data = await response.json();
+      apiCache.current[url] = { data, timestamp: Date.now() }; // Lưu vào cache
+      return data;
+    }
+    throw new Error("Fetch failed");
+  }, [fetchWithAuth]);
+
+  // --- STATES DỮ LIỆU CHÍNH ---
   const [profile, setProfile] = useState({ id: "" });
   const [history, setHistory] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
@@ -78,88 +99,84 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   const [myFeedbacks, setMyFeedbacks] = useState<MyFeedbackType[]>([]);
   const [vaccines, setVaccines] = useState<VaccineCatalog[]>([]);
 
-  // Lấy danh sách bệnh
-  const fetchDiseases = async () => {
+  // Lấy danh sách bệnh (Sử dụng Cache)
+  const fetchDiseases = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/diseases`);
-      if (response.ok) setDiseases(await response.json());
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/diseases`);
+      setDiseases(data);
     } catch (error) {
       if (error !== "Unauthorized") console.error(error);
     }
-  };
+  }, [fetchWithCache]);
 
-  // Lấy danh sách FAQ
-  const fetchFaqs = async () => {
+  // Lấy danh sách FAQ (Sử dụng Cache)
+  const fetchFaqs = useCallback(async () => {
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/faqs`);
-      if (res.ok) setFaqs(await res.json());
-    } catch (e) {
-      if (e !== "Unauthorized") console.error(e);
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/faqs`);
+      setFaqs(data);
+    } catch (error) {
+      if (error !== "Unauthorized") console.error(error);
     }
-  };
+  }, [fetchWithCache]);
 
-  // Lấy lịch sử phản hồi
-  const fetchMyFeedbacks = async () => {
+  // Lấy lịch sử phản hồi (Không nên cache cứng, force refetch để nhận tin nhắn mới)
+  const fetchMyFeedbacks = useCallback(async () => {
     if (!profile.id) return;
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/my-feedbacks/${profile.id}`);
-      if (res.ok) setMyFeedbacks(await res.json());
-    } catch (e) {
-      if (e !== "Unauthorized") console.error(e);
-    }
-  };
-
-  // Lấy dữ liệu cá nhân & Lịch sử tiêm
-  const fetchPatientData = async () => {
-    try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/profile`);
-      if (response.ok) {
-        const data = await response.json();
-        setProfile({ id: data.id });
-
-        // Map đầy đủ lịch sử tiêm
-        const formattedHistory = data.history.map((h: any, i: number) => ({
-          id: h.recordId || i,
-          date: h.date || "---",
-          time: h.time || "",
-          place: h.place || "Chưa xác định",
-          vacName: h.vaccineName || "---",
-          vacType: h.vaccineType || "Chưa xác định",
-          dosage: h.dosage || "Chưa xác định",
-          status: h.status || "Chưa xác định",
-          sideEffect: h.sideEffect || "",
-          thoiGianTacDung: h.thoiGianTacDung || "",
-        }));
-        setHistory(formattedHistory);
-      }
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/my-feedbacks/${profile.id}`, true);
+      setMyFeedbacks(data);
     } catch (error) {
       if (error !== "Unauthorized") console.error(error);
     }
-  };
+  }, [fetchWithCache, profile.id]);
 
-  // Lấy danh sách Vắc-xin
-  const fetchVaccines = async () => {
+  // Lấy dữ liệu cá nhân & Lịch sử tiêm (Lấy mới mỗi lần vào tab để đảm bảo data mới nhất)
+  const fetchPatientData = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
-      if (response.ok) setVaccines(await response.json());
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/profile`, true);
+      setProfile({ id: data.id });
+      
+      const formattedHistory = data.history.map((h: any, i: number) => ({
+        id: h.recordId || i,
+        date: h.date || "---",
+        time: h.time || "",
+        place: h.place || "Chưa xác định",
+        vacName: h.vaccineName || "---",
+        vacType: h.vaccineType || "Chưa xác định",
+        dosage: h.dosage || "Chưa xác định",
+        status: h.status || "Chưa xác định",
+        sideEffect: h.sideEffect || "",
+        thoiGianTacDung: h.thoiGianTacDung || "",
+      }));
+      setHistory(formattedHistory);
     } catch (error) {
       if (error !== "Unauthorized") console.error(error);
     }
-  };
+  }, [fetchWithCache]);
 
-  // Lấy danh sách lịch tiêm trung tâm
-  const fetchSchedules = async () => {
+  // Lấy danh sách Vắc-xin (Sử dụng Cache)
+  const fetchVaccines = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
-      if (response.ok) setSchedules(await response.json());
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
+      setVaccines(data);
     } catch (error) {
       if (error !== "Unauthorized") console.error(error);
     }
-  };
+  }, [fetchWithCache]);
+
+  // Lấy danh sách lịch tiêm trung tâm (Sử dụng Cache)
+  const fetchSchedules = useCallback(async () => {
+    try {
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
+      setSchedules(data);
+    } catch (error) {
+      if (error !== "Unauthorized") console.error(error);
+    }
+  }, [fetchWithCache]);
 
   useEffect(() => {
     fetchPatientData();
-  }, []);
+  }, [fetchPatientData]);
 
   useEffect(() => {
     if (activeTab === "history") fetchPatientData();
@@ -168,44 +185,35 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
     if (activeTab === "diseases") fetchDiseases();
     if (activeTab === "faqs") fetchFaqs();
     if (activeTab === "my_feedbacks" && profile.id) fetchMyFeedbacks();
-  }, [activeTab, profile.id]);
+  }, [activeTab, profile.id, fetchPatientData, fetchVaccines, fetchSchedules, fetchDiseases, fetchFaqs, fetchMyFeedbacks]);
 
   // States cho Form Feedback
   const [feedbackType, setFeedbackType] = useState<"after_vaccine" | "high_level">("after_vaccine");
   const [feedbackForm, setFeedbackForm] = useState({
-    vacName: "",
-    time: "",
-    place: "",
-    doctor: "",
-    normalContent: "",
-    highLevelType: "Phàn nàn",
-    highLevelContent: "",
+    vacName: "", time: "", place: "", doctor: "", normalContent: "", highLevelType: "Phàn nàn", highLevelContent: "",
   });
   const [feedbackErrors, setFeedbackErrors] = useState<Record<string, string>>({});
 
-  // --- THÊM STATES CHO TÍNH NĂNG CHAT HAI CHIỀU ---
+  // --- STATES CHO TÍNH NĂNG CHAT HAI CHIỀU ---
   const [selectedFeedbackForChat, setSelectedFeedbackForChat] = useState<MyFeedbackType | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
   const [isReplying, setIsReplying] = useState(false);
-  const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<string>("Tất cả"); // Bộ lọc feedback
-  const [showConfirmCompleteModal, setShowConfirmCompleteModal] = useState(false); // Modal xác nhận đóng
+  const [feedbackStatusFilter, setFeedbackStatusFilter] = useState<string>("Tất cả");
+  const [showConfirmCompleteModal, setShowConfirmCompleteModal] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto scroll xuống cuối khung chat mỗi khi nội dung cập nhật
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedFeedbackForChat?.chiTietPhanHoi]);
 
-  // Cập nhật lại khung chat nếu có tin nhắn mới từ API
   useEffect(() => {
     if (selectedFeedbackForChat) {
       const updated = myFeedbacks.find((fb) => fb.id === selectedFeedbackForChat.id);
       if (updated) setSelectedFeedbackForChat(updated);
     }
-  }, [myFeedbacks]);
+  }, [myFeedbacks, selectedFeedbackForChat?.id]);
 
-  // Gửi tin nhắn Reply
-  const handleReplyFeedback = async (e: React.FormEvent) => {
+  const handleReplyFeedback = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!replyMessage.trim() || !selectedFeedbackForChat) return;
 
@@ -222,16 +230,15 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       });
       if (!res.ok) throw new Error("API lỗi");
       setReplyMessage("");
-      await fetchMyFeedbacks(); // Reload lại tin nhắn
+      await fetchMyFeedbacks(); // Cập nhật lại tin nhắn
     } catch (err) {
       triggerToast("Lỗi gửi tin nhắn");
     } finally {
       setIsReplying(false);
     }
-  };
+  }, [replyMessage, selectedFeedbackForChat, fetchWithAuth, fetchMyFeedbacks, triggerToast]);
 
-  // Đánh dấu hoàn thành
-  const handleCompleteFeedback = async () => {
+  const handleCompleteFeedback = useCallback(async () => {
     if (!selectedFeedbackForChat) return;
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/complete/${selectedFeedbackForChat.id}`, {
@@ -240,13 +247,13 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       if (!res.ok) throw new Error("Lỗi");
       triggerToast("Đã đánh dấu hoàn thành!");
       setShowConfirmCompleteModal(false);
-      await fetchMyFeedbacks(); // Reload danh sách
+      await fetchMyFeedbacks();
     } catch (err) {
       triggerToast("Lỗi cập nhật trạng thái");
     }
-  };
+  }, [selectedFeedbackForChat, fetchWithAuth, triggerToast, fetchMyFeedbacks]);
 
-  const renderChatHistory = (jsonStr?: string) => {
+  const renderChatHistory = useCallback((jsonStr?: string) => {
     if (!jsonStr || jsonStr === "null") return null;
     try {
       const messages: ChatMessage[] = JSON.parse(jsonStr);
@@ -272,27 +279,25 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
     } catch (e) {
       return <div className="text-center text-xs text-slate-400">Lỗi hiển thị nội dung chat.</div>;
     }
-  };
+  }, []);
 
   // States cho Form Modal Booking
   const [bookModal, setBookModal] = useState<{ isOpen: boolean; type: "vaccine" | "schedule"; data: any }>({
-    isOpen: false,
-    type: "vaccine",
-    data: null,
+    isOpen: false, type: "vaccine", data: null,
   });
   const [bookingDate, setBookingDate] = useState<string>("");
   const [bookingTime, setBookingTime] = useState<string>("");
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = useCallback((amount: number) => {
     return new Intl.NumberFormat("vi-VN").format(amount) + " ₫";
-  };
+  }, []);
 
-  const handleCancelFeedback = () => {
+  const handleCancelFeedback = useCallback(() => {
     setFeedbackForm({ vacName: "", time: "", place: "", doctor: "", normalContent: "", highLevelType: "Phàn nàn", highLevelContent: "" });
     setFeedbackErrors({});
-  };
+  }, []);
 
-  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+  const handleFeedbackSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
     if (feedbackType === "after_vaccine") {
@@ -322,13 +327,13 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
       if (!res.ok) throw new Error("API trả về lỗi");
       triggerToast(feedbackType === "after_vaccine" ? "Gửi thành công" : "Phản hồi gửi đi thành công.");
       handleCancelFeedback();
-      setActiveTab("my_feedbacks"); // Tự động chuyển qua tab lịch sử để chat
+      setActiveTab("my_feedbacks"); 
     } catch (error) {
       if (error !== "Unauthorized") triggerToast(feedbackType === "after_vaccine" ? "Gửi thất bại" : "Phản hồi gửi thất bại");
     }
-  };
+  }, [feedbackType, feedbackForm, profile.id, fetchWithAuth, triggerToast, handleCancelFeedback]);
 
-  const handleConfirmBooking = async () => {
+  const handleConfirmBooking = useCallback(async () => {
     if (bookModal.type === "vaccine") {
       if (!bookingDate) return triggerToast("Vui lòng chọn ngày mong muốn tiêm!");
       if (!bookingTime.trim()) return triggerToast("Vui lòng nhập giờ mong muốn tiêm!");
@@ -361,60 +366,89 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
     } catch (err: any) {
       if (err !== "Unauthorized") triggerToast("Lỗi: " + err.message);
     }
-  };
+  }, [bookModal, bookingDate, bookingTime, profile.id, fetchWithAuth, triggerToast]);
 
   // State lọc Vắc xin
   const [vacSearchType, setVacSearchType] = useState("Tất cả");
   const [vacSearchName, setVacSearchName] = useState("");
+  const [debouncedVacSearchName, setDebouncedVacSearchName] = useState("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 8;
-  const uniqueTypes = ["Tất cả", ...Array.from(new Set(vaccines.map((v) => v.loaiVacXin).filter(Boolean)))];
+
+  // Debounce xử lý input search vắc-xin
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setDebouncedVacSearchName(vacSearchName);
+    }, 300);
+    return () => clearTimeout(timerId);
+  }, [vacSearchName]);
+
+  const uniqueTypes = useMemo(() => {
+    return ["Tất cả", ...Array.from(new Set(vaccines.map((v) => v.loaiVacXin).filter(Boolean)))];
+  }, [vaccines]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [vacSearchType, vacSearchName]);
+  }, [vacSearchType, debouncedVacSearchName]);
 
-  const filteredVaccines = vaccines.filter(
-    (v) =>
-      (vacSearchType === "Tất cả" || (v.loaiVacXin && v.loaiVacXin === vacSearchType)) &&
-      v.tenVacXin.toLowerCase().includes(vacSearchName.toLowerCase()),
-  );
-  const totalPages = Math.ceil(filteredVaccines.length / ITEMS_PER_PAGE) || 1;
-  const currentVaccines = filteredVaccines.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-  const getVaccineTypeCount = (type: string) => (type === "Tất cả" ? vaccines.length : vaccines.filter((v) => v.loaiVacXin === type).length);
+  const filteredVaccines = useMemo(() => {
+    return vaccines.filter(
+      (v) =>
+        (vacSearchType === "Tất cả" || (v.loaiVacXin && v.loaiVacXin === vacSearchType)) &&
+        v.tenVacXin.toLowerCase().includes(debouncedVacSearchName.toLowerCase())
+    );
+  }, [vaccines, vacSearchType, debouncedVacSearchName]);
+
+  const totalPages = useMemo(() => Math.ceil(filteredVaccines.length / ITEMS_PER_PAGE) || 1, [filteredVaccines.length]);
+  
+  const currentVaccines = useMemo(() => {
+    return filteredVaccines.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  }, [filteredVaccines, currentPage]);
+
+  const getVaccineTypeCount = useCallback((type: string) => {
+    return type === "Tất cả" ? vaccines.length : vaccines.filter((v) => v.loaiVacXin === type).length;
+  }, [vaccines]);
 
   // --- LỌC, NHÓM VÀ SẮP XẾP FEEDBACKS ---
-  const uniqueFeedbackStatuses = ["Tất cả", ...Array.from(new Set(myFeedbacks.map((f) => f.status).filter(Boolean)))];
-  const filteredFeedbacks = myFeedbacks.filter(
-    (fb) => feedbackStatusFilter === "Tất cả" || fb.status === feedbackStatusFilter
-  );
+  const uniqueFeedbackStatuses = useMemo(() => {
+    return ["Tất cả", ...Array.from(new Set(myFeedbacks.map((f) => f.status).filter(Boolean)))];
+  }, [myFeedbacks]);
 
-  const groupedFeedbacks = filteredFeedbacks.reduce((acc, fb) => {
-    const status = fb.status || "Chưa xác định";
-    if (!acc[status]) acc[status] = [];
-    acc[status].push(fb);
-    return acc;
-  }, {} as Record<string, MyFeedbackType[]>);
+  const filteredFeedbacks = useMemo(() => {
+    return myFeedbacks.filter((fb) => feedbackStatusFilter === "Tất cả" || fb.status === feedbackStatusFilter);
+  }, [myFeedbacks, feedbackStatusFilter]);
 
-  // Sort each group by time (Mới nhất lên trên)
-  Object.keys(groupedFeedbacks).forEach((status) => {
-    groupedFeedbacks[status].sort((a, b) => {
-      const tA = new Date(a.time).getTime();
-      const tB = new Date(b.time).getTime();
-      if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
-      return (b.time || "").localeCompare(a.time || ""); // Fallback
+  const groupedFeedbacks = useMemo(() => {
+    const grouped = filteredFeedbacks.reduce((acc, fb) => {
+      const status = fb.status || "Chưa xác định";
+      if (!acc[status]) acc[status] = [];
+      acc[status].push(fb);
+      return acc;
+    }, {} as Record<string, MyFeedbackType[]>);
+
+    Object.keys(grouped).forEach((status) => {
+      grouped[status].sort((a, b) => {
+        const tA = new Date(a.time).getTime();
+        const tB = new Date(b.time).getTime();
+        if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
+        return (b.time || "").localeCompare(a.time || ""); // Fallback
+      });
     });
-  });
 
-  const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
-  const sortedStatuses = Object.keys(groupedFeedbacks).sort((a, b) => {
-    const indexA = statusOrder.indexOf(a);
-    const indexB = statusOrder.indexOf(b);
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA === -1 && indexB !== -1) return 1;
-    if (indexA !== -1 && indexB === -1) return -1;
-    return a.localeCompare(b);
-  });
+    return grouped;
+  }, [filteredFeedbacks]);
+
+  const sortedStatuses = useMemo(() => {
+    const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
+    return Object.keys(groupedFeedbacks).sort((a, b) => {
+      const indexA = statusOrder.indexOf(a);
+      const indexB = statusOrder.indexOf(b);
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA === -1 && indexB !== -1) return 1;
+      if (indexA !== -1 && indexB === -1) return -1;
+      return a.localeCompare(b);
+    });
+  }, [groupedFeedbacks]);
 
   return (
     <>
@@ -580,10 +614,7 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                   <tbody className="divide-y divide-slate-100 text-slate-700">
                     {currentVaccines.length > 0 ? (
                       currentVaccines.map(
-                        (
-                          v,
-                          index,
-                        ) => (
+                        (v, index) => (
                           <tr key={v.maVacXin} className="hover:bg-slate-50/50">
                             <td className="px-2 sm:px-3 py-3.5 font-mono text-slate-400 break-words text-center font-bold">
                               {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
@@ -1054,7 +1085,6 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                                         {fb.type}
                                       </span>
                                     </div>
-                                    {/* Thay đổi màu trạng thái ở góc trên bên phải của card */}
                                     <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${statusColor}`}>
                                       {fb.status}
                                     </span>
@@ -1112,7 +1142,6 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
                             <CheckCircle2 className="w-3.5 h-3.5" /> Hài lòng & Đóng
                           </button>
                         ) : (
-                          // Trạng thái disable không đổi nội dung text
                           <button
                             disabled
                             className="px-3 py-1.5 bg-slate-100 text-slate-400 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-not-allowed opacity-70"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Search,
@@ -56,9 +56,12 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const [activeTab, setActiveTab] = useState<"view" | "import">("view");
 
   // =========================================================================
-  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // CACHE SYSTEM & BẢO MẬT GỌI API
   // =========================================================================
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
+  const CACHE_TTL = 5 * 60 * 1000; // 5 phút
+
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
     const headers = {
       ...options.headers,
@@ -68,12 +71,30 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
 
     if (response.status === 401 || response.status === 403) {
       triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject("Unauthorized");
+      return Promise.reject(new Error("Unauthorized"));
     }
     return response;
-  };
+  }, [triggerToast]);
 
-  // States
+  const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
+    if (!forceRefetch && apiCache.current[url]) {
+      const cached = apiCache.current[url];
+      if (Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
+      }
+    }
+    const response = await fetchWithAuth(url);
+    if (response.ok) {
+      const data = await response.json();
+      apiCache.current[url] = { data, timestamp: Date.now() };
+      return data;
+    }
+    throw new Error("Lỗi khi tải dữ liệu từ máy chủ");
+  }, [fetchWithAuth]);
+
+  // =========================================================================
+  // STATES DỮ LIỆU
+  // =========================================================================
   const [vaccines, setVaccines] = useState<KhoVacXin[]>([]);
   const [loaiVacXinList, setLoaiVacXinList] = useState<ItemDB[]>([]);
   const [vacXinCatalog, setVacXinCatalog] = useState<VacXinDB[]>([]);
@@ -82,40 +103,32 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchInventoryData();
-    fetchMetadata();
-  }, []);
-
-  const fetchInventoryData = async () => {
+  const fetchInventoryData = useCallback(async (force = false) => {
     try {
       setLoading(true);
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`);
-      if (!res.ok) throw new Error("Lỗi kết nối");
-      setVaccines(await res.json());
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, force);
+      setVaccines(data);
       setError(null);
     } catch (err: any) {
-      if (err !== "Unauthorized") setError(err.message);
+      if (err.message !== "Unauthorized") setError(err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [fetchWithCache]);
 
-  const fetchMetadata = async () => {
+  const fetchMetadata = useCallback(async (force = false) => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`),
-        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`),
-        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`),
+        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`, force),
+        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`, force),
+        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`, force),
       ]);
-      if (resType.ok) {
-        const data = await resType.json();
-        setLoaiVacXinList(data.map((d: any) => ({ id: d.maLoaiVacXin, name: d.tenLoaiVacXin })));
+      if (resType) {
+        setLoaiVacXinList(resType.map((d: any) => ({ id: d.maLoaiVacXin, name: d.tenLoaiVacXin })));
       }
-      if (resVac.ok) {
-        const data = await resVac.json();
+      if (resVac) {
         setVacXinCatalog(
-          data.map((d: any) => ({
+          resVac.map((d: any) => ({
             id: d.maVacXin,
             name: d.tenVacXin,
             loaiVacXin: d.loaiVacXin?.tenLoaiVacXin,
@@ -127,22 +140,32 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
           }))
         );
       }
-      if (resSup.ok) {
-        const data = await resSup.json();
-        setSupplierList(data.map((d: any) => ({ id: d.maNhaCungCap, name: d.tenNhaCungCap })));
+      if (resSup) {
+        setSupplierList(resSup.map((d: any) => ({ id: d.maNhaCungCap, name: d.tenNhaCungCap })));
       }
-    } catch (e) {
-      if (e !== "Unauthorized") console.error("Lỗi lấy siêu dữ liệu", e);
+    } catch (e: any) {
+      if (e.message !== "Unauthorized") console.error("Lỗi lấy siêu dữ liệu", e);
     }
-  };
+  }, [fetchWithCache]);
+
+  useEffect(() => {
+    fetchInventoryData();
+    fetchMetadata();
+  }, [fetchInventoryData, fetchMetadata]);
 
   // =========================================================================
-  // XỬ LÝ LỌC, GOM NHÓM VÀ SẮP XẾP VẮC XIN
+  // XỬ LÝ DEBOUNCE TÌM KIẾM & GOM NHÓM
   // =========================================================================
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const groupedVaccines = useMemo(() => {
-    const filtered = vaccines.filter((v) => v.tenVacXin.toLowerCase().includes(searchQuery.toLowerCase()));
+    const filtered = vaccines.filter((v) => v.tenVacXin.toLowerCase().includes(debouncedSearchQuery.toLowerCase()));
     const groups: Record<string, KhoVacXin[]> = {};
     filtered.forEach((v) => {
       const groupName = v.loaiVacXin || "Chưa phân loại";
@@ -156,7 +179,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       });
       return { groupName, items };
     });
-  }, [vaccines, searchQuery]);
+  }, [vaccines, debouncedSearchQuery]);
 
   // =========================================================================
   // STATES CHO FORMS & MODALS
@@ -179,37 +202,37 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const [isNewVaccine, setIsNewVaccine] = useState(false);
   const [isNewSupplier, setIsNewSupplier] = useState(false);
 
-  const formatCurrency = (val: number | undefined) => (val ? val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "0");
+  const formatCurrency = useCallback((val: number | undefined) => (val ? val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "0"), []);
 
-  const handleDonGiaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDonGiaChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (!val) {
-      setImportForm({ ...importForm, donGia: 0 });
-      setImportErrors({ ...importErrors, donGia: "" });
+      setImportForm((prev) => ({ ...prev, donGia: 0 }));
+      setImportErrors((prev) => ({ ...prev, donGia: "" }));
       return;
     }
     const num = Number(val);
     if (num < 10000000000) {
-      setImportForm({ ...importForm, donGia: num });
-      setImportErrors({ ...importErrors, donGia: "" });
+      setImportForm((prev) => ({ ...prev, donGia: num }));
+      setImportErrors((prev) => ({ ...prev, donGia: "" }));
     }
-  };
+  }, []);
 
-  const handleTongTienChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTongTienChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (!val) {
-      setImportForm({ ...importForm, tongTien: 0 });
-      setImportErrors({ ...importErrors, tongTien: "" });
+      setImportForm((prev) => ({ ...prev, tongTien: 0 }));
+      setImportErrors((prev) => ({ ...prev, tongTien: "" }));
       return;
     }
     const num = Number(val);
     if (num < 100000000000) {
-      setImportForm({ ...importForm, tongTien: num });
-      setImportErrors({ ...importErrors, tongTien: "" });
+      setImportForm((prev) => ({ ...prev, tongTien: num }));
+      setImportErrors((prev) => ({ ...prev, tongTien: "" }));
     }
-  };
+  }, []);
 
-  const handleSelectVaccine = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleSelectVaccine = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (val === "OTHER") {
       setIsNewVaccine(true);
@@ -244,9 +267,9 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       setIsNewVaccine(false);
       setImportForm((prev) => ({ ...prev, maVacXin: undefined }));
     }
-  };
+  }, [vacXinCatalog]);
 
-  const handleSelectSupplier = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleSelectSupplier = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (val === "OTHER") {
       setIsNewSupplier(true);
@@ -261,9 +284,9 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       setIsNewSupplier(false);
       setImportForm((prev) => ({ ...prev, maNhaCungCap: undefined }));
     }
-  };
+  }, [supplierList]);
 
-  const handleSaveSubmit = async (e: React.FormEvent) => {
+  const handleSaveSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
@@ -313,17 +336,17 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       if (!res.ok) throw new Error("Lưu thất bại");
       triggerToast(editingVacId ? "Cập nhật lô vắc-xin thành công!" : "Thao tác nhập kho thành công!");
 
-      fetchInventoryData();
-      fetchMetadata();
+      fetchInventoryData(true); // Force refetch to get updated list
+      fetchMetadata(true); // Force refetch to update dropdowns
       setActiveTab("view");
       setEditingVacId(null);
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Lỗi khi lưu Database");
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") triggerToast("Lỗi khi lưu Database");
     }
-  };
+  }, [importForm, isNewVaccine, isNewSupplier, editingVacId, fetchWithAuth, fetchInventoryData, fetchMetadata, triggerToast]);
 
   // --- HÀM XỬ LÝ XUẤT KHO ---
-  const handleExportSubmit = async (e: React.FormEvent) => {
+  const handleExportSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!exportingVac) return;
 
@@ -347,31 +370,30 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       
       triggerToast(`Xuất thành công ${exportQuantity} liều vắc-xin ${exportingVac.tenVacXin}`);
       
-      // Reset Modal và load lại
       setExportingVac(null);
       setExportQuantity("");
       setExportErrors({});
-      fetchInventoryData();
+      fetchInventoryData(true); // Force refetch to reflect new inventory
     } catch (err: any) {
-      if (err !== "Unauthorized") triggerToast(err.message);
+      if (err.message !== "Unauthorized") triggerToast(err.message);
     }
-  };
+  }, [exportingVac, exportQuantity, fetchWithAuth, fetchInventoryData, triggerToast]);
 
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     if (itemToDelete === null) return;
     try {
       await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${itemToDelete}`, { method: "DELETE" });
       triggerToast("Hủy Lô Vắc-xin thành công!");
-      fetchInventoryData();
+      fetchInventoryData(true); // Force refetch to reflect deletion
     } catch (err: any) {
-      if (err !== "Unauthorized") triggerToast("Lỗi xóa lô");
+      if (err.message !== "Unauthorized") triggerToast("Lỗi xóa lô");
     } finally {
       setItemToDelete(null);
     }
-  };
+  }, [itemToDelete, fetchWithAuth, fetchInventoryData, triggerToast]);
 
   // --- HÀM NẠP DỮ LIỆU ĐỂ CHỈNH SỬA ---
-  const handleEditClick = (v: KhoVacXin) => {
+  const handleEditClick = useCallback((v: KhoVacXin) => {
     setEditingVacId(v.soLo);
     setImportForm({
       maVacXin: v.maVacXin,
@@ -395,7 +417,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     setIsNewSupplier(false);
     setImportErrors({});
     setActiveTab("import");
-  };
+  }, []);
 
   const renderImportForm = () => (
     <form onSubmit={handleSaveSubmit} noValidate className="space-y-6">
@@ -767,7 +789,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
                 className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm focus:border-blue-500 outline-none"
               />
             </div>
-            <button onClick={fetchInventoryData} className="text-blue-600 text-xs font-semibold flex items-center gap-1 hover:underline">
+            <button onClick={() => fetchInventoryData(true)} className="text-blue-600 text-xs font-semibold flex items-center gap-1 hover:underline cursor-pointer">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Tải lại dữ liệu
             </button>
           </div>
@@ -832,7 +854,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
                                     setExportQuantity("");
                                     setExportErrors({});
                                   }}
-                                  className="text-amber-600 hover:text-amber-800 p-1.5 bg-amber-50 hover:bg-amber-100 rounded transition-colors"
+                                  className="text-amber-600 hover:text-amber-800 p-1.5 bg-amber-50 hover:bg-amber-100 rounded transition-colors cursor-pointer"
                                   title="Xuất Kho (Trừ tồn)"
                                 >
                                   <MinusCircle className="w-4 h-4" />
@@ -841,7 +863,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
                               
                               <button
                                 onClick={() => handleEditClick(v)}
-                                className="text-blue-500 hover:text-blue-700 p-1.5 bg-blue-50 hover:bg-blue-100 rounded transition-colors"
+                                className="text-blue-500 hover:text-blue-700 p-1.5 bg-blue-50 hover:bg-blue-100 rounded transition-colors cursor-pointer"
                                 title="Chỉnh sửa Lô"
                               >
                                 <Edit className="w-4 h-4" />
@@ -849,7 +871,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
                               
                               <button
                                 onClick={() => setItemToDelete(v.soLo)}
-                                className="text-red-500 hover:text-red-700 p-1.5 bg-red-50 hover:bg-red-100 rounded transition-colors"
+                                className="text-red-500 hover:text-red-700 p-1.5 bg-red-50 hover:bg-red-100 rounded transition-colors cursor-pointer"
                                 title="Xóa Lô"
                               >
                                 <Trash2 className="w-4 h-4" />

@@ -1,6 +1,6 @@
 // src/components/FinanceModule.tsx
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { Invoice, Vaccine, SystemLog } from "../types";
@@ -89,13 +89,17 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   const [activeTab, setActiveTab] = useState<"overview" | "customer_tx" | "supplier_tx" | "pricing">("overview");
   const navigate = useNavigate();
 
+  // --- CACHE & DEBOUNCE REFS ---
+  const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
+  const CACHE_TTL = 5 * 60 * 1000; // 5 phút
+
   // --- FORMAT CURRENCY ---
-  const formatCurrencyInput = (value: number | undefined) => {
+  const formatCurrencyInput = useCallback((value: number | undefined) => {
     if (!value || value === 0) return "";
     return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  };
+  }, []);
 
-  const formatCurrency = (val: number | undefined) => (val ? val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "0");
+  const formatCurrency = useCallback((val: number | undefined) => (val ? val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") : "0"), []);
 
   // --- STATE: METADATA CHO FORM ---
   const [loaiVacXinList, setLoaiVacXinList] = useState<ItemDB[]>([]);
@@ -142,6 +146,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   // ==========================================
   const [customerTxs, setCustomerTxs] = useState<CustomerTransaction[]>([]);
   const [searchCustomerQuery, setSearchCustomerQuery] = useState("");
+  const [debouncedCustomerQuery, setDebouncedCustomerQuery] = useState("");
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [editingCustomerTxId, setEditingCustomerTxId] = useState<string | null>(null);
 
@@ -159,6 +164,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   // ==========================================
   const [supplierTxs, setSupplierTxs] = useState<KhoVacXin[]>([]);
   const [searchSupplierQuery, setSearchSupplierQuery] = useState("");
+  const [debouncedSupplierQuery, setDebouncedSupplierQuery] = useState("");
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [editingSupplierTxId, setEditingSupplierTxId] = useState<number | null>(null);
 
@@ -177,6 +183,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   // ==========================================
   const [vaccinePrices, setVaccinePrices] = useState<VaccinePrice[]>([]);
   const [searchPriceQuery, setSearchPriceQuery] = useState("");
+  const [debouncedPriceQuery, setDebouncedPriceQuery] = useState("");
   const [showPriceForm, setShowPriceForm] = useState(false);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
 
@@ -188,8 +195,24 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     price: 0,
   });
 
+  // --- DEBOUNCE EFFECTS ---
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedCustomerQuery(searchCustomerQuery), 300);
+    return () => clearTimeout(handler);
+  }, [searchCustomerQuery]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedSupplierQuery(searchSupplierQuery), 300);
+    return () => clearTimeout(handler);
+  }, [searchSupplierQuery]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedPriceQuery(searchPriceQuery), 300);
+    return () => clearTimeout(handler);
+  }, [searchPriceQuery]);
+
   // =========================================================================
-  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN (WITH CACHE)
   // =========================================================================
 
   useEffect(() => {
@@ -200,7 +223,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     }
   }, [navigate, triggerToast]);
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
     const headers = {
       ...options.headers,
@@ -218,26 +241,40 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     }
 
     return response;
-  };
+  }, [navigate, triggerToast]);
+
+  const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
+    if (!forceRefetch && apiCache.current[url]) {
+      const cached = apiCache.current[url];
+      if (Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
+      }
+    }
+    const response = await fetchWithAuth(url);
+    if (response.ok) {
+      const data = await response.json();
+      apiCache.current[url] = { data, timestamp: Date.now() };
+      return data;
+    }
+    throw new Error("Fetch failed");
+  }, [fetchWithAuth]);
 
   // ==========================================
   // CALL API
   // ==========================================
-  const fetchMetadata = async () => {
+  const fetchMetadata = useCallback(async (force = false) => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`),
-        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`),
-        fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`),
+        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`, force),
+        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`, force),
+        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`, force),
       ]);
-      if (resType.ok) {
-        const data = await resType.json();
-        setLoaiVacXinList(data.map((d: any) => ({ id: d.maLoaiVacXin, name: d.tenLoaiVacXin })));
+      if (resType) {
+        setLoaiVacXinList(resType.map((d: any) => ({ id: d.maLoaiVacXin, name: d.tenLoaiVacXin })));
       }
-      if (resVac.ok) {
-        const data = await resVac.json();
+      if (resVac) {
         setVacXinCatalog(
-          data.map((d: any) => ({
+          resVac.map((d: any) => ({
             id: d.maVacXin,
             name: d.tenVacXin,
             loaiVacXin: d.loaiVacXin?.tenLoaiVacXin,
@@ -246,44 +283,43 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
             dieuKienBaoQuan: d.dieuKienBaoQuan,
             doTuoiTiemChung: d.doTuoiTiemChung,
             donGia: d.donGia,
-          })),
+          }))
         );
       }
-      if (resSup.ok) {
-        const data = await resSup.json();
-        setSupplierList(data.map((d: any) => ({ id: d.maNhaCungCap, name: d.tenNhaCungCap })));
+      if (resSup) {
+        setSupplierList(resSup.map((d: any) => ({ id: d.maNhaCungCap, name: d.tenNhaCungCap })));
       }
     } catch (e) {
       if (e !== "Unauthorized") console.error("Lỗi lấy siêu dữ liệu", e);
     }
-  };
+  }, [fetchWithCache]);
 
-  const fetchCustomerTransactions = async () => {
+  const fetchCustomerTransactions = useCallback(async (force = false) => {
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions`);
-      if (response.ok) setCustomerTxs(await response.json());
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions`, force);
+      setCustomerTxs(data);
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin khách hàng!");
     }
-  };
+  }, [fetchWithCache, triggerToast]);
 
-  const fetchSupplierTransactions = async () => {
+  const fetchSupplierTransactions = useCallback(async (force = false) => {
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`);
-      if (response.ok) setSupplierTxs(await response.json());
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, force);
+      setSupplierTxs(data);
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Lỗi kết nối tải dữ liệu nhà cung cấp!");
     }
-  };
+  }, [fetchWithCache, triggerToast]);
 
-  const fetchVaccinePrices = async () => {
+  const fetchVaccinePrices = useCallback(async (force = false) => {
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices`);
-      if (response.ok) setVaccinePrices(await response.json());
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices`, force);
+      setVaccinePrices(data);
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin giá vắc-xin!");
     }
-  };
+  }, [fetchWithCache, triggerToast]);
 
   useEffect(() => {
     if (activeTab === "pricing") {
@@ -291,13 +327,13 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     } else if (activeTab === "customer_tx") {
       fetchCustomerTransactions();
     } else if (activeTab === "supplier_tx") {
-      fetchSupplierTransactions();
-      fetchMetadata();
+      fetchSupplierTransactions(true);
+      fetchMetadata(true);
     } else if (activeTab === "overview") {
       fetchCustomerTransactions();
       fetchSupplierTransactions();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchVaccinePrices, fetchCustomerTransactions, fetchSupplierTransactions, fetchMetadata]);
 
   // ==========================================
   // LOGIC TÍNH TỔNG THU - CHI (OVERVIEW)
@@ -323,7 +359,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   // ==========================================
   // HANDLER POPUP XÓA CHUNG
   // ==========================================
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     if (!deleteModal.id || !deleteModal.type) return;
     const { id, type } = deleteModal;
 
@@ -331,7 +367,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       if (type === "customer") {
         const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions/${id}`, { method: "DELETE" });
         if (response.ok) {
-          setCustomerTxs(customerTxs.filter((tx) => tx.id !== id));
+          setCustomerTxs((prev) => prev.filter((tx) => tx.id !== id));
           triggerToast("Đã hủy và xóa mềm hóa đơn thành công!");
         } else {
           triggerToast("Tác vụ lỗi: Hủy hóa đơn thất bại!");
@@ -339,7 +375,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       } else if (type === "supplier") {
         const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${id}`, { method: "DELETE" });
         if (response.ok) {
-          setSupplierTxs(supplierTxs.filter((tx) => tx.soLo !== id));
+          setSupplierTxs((prev) => prev.filter((tx) => tx.soLo !== id));
           triggerToast("Hủy hóa đơn nhập lô thành công!");
         } else {
           triggerToast("Lỗi xóa giao dịch");
@@ -348,7 +384,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices/${id}`, { method: "DELETE" });
         if (response.ok) {
           triggerToast("Đã xóa bảng giá vắc-xin thành công!");
-          fetchVaccinePrices();
+          fetchVaccinePrices(true);
         } else {
           triggerToast("Lỗi khi thực hiện xóa trên máy chủ!");
         }
@@ -358,24 +394,24 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     } finally {
       setDeleteModal({ isOpen: false, type: null, id: null, message: "", actionTitle: "" });
     }
-  };
+  }, [deleteModal, fetchWithAuth, triggerToast, fetchVaccinePrices]);
 
   // ==========================================
   // HANDLERS: KHÁCH HÀNG
   // ==========================================
-  const resetCustomerForm = () => {
+  const resetCustomerForm = useCallback(() => {
     setCustomerForm({ id: "", date: "", vaccineCode: "", quantity: 1, customerName: "", price: 0 });
     setEditingCustomerTxId(null);
     setShowCustomerForm(false);
-  };
+  }, []);
 
-  const handleEditCustomer = (tx: CustomerTransaction) => {
+  const handleEditCustomer = useCallback((tx: CustomerTransaction) => {
     setCustomerForm(tx);
     setEditingCustomerTxId(tx.id);
     setShowCustomerForm(true);
-  };
+  }, []);
 
-  const handleDeleteCustomer = (id: string) => {
+  const handleDeleteCustomer = useCallback((id: string) => {
     setDeleteModal({
       isOpen: true,
       type: "customer",
@@ -383,9 +419,9 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       message: "Bạn có chắc chắn muốn hủy giao dịch (hóa đơn) này? Thao tác này có thể ảnh hưởng đến kết quả kinh doanh.",
       actionTitle: "Xác nhận Hủy hóa đơn",
     });
-  };
+  }, []);
 
-  const handleSaveCustomer = async (e: React.FormEvent) => {
+  const handleSaveCustomer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerForm.id || !customerForm.customerName || !customerForm.date) {
       triggerToast("Vui lòng nhập đủ thông tin bắt buộc");
@@ -399,7 +435,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
           body: JSON.stringify(customerForm),
         });
         if (response.ok) {
-          fetchCustomerTransactions();
+          fetchCustomerTransactions(true);
           triggerToast("Cập nhật hóa đơn và đồng bộ hồ sơ bệnh án thành công!");
           resetCustomerForm();
         } else {
@@ -409,29 +445,29 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ!");
     }
-  };
+  }, [customerForm, editingCustomerTxId, fetchWithAuth, fetchCustomerTransactions, triggerToast, resetCustomerForm]);
 
   // ==========================================
   // HANDLERS: NHÀ CUNG CẤP
   // ==========================================
-  const resetSupplierForm = () => {
+  const resetSupplierForm = useCallback(() => {
     setSupplierForm({ soLuong: 0, donGia: 0, tongTien: 0, tinhTrang: "Bình thường" });
     setSupplierErrors({});
     setIsNewVaccine(false);
     setIsNewSupplier(false);
     setEditingSupplierTxId(null);
     setShowSupplierForm(false);
-  };
+  }, []);
 
-  const handleEditSupplier = (tx: KhoVacXin) => {
+  const handleEditSupplier = useCallback((tx: KhoVacXin) => {
     setSupplierForm(tx);
     setIsNewVaccine(false);
     setIsNewSupplier(false);
     setEditingSupplierTxId(tx.soLo);
     setShowSupplierForm(true);
-  };
+  }, []);
 
-  const handleDeleteSupplier = (soLo: number) => {
+  const handleDeleteSupplier = useCallback((soLo: number) => {
     setDeleteModal({
       isOpen: true,
       type: "supplier",
@@ -439,37 +475,37 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       message: "Bạn có chắc chắn muốn xóa giao dịch nhập lô này khỏi hệ thống?",
       actionTitle: "Xác nhận Xóa giao dịch",
     });
-  };
+  }, []);
 
-  const handleDonGiaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDonGiaChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (!val) {
-      setSupplierForm({ ...supplierForm, donGia: 0 });
-      setSupplierErrors({ ...supplierErrors, donGia: "" });
+      setSupplierForm((prev) => ({ ...prev, donGia: 0 }));
+      setSupplierErrors((prev) => ({ ...prev, donGia: "" }));
       return;
     }
     const num = Number(val);
     if (num < 10000000000) {
-      setSupplierForm({ ...supplierForm, donGia: num });
-      setSupplierErrors({ ...supplierErrors, donGia: "" });
+      setSupplierForm((prev) => ({ ...prev, donGia: num }));
+      setSupplierErrors((prev) => ({ ...prev, donGia: "" }));
     }
-  };
+  }, []);
 
-  const handleTongTienChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTongTienChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (!val) {
-      setSupplierForm({ ...supplierForm, tongTien: 0 });
-      setSupplierErrors({ ...supplierErrors, tongTien: "" });
+      setSupplierForm((prev) => ({ ...prev, tongTien: 0 }));
+      setSupplierErrors((prev) => ({ ...prev, tongTien: "" }));
       return;
     }
     const num = Number(val);
     if (num < 100000000000) {
-      setSupplierForm({ ...supplierForm, tongTien: num });
-      setSupplierErrors({ ...supplierErrors, tongTien: "" });
+      setSupplierForm((prev) => ({ ...prev, tongTien: num }));
+      setSupplierErrors((prev) => ({ ...prev, tongTien: "" }));
     }
-  };
+  }, []);
 
-  const handleSelectVaccine = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleSelectVaccine = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (val === "OTHER") {
       setIsNewVaccine(true);
@@ -516,9 +552,9 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       setIsNewVaccine(false);
       setSupplierForm((prev) => ({ ...prev, maVacXin: undefined }));
     }
-  };
+  }, [vacXinCatalog]);
 
-  const handleSelectSupplier = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleSelectSupplier = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (val === "OTHER") {
       setIsNewSupplier(true);
@@ -538,9 +574,9 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       setIsNewSupplier(false);
       setSupplierForm((prev) => ({ ...prev, maNhaCungCap: undefined }));
     }
-  };
+  }, [supplierList]);
 
-  const handleSaveSupplier = async (e: React.FormEvent) => {
+  const handleSaveSupplier = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
@@ -581,30 +617,30 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       if (!res.ok) throw new Error("Lưu thất bại");
       triggerToast("Thao tác khởi tạo chứng từ nhập thành công!");
 
-      fetchSupplierTransactions();
-      fetchMetadata();
+      fetchSupplierTransactions(true);
+      fetchMetadata(true);
       resetSupplierForm();
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Lỗi khi lưu Database");
     }
-  };
+  }, [supplierForm, isNewVaccine, isNewSupplier, editingSupplierTxId, fetchWithAuth, fetchSupplierTransactions, fetchMetadata, resetSupplierForm, triggerToast]);
 
   // ==========================================
   // HANDLERS: QUẢN LÝ GIÁ VẮC XIN
   // ==========================================
-  const resetPriceForm = () => {
+  const resetPriceForm = useCallback(() => {
     setPriceForm({ id: "", name: "", dosage: "", year: "", price: 0 });
     setEditingPriceId(null);
     setShowPriceForm(false);
-  };
+  }, []);
 
-  const handleEditPrice = (priceRec: VaccinePrice) => {
+  const handleEditPrice = useCallback((priceRec: VaccinePrice) => {
     setPriceForm(priceRec);
     setEditingPriceId(priceRec.id);
     setShowPriceForm(true);
-  };
+  }, []);
 
-  const handleDeletePrice = (id: string) => {
+  const handleDeletePrice = useCallback((id: string) => {
     setDeleteModal({
       isOpen: true,
       type: "price",
@@ -612,9 +648,9 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       message: "Bạn có chắc chắn muốn ngừng kinh doanh và xóa định giá vắc-xin này không?",
       actionTitle: "Xác nhận Xóa định giá",
     });
-  };
+  }, []);
 
-  const handleSavePrice = async (e: React.FormEvent) => {
+  const handleSavePrice = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!priceForm.id || !priceForm.price) {
       triggerToast("Vui lòng điền đủ thông tin");
@@ -628,7 +664,7 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       });
       if (response.ok) {
         triggerToast("Cập nhật giá vắc-xin thành công!");
-        fetchVaccinePrices();
+        fetchVaccinePrices(true);
         resetPriceForm();
       } else {
         triggerToast("Lỗi cập nhật giá trên máy chủ!");
@@ -636,28 +672,34 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     } catch (error) {
       if (error !== "Unauthorized") triggerToast("Lỗi cập nhật hệ thống!");
     }
-  };
+  }, [priceForm, fetchWithAuth, fetchVaccinePrices, resetPriceForm, triggerToast]);
 
   // ==========================================
-  // LỌC DỮ LIỆU
+  // LỌC DỮ LIỆU BẰNG useMemo
   // ==========================================
-  const filteredCustomerTxs = customerTxs.filter(
-    (tx) =>
-      tx.customerName.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
-      tx.id.toLowerCase().includes(searchCustomerQuery.toLowerCase()) ||
-      tx.vaccineCode.toLowerCase().includes(searchCustomerQuery.toLowerCase()),
-  );
+  const filteredCustomerTxs = useMemo(() => {
+    return customerTxs.filter(
+      (tx) =>
+        tx.customerName.toLowerCase().includes(debouncedCustomerQuery.toLowerCase()) ||
+        tx.id.toLowerCase().includes(debouncedCustomerQuery.toLowerCase()) ||
+        tx.vaccineCode.toLowerCase().includes(debouncedCustomerQuery.toLowerCase()),
+    );
+  }, [customerTxs, debouncedCustomerQuery]);
 
-  const filteredSupplierTxs = supplierTxs.filter(
-    (tx) =>
-      (tx.tenNhaCungCap && tx.tenNhaCungCap.toLowerCase().includes(searchSupplierQuery.toLowerCase())) ||
-      tx.soLo.toString().includes(searchSupplierQuery) ||
-      (tx.tenVacXin && tx.tenVacXin.toLowerCase().includes(searchSupplierQuery.toLowerCase())),
-  );
+  const filteredSupplierTxs = useMemo(() => {
+    return supplierTxs.filter(
+      (tx) =>
+        (tx.tenNhaCungCap && tx.tenNhaCungCap.toLowerCase().includes(debouncedSupplierQuery.toLowerCase())) ||
+        tx.soLo.toString().includes(debouncedSupplierQuery) ||
+        (tx.tenVacXin && tx.tenVacXin.toLowerCase().includes(debouncedSupplierQuery.toLowerCase())),
+    );
+  }, [supplierTxs, debouncedSupplierQuery]);
 
-  const filteredPrices = vaccinePrices.filter(
-    (p) => p.id.toString().toLowerCase().includes(searchPriceQuery.toLowerCase()) || p.name.toLowerCase().includes(searchPriceQuery.toLowerCase()),
-  );
+  const filteredPrices = useMemo(() => {
+    return vaccinePrices.filter(
+      (p) => p.id.toString().toLowerCase().includes(debouncedPriceQuery.toLowerCase()) || p.name.toLowerCase().includes(debouncedPriceQuery.toLowerCase()),
+    );
+  }, [vaccinePrices, debouncedPriceQuery]);
 
   return (
     <div className="space-y-6 animate-fade-in pb-10">
@@ -758,14 +800,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
             </div>
           </div>
           
-          {/* <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
-            <p className="font-semibold flex items-center gap-2"><Activity className="w-4 h-4"/> Ghi chú dữ liệu:</p>
-            <ul className="list-disc ml-5 mt-2 space-y-1">
-              <li><strong>Tổng Thu:</strong> Tính từ các hóa đơn giao dịch với khách hàng dựa trên "Ngày xuất/tiêm".</li>
-              <li><strong>Tổng Chi:</strong> Tính từ các hóa đơn nhập kho vắc-xin với nhà cung cấp dựa trên "Ngày nhận lô".</li>
-              <li>Sử dụng thanh chọn thời gian bên trên để tùy chỉnh giới hạn khoảng thời gian muốn xem báo cáo.</li>
-            </ul>
-          </div> */}
         </div>
       )}
 

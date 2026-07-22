@@ -275,4 +275,60 @@ public class BenhNhanService {
         dto.setHistory(historyList);
         return dto;
     }
+
+    /**
+     * Lưu tạm thông tin phản ứng sau tiêm trước khi thanh toán VNPay
+     */
+    @Transactional
+    public Double preparePayment(LichSuTiemDTO dto) {
+        ChiTietDkTiem ct = chiTietDkTiemRepository.findById(dto.getRecordId())
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy bản ghi"));
+
+        // Lưu tạm ghi chú / phản ứng
+        ct.setGhiChu("Phản ứng: " + dto.getSideEffect() + " | Thời gian: " + dto.getThoiGianTacDung());
+        ct.setTrangThai("Chờ thanh toán"); // Khóa trạng thái chờ
+        chiTietDkTiemRepository.save(ct);
+
+        LoVacXin lo = loVacXinRepository.findById(ct.getMaLo()).orElse(null);
+        if (lo != null && lo.getVacXin() != null && lo.getVacXin().getDonGia() != null) {
+            return lo.getVacXin().getDonGia(); // Trả về giá tiền để tạo URL VNPay
+        }
+        return 0.0;
+    }
+
+    /**
+     * Xác nhận thanh toán thành công, chuyển trạng thái "Đã tiêm" và tạo Hóa Đơn
+     */
+    @Transactional
+    public void confirmPaymentSuccess(Long recordId) {
+        ChiTietDkTiem ct = chiTietDkTiemRepository.findById(recordId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy bản ghi"));
+
+        ct.setTrangThai("Đã tiêm");
+        chiTietDkTiemRepository.save(ct);
+
+        // Lấy giá
+        LoVacXin lo = loVacXinRepository.findById(ct.getMaLo()).orElse(null);
+        double price = (lo != null && lo.getVacXin() != null && lo.getVacXin().getDonGia() != null)
+                ? lo.getVacXin().getDonGia() : 0.0;
+
+        // Tạo Hóa Đơn
+        HoaDon hd = new HoaDon();
+        hd.setTongTien(price);
+        hd.setFlagDelete(false);
+        hd = hoaDonRepository.save(hd);
+
+        // Tạo Hồ sơ bệnh án
+        HoSoBenhAn hs = new HoSoBenhAn();
+        hs.setMaHoaDon(hd.getMaHoaDon());
+        hs.setChiTietDkTiem(ct);
+        hs.setThoiGianTiem(LocalDate.now());
+
+        // Phân tách GhiChu lưu tạm trước đó
+        String tempGhiChu = ct.getGhiChu();
+        hs.setPhanUngSauTiem(tempGhiChu);
+        hs.setThoiGianTacDung("Đã thanh toán qua VNPay");
+
+        hoSoBenhAnRepository.save(hs);
+    }
 }

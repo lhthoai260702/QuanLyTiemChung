@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { FAQ, SystemLog } from "../types";
 import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail, CheckCircle2, Filter } from "lucide-react";
@@ -51,8 +51,11 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const navigate = useNavigate();
 
   // =========================================================================
-  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // CACHE SYSTEM & BẢO MẬT GỌI API
   // =========================================================================
+  const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
+  const CACHE_TTL = 5 * 60 * 1000; // 5 phút
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -61,7 +64,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     }
   }, [navigate, triggerToast]);
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
     const headers = {
       ...options.headers,
@@ -73,10 +76,26 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       localStorage.removeItem("user");
       navigate("/");
       triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject("Unauthorized");
+      return Promise.reject(new Error("Unauthorized"));
     }
     return response;
-  };
+  }, [navigate, triggerToast]);
+
+  const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
+    if (!forceRefetch && apiCache.current[url]) {
+      const cached = apiCache.current[url];
+      if (Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data;
+      }
+    }
+    const response = await fetchWithAuth(url);
+    if (response.ok) {
+      const data = await response.json();
+      apiCache.current[url] = { data, timestamp: Date.now() };
+      return data;
+    }
+    throw new Error("Lỗi khi tải dữ liệu từ máy chủ");
+  }, [fetchWithAuth]);
 
   // ==========================================
   // STATE: MÀN HÌNH 1 - NHẮC NHỞ TIÊM CHỦNG
@@ -87,36 +106,33 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const [reminderErrors, setReminderErrors] = useState<Record<string, string>>({});
   const [isLoadingReminders, setIsLoadingReminders] = useState(false);
 
-  const fetchReminders = async () => {
+  const fetchReminders = useCallback(async (force = false) => {
     setIsLoadingReminders(true);
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/support/reminders`);
-      if (response.ok) {
-        const data = await response.json();
-        const today = new Date();
-        const offset = today.getTimezoneOffset();
-        const localToday = new Date(today.getTime() - offset * 60 * 1000).toISOString().split("T")[0];
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/support/reminders`, force);
+      const today = new Date();
+      const offset = today.getTimezoneOffset();
+      const localToday = new Date(today.getTime() - offset * 60 * 1000).toISOString().split("T")[0];
 
-        const mappedData: Reminder[] = data
-          .filter((item: any) => item.expectedDate >= localToday)
-          .map((item: any) => ({
-            id: `DKT${String(item.id).padStart(3, "0")}`,
-            patientId: `BN${String(item.patientId).padStart(3, "0")}`,
-            patientName: item.patientName,
-            expectedDate: item.expectedDate,
-            vaccineName: item.vaccineName,
-            estimatedPrice: item.estimatedPrice || 0,
-            email: item.email || "",
-            status: "Chưa gửi",
-          }));
-        setReminders(mappedData);
-      }
-    } catch (error) {
-      if (error !== "Unauthorized") console.error("Lỗi kết nối:", error);
+      const mappedData: Reminder[] = data
+        .filter((item: any) => item.expectedDate >= localToday)
+        .map((item: any) => ({
+          id: `DKT${String(item.id).padStart(3, "0")}`,
+          patientId: `BN${String(item.patientId).padStart(3, "0")}`,
+          patientName: item.patientName,
+          expectedDate: item.expectedDate,
+          vaccineName: item.vaccineName,
+          estimatedPrice: item.estimatedPrice || 0,
+          email: item.email || "",
+          status: "Chưa gửi",
+        }));
+      setReminders(mappedData);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error("Lỗi kết nối:", error);
     } finally {
       setIsLoadingReminders(false);
     }
-  };
+  }, [fetchWithCache]);
 
   // ==========================================
   // STATE: MÀN HÌNH 2 - TƯ VẤN TIÊM CHỦNG (FAQ)
@@ -128,22 +144,17 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const [faqErrors, setFaqErrors] = useState<Record<string, string>>({});
   const [isLoadingFaqs, setIsLoadingFaqs] = useState(false);
 
-  const fetchFaqs = async () => {
+  const fetchFaqs = useCallback(async (force = false) => {
     setIsLoadingFaqs(true);
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/support/faqs`);
-      if (response.ok) {
-        const data = await response.json();
-        setFaqsList(data);
-      } else {
-        triggerToast("Lỗi lấy danh sách FAQ!");
-      }
-    } catch (error) {
-      if (error !== "Unauthorized") console.error("Lỗi kết nối:", error);
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/support/faqs`, force);
+      setFaqsList(data);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error("Lỗi kết nối:", error);
     } finally {
       setIsLoadingFaqs(false);
     }
-  };
+  }, [fetchWithCache]);
 
   // ==========================================
   // STATE: MÀN HÌNH 3 - GIẢI ĐÁP THẮC MẮC (TICKETS CHAT)
@@ -152,40 +163,46 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [replyMessage, setReplyMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>("Tất cả"); // Bổ sung bộ lọc trạng thái
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const fetchTickets = async () => {
+  // Xử lý Debounce cho ô tìm kiếm
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timerId);
+  }, [searchQuery]);
+
+  const fetchTickets = useCallback(async (force = false) => {
     setIsLoadingTickets(true);
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/list`);
-      if (res.ok) {
-        const data = await res.json();
-        const mapped = data.map((t: any) => ({
-          id: `PH-${t.id}`,
-          customerName: t.customerName,
-          comments: t.comments,
-          email: t.email || "chưa_cập_nhật@gmail.com",
-          status: t.status || "Đang xử lý",
-          chiTietPhanHoi: t.chiTietPhanHoi,
-          time: t.time || "Chưa cập nhật",
-        }));
-        setTicketsList(mapped);
-      }
-    } catch (err) {
-      if (err !== "Unauthorized") console.error(err);
+      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/list`, force);
+      const mapped = data.map((t: any) => ({
+        id: `PH-${t.id}`,
+        customerName: t.customerName,
+        comments: t.comments,
+        email: t.email || "chưa_cập_nhật@gmail.com",
+        status: t.status || "Đang xử lý",
+        chiTietPhanHoi: t.chiTietPhanHoi,
+        time: t.time || "Chưa cập nhật",
+      }));
+      setTicketsList(mapped);
+    } catch (err: any) {
+      if (err.message !== "Unauthorized") console.error(err);
     } finally {
       setIsLoadingTickets(false);
     }
-  };
+  }, [fetchWithCache]);
 
   useEffect(() => {
     if (activeTab === "reminder") fetchReminders();
     if (activeTab === "faq") fetchFaqs();
     if (activeTab === "tickets") fetchTickets();
-  }, [activeTab]);
+  }, [activeTab, fetchReminders, fetchFaqs, fetchTickets]);
 
   // Cập nhật lại màn hình chat nếu danh sách thay đổi (khi có tin nhắn mới)
   useEffect(() => {
@@ -193,7 +210,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       const updated = ticketsList.find((t) => t.id === selectedTicket.id);
       if (updated) setSelectedTicket(updated);
     }
-  }, [ticketsList]);
+  }, [ticketsList, selectedTicket?.id]);
 
   // Tự động cuộn xuống tin nhắn cuối
   useEffect(() => {
@@ -201,13 +218,13 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   }, [selectedTicket?.chiTietPhanHoi]);
 
   // ---------- HANDLERS NHẮC NHỞ ----------
-  const handleSelectReminder = (rem: Reminder) => {
+  const handleSelectReminder = useCallback((rem: Reminder) => {
     setSelectedReminder(rem);
     setReminderEmail(rem.email);
     setReminderErrors({});
-  };
+  }, []);
 
-  const handleSendReminder = (e: React.FormEvent) => {
+  const handleSendReminder = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     const errors: Record<string, string> = {};
 
@@ -224,30 +241,30 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     setReminders(updated);
     triggerToast("Email được gởi đi");
     setSelectedReminder(null);
-  };
+  }, [reminderEmail, reminders, selectedReminder, triggerToast]);
 
-  const handleCancelReminder = () => {
+  const handleCancelReminder = useCallback(() => {
     setSelectedReminder(null);
     setReminderErrors({});
-  };
+  }, []);
 
   // ---------- HANDLERS TƯ VẤN (FAQ) ----------
-  const selectFaqForEditing = (faq: FAQType) => {
+  const selectFaqForEditing = useCallback((faq: FAQType) => {
     setSelectedFaq(faq);
     setFaqQuestion(faq.question);
     setFaqAnswer(faq.answer);
     setFaqErrors({});
-  };
+  }, []);
 
-  const handleAddFaq = () => {
+  const handleAddFaq = useCallback(() => {
     const newFaq: FAQType = { id: null, question: "", answer: "" };
     setSelectedFaq(newFaq);
     setFaqQuestion("");
     setFaqAnswer("");
     setFaqErrors({});
-  };
+  }, []);
 
-  const handleSaveFaq = async (e: React.FormEvent) => {
+  const handleSaveFaq = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFaq) return;
 
@@ -277,27 +294,27 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
 
       if (response.ok) {
         triggerToast(isEditing ? "Đã cập nhật câu hỏi thành công" : "Đã thêm câu hỏi FAQ thành công");
-        fetchFaqs();
+        fetchFaqs(true); // Force refetch sau khi lưu
         setSelectedFaq(null);
       } else {
         triggerToast("Lỗi khi lưu dữ liệu vào hệ thống!");
       }
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Lỗi kết nối tới máy chủ!");
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") triggerToast("Lỗi kết nối tới máy chủ!");
     }
-  };
+  }, [selectedFaq, faqQuestion, faqAnswer, fetchWithAuth, fetchFaqs, triggerToast]);
 
   // ---------- HANDLERS GIẢI ĐÁP (TICKETS CHAT) ----------
-  const selectTicketForProcessing = (t: SupportTicket) => {
+  const selectTicketForProcessing = useCallback((t: SupportTicket) => {
     setSelectedTicket(t);
     setReplyMessage("");
-  };
+  }, []);
 
-  const handleProcessTicket = async (e: React.FormEvent) => {
+  const handleProcessTicket = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTicket || !replyMessage.trim()) return;
 
-    // SỬA Ở ĐÂY: Giữ nguyên ID gốc (bao gồm cả PH- hoặc PHCC-) để backend có thể phân loại
+    // Giữ nguyên ID gốc để backend phân loại
     const realId = String(selectedTicket.id);
 
     try {
@@ -314,18 +331,18 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
 
       if (res.ok) {
         setReplyMessage("");
-        await fetchTickets(); // Refresh dữ liệu chat
+        await fetchTickets(true); // Force refetch để lấy tin nhắn mới
       } else {
         triggerToast("Lỗi gửi phản hồi");
       }
-    } catch (err) {
-      if (err !== "Unauthorized") triggerToast("Lỗi gửi tin nhắn");
+    } catch (err: any) {
+      if (err.message !== "Unauthorized") triggerToast("Lỗi gửi tin nhắn");
     } finally {
       setIsReplying(false);
     }
-  };
+  }, [selectedTicket, replyMessage, fetchWithAuth, fetchTickets, triggerToast]);
 
-  const renderChatHistory = (jsonStr?: string) => {
+  const renderChatHistory = useCallback((jsonStr?: string) => {
     if (!jsonStr || jsonStr === "null") return null;
     try {
       const messages: ChatMessage[] = JSON.parse(jsonStr);
@@ -355,47 +372,58 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     } catch (e) {
       return <div className="text-center text-xs text-slate-400">Lỗi hiển thị nội dung chat.</div>;
     }
-  };
+  }, []);
 
-  const formatCurrency = (val: number) => {
+  const formatCurrency = useCallback((val: number) => {
     return val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " VNĐ";
-  };
+  }, []);
 
   // --- LỌC, NHÓM VÀ SẮP XẾP TICKETS ---
-  const uniqueTicketStatuses = ["Tất cả", ...Array.from(new Set(ticketsList.map((t) => t.status).filter(Boolean)))];
+  const uniqueTicketStatuses = useMemo(() => {
+    return ["Tất cả", ...Array.from(new Set(ticketsList.map((t) => t.status).filter(Boolean)))];
+  }, [ticketsList]);
 
-  const filteredTickets = ticketsList.filter((t) => {
-    const matchesSearch = t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || String(t.id).toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = ticketStatusFilter === "Tất cả" || t.status === ticketStatusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const groupedTickets = filteredTickets.reduce((acc, ticket) => {
-    const status = ticket.status || "Chưa xác định";
-    if (!acc[status]) acc[status] = [];
-    acc[status].push(ticket);
-    return acc;
-  }, {} as Record<string, SupportTicket[]>);
-
-  // Sort each group by time (Mới nhất lên trên)
-  Object.keys(groupedTickets).forEach((status) => {
-    groupedTickets[status].sort((a, b) => {
-      const tA = new Date(a.time || "").getTime();
-      const tB = new Date(b.time || "").getTime();
-      if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
-      return (b.time || "").localeCompare(a.time || ""); // Fallback
+  const filteredTickets = useMemo(() => {
+    return ticketsList.filter((t) => {
+      const matchesSearch = t.customerName.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) || 
+                            String(t.id).toLowerCase().includes(debouncedSearchQuery.toLowerCase());
+      const matchesStatus = ticketStatusFilter === "Tất cả" || t.status === ticketStatusFilter;
+      return matchesSearch && matchesStatus;
     });
-  });
+  }, [ticketsList, debouncedSearchQuery, ticketStatusFilter]);
 
-  const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
-  const sortedStatuses = Object.keys(groupedTickets).sort((a, b) => {
-    const indexA = statusOrder.indexOf(a);
-    const indexB = statusOrder.indexOf(b);
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA === -1 && indexB !== -1) return 1;
-    if (indexA !== -1 && indexB === -1) return -1;
-    return a.localeCompare(b);
-  });
+  const groupedTickets = useMemo(() => {
+    const grouped = filteredTickets.reduce((acc, ticket) => {
+      const status = ticket.status || "Chưa xác định";
+      if (!acc[status]) acc[status] = [];
+      acc[status].push(ticket);
+      return acc;
+    }, {} as Record<string, SupportTicket[]>);
+
+    // Sort each group by time (Mới nhất lên trên)
+    Object.keys(grouped).forEach((status) => {
+      grouped[status].sort((a, b) => {
+        const tA = new Date(a.time || "").getTime();
+        const tB = new Date(b.time || "").getTime();
+        if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
+        return (b.time || "").localeCompare(a.time || ""); // Fallback
+      });
+    });
+
+    return grouped;
+  }, [filteredTickets]);
+
+  const sortedStatuses = useMemo(() => {
+    const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
+    return Object.keys(groupedTickets).sort((a, b) => {
+      const indexA = statusOrder.indexOf(a);
+      const indexB = statusOrder.indexOf(b);
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA === -1 && indexB !== -1) return 1;
+      if (indexA !== -1 && indexB === -1) return -1;
+      return a.localeCompare(b);
+    });
+  }, [groupedTickets]);
 
 
   return (
@@ -410,7 +438,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
       <div className="border-b border-slate-200 flex space-x-2">
         <button
           onClick={() => setActiveTab("reminder")}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
             activeTab === "reminder" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
@@ -418,7 +446,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
         </button>
         <button
           onClick={() => setActiveTab("faq")}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
             activeTab === "faq" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
@@ -429,7 +457,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
             setActiveTab("tickets");
             setSelectedTicket(null);
           }}
-          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 cursor-pointer ${
             activeTab === "tickets" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
@@ -552,13 +580,13 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
                   <button
                     type="button"
                     onClick={handleCancelReminder}
-                    className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors"
+                    className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
                   >
                     Hủy
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Send className="w-3.5 h-3.5" /> Gởi
                   </button>
@@ -579,7 +607,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
               <h3 className="font-bold text-slate-800 text-sm">Bảng câu hỏi (FAQ)</h3>
               <button
                 onClick={handleAddFaq}
-                className="px-2.5 py-1.5 text-blue-600 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1 text-xs font-semibold shadow-sm"
+                className="px-2.5 py-1.5 text-blue-600 bg-white border border-slate-200 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1 text-xs font-semibold shadow-sm cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Thêm mới
               </button>
@@ -664,13 +692,13 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
                   <button
                     type="button"
                     onClick={() => setSelectedFaq(null)}
-                    className="px-5 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors"
+                    className="px-5 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-colors cursor-pointer"
                   >
                     Hủy bỏ
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5 transition-colors"
+                    className="px-5 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Save className="w-4 h-4" /> {selectedFaq.id ? "Lưu" : "Đăng câu hỏi"}
                   </button>
@@ -707,7 +735,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
                 <select
                   value={ticketStatusFilter}
                   onChange={(e) => setTicketStatusFilter(e.target.value)}
-                  className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-500"
+                  className="flex-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-blue-500 cursor-pointer"
                 >
                   {uniqueTicketStatuses.map((status) => (
                     <option key={status} value={status}>
@@ -824,7 +852,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
                       <button
                         type="submit"
                         disabled={isReplying || !replyMessage.trim()}
-                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm"
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm cursor-pointer"
                       >
                         <Send className="w-4 h-4" />
                       </button>

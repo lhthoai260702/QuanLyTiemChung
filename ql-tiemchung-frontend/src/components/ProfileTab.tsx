@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Save, User, Shield, ArrowLeft, KeyRound } from "lucide-react";
 
 interface ProfileForm {
@@ -23,6 +23,12 @@ interface ProfileTabProps {
   onBack?: () => void;
 }
 
+// =========================================================================
+// CACHE SYSTEM BÊN NGOÀI COMPONENT ĐỂ GIỮ DỮ LIỆU KHI REMOUNT (CHUYỂN TAB)
+// =========================================================================
+const profileCache: { data: any; timestamp: number } = { data: null, timestamp: 0 };
+const CACHE_TTL = 5 * 60 * 1000; // 5 phút
+
 export default function ProfileTab({ triggerToast, onNameChange, onBack }: ProfileTabProps) {
   const [profile, setProfile] = useState<ProfileForm>({
     tenDangNhap: "", hoTen: "", cmnd: "", noiO: "", moTa: "", email: "", sdt: "",
@@ -34,83 +40,104 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
   const [userRoleBadge, setUserRoleBadge] = useState<string>("Tài khoản Hệ thống");
   const [userRole, setUserRole] = useState<number>(1);
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  // =========================================================================
+  // BẢO MẬT & API
+  // =========================================================================
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
     const headers = { ...options.headers, Authorization: `Bearer ${token}` };
     return fetch(url, { ...options, headers });
-  };
+  }, []);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async (forceRefetch = false) => {
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/profile`);
-      if (res.ok) {
-        const data = await res.json();
+      let data;
+      
+      // Kỹ thuật Caching
+      if (!forceRefetch && profileCache.data && Date.now() - profileCache.timestamp < CACHE_TTL) {
+        data = profileCache.data;
+      } else {
+        const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/profile`);
+        if (!res.ok) return;
+        data = await res.json();
+        
+        // Lưu vào Cache
+        profileCache.data = data;
+        profileCache.timestamp = Date.now();
+      }
 
-        let formattedPhone = data.sdt ? data.sdt.replace(/\D/g, "") : "";
-        if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
-          formattedPhone = `${formattedPhone.slice(0, 3)} ${formattedPhone.slice(3)}`;
-        } else if (formattedPhone.length > 6) {
-          formattedPhone = `${formattedPhone.slice(0, 3)} ${formattedPhone.slice(3, 6)} ${formattedPhone.slice(6)}`;
-        }
+      let formattedPhone = data.sdt ? data.sdt.replace(/\D/g, "") : "";
+      if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
+        formattedPhone = `${formattedPhone.slice(0, 3)} ${formattedPhone.slice(3)}`;
+      } else if (formattedPhone.length > 6) {
+        formattedPhone = `${formattedPhone.slice(0, 3)} ${formattedPhone.slice(3, 6)} ${formattedPhone.slice(6)}`;
+      }
 
-        setProfile({
-          tenDangNhap: data.tenDangNhap || "",
-          hoTen: data.hoTen || "",
-          cmnd: data.cmnd || "",
-          noiO: data.noiO || "",
-          moTa: data.moTa || "",
-          email: data.email || "",
-          sdt: formattedPhone,
-          matKhau: "",
-          namSinh: data.namSinh || "",
-          ngaySinh: data.ngaySinh || "",
-          gioiTinh: data.gioiTinh || "Nam",
-          diaChi: data.diaChi || "",
-          nguoiGiamHo: data.nguoiGiamHo || "",
-        });
+      setProfile({
+        tenDangNhap: data.tenDangNhap || "",
+        hoTen: data.hoTen || "",
+        cmnd: data.cmnd || "",
+        noiO: data.noiO || "",
+        moTa: data.moTa || "",
+        email: data.email || "",
+        sdt: formattedPhone,
+        matKhau: "", // Không bao giờ load mật khẩu
+        namSinh: data.namSinh || "",
+        ngaySinh: data.ngaySinh || "",
+        gioiTinh: data.gioiTinh || "Nam",
+        diaChi: data.diaChi || "",
+        nguoiGiamHo: data.nguoiGiamHo || "",
+      });
 
-        const userStr = localStorage.getItem("user");
-        if (userStr) {
-          const u = JSON.parse(userStr);
-          setUserRole(u.maQuyen);
-          if (u.maQuyen === 1) setUserRoleBadge("Administrator");
-          else if (u.maQuyen === 2) setUserRoleBadge("Nhân viên Kho");
-          else if (u.maQuyen === 3) setUserRoleBadge("Nhân sự Tài chính");
-          else if (u.maQuyen === 4) setUserRoleBadge("CSKH & Hỗ trợ");
-          else if (u.maQuyen === 5) setUserRoleBadge("Nhân viên Y tế");
-          else if (u.maQuyen === 6) setUserRoleBadge("Khách hàng");
-        }
+      const userStr = localStorage.getItem("user");
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        setUserRole(u.maQuyen);
+        if (u.maQuyen === 1) setUserRoleBadge("Administrator");
+        else if (u.maQuyen === 2) setUserRoleBadge("Nhân viên Kho");
+        else if (u.maQuyen === 3) setUserRoleBadge("Nhân sự Tài chính");
+        else if (u.maQuyen === 4) setUserRoleBadge("CSKH & Hỗ trợ");
+        else if (u.maQuyen === 5) setUserRoleBadge("Nhân viên Y tế");
+        else if (u.maQuyen === 6) setUserRoleBadge("Khách hàng");
       }
     } catch (e) {
       console.error(e);
     }
-  };
+  }, [fetchWithAuth]);
 
-  useEffect(() => { loadProfile(); }, []);
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setProfile({ ...profile, [e.target.name]: e.target.value });
-    if (profileErrors[e.target.name]) setProfileErrors({ ...profileErrors, [e.target.name]: "" });
-  };
+  // =========================================================================
+  // HANDLERS (Đã áp dụng useCallback để tránh render lại)
+  // =========================================================================
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setProfile((prev) => ({ ...prev, [name]: value }));
+    setProfileErrors((prev) => prev[name] ? { ...prev, [name]: "" } : prev);
+  }, []);
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhoneChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (val.length > 10) val = val.substring(0, 10);
     let formatted = val;
     if (val.length > 3 && val.length <= 6) formatted = `${val.slice(0, 3)} ${val.slice(3)}`;
     else if (val.length > 6) formatted = `${val.slice(0, 3)} ${val.slice(3, 6)} ${val.slice(6)}`;
-    setProfile({ ...profile, sdt: formatted });
-    if (profileErrors.sdt) setProfileErrors({ ...profileErrors, sdt: "" });
-  };
+    
+    setProfile((prev) => ({ ...prev, sdt: formatted }));
+    setProfileErrors((prev) => prev.sdt ? { ...prev, sdt: "" } : prev);
+  }, []);
 
-  const handleNumberOnlyChange = (field: keyof ProfileForm, maxLength: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNumberOnlyChange = useCallback((field: keyof ProfileForm, maxLength: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (val.length > maxLength) val = val.substring(0, maxLength);
-    setProfile({ ...profile, [field]: val });
-    if (profileErrors[field]) setProfileErrors({ ...profileErrors, [field]: "" });
-  };
+    
+    setProfile((prev) => ({ ...prev, [field]: val }));
+    setProfileErrors((prev) => prev[field] ? { ...prev, [field]: "" } : prev);
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
@@ -148,9 +175,14 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      
       if (res.ok) {
         triggerToast("Cập nhật thông tin thành công!");
-        setProfile({ ...profile, matKhau: "" }); // Reset password field sau khi update thành công
+        setProfile((prev) => ({ ...prev, matKhau: "" })); // Reset password field sau khi update thành công
+        
+        // Invalidate Cache để lần sau loadProfile sẽ lấy dữ liệu mới
+        profileCache.timestamp = 0; 
+
         if (onNameChange) onNameChange(profile.hoTen);
       } else {
         triggerToast("Lỗi: Cập nhật thông tin thất bại!");
@@ -160,7 +192,7 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
     } finally {
       setLoading(false);
     }
-  };
+  }, [profile, userRole, fetchWithAuth, triggerToast, onNameChange]);
 
   return (
     <div className="space-y-6 animate-fade-in relative h-full flex flex-col">

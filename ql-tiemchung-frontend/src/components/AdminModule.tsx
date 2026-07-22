@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
@@ -116,47 +116,59 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const [currentPage, setCurrentPage] = useState<number>(1);
   const ITEMS_PER_PAGE = 20;
 
-  // THÊM ĐOẠN STATE MỚI NÀY VÀO ĐỂ LỌC TRẠNG THÁI:
+  // LỌC TRẠNG THÁI:
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>("Tất cả");
 
-  // --- LOGIC LỌC, NHÓM VÀ SẮP XẾP TICKETS (GIỐNG SUPPORT) ---
-  const uniqueTicketStatuses = ["Tất cả", ...Array.from(new Set(ticketsList.map((t) => t.status).filter(Boolean)))];
+  // =========================================================================
+  // TỐI ƯU HÓA: LOGIC LỌC, NHÓM VÀ SẮP XẾP TICKETS BẰNG useMemo
+  // =========================================================================
+  const uniqueTicketStatuses = useMemo(() => {
+    return ["Tất cả", ...Array.from(new Set(ticketsList.map((t) => t.status).filter(Boolean)))];
+  }, [ticketsList]);
 
-  const filteredTickets = ticketsList.filter((t) => {
-    const matchesSearch = t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || String(t.id).toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = ticketStatusFilter === "Tất cả" || t.status === ticketStatusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const groupedTickets = filteredTickets.reduce((acc, ticket) => {
-    const status = ticket.status || "Chưa xác định";
-    if (!acc[status]) acc[status] = [];
-    acc[status].push(ticket);
-    return acc;
-  }, {} as Record<string, SupportTicket[]>);
-
-  // Sắp xếp mỗi nhóm theo thời gian (Mới nhất lên trên)
-  Object.keys(groupedTickets).forEach((status) => {
-    groupedTickets[status].sort((a, b) => {
-      const tA = new Date(a.time || "").getTime();
-      const tB = new Date(b.time || "").getTime();
-      if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
-      return (b.time || "").localeCompare(a.time || "");
+  const filteredTickets = useMemo(() => {
+    return ticketsList.filter((t) => {
+      const matchesSearch = t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || String(t.id).toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = ticketStatusFilter === "Tất cả" || t.status === ticketStatusFilter;
+      return matchesSearch && matchesStatus;
     });
-  });
+  }, [ticketsList, searchQuery, ticketStatusFilter]);
 
-  const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
-  const sortedStatuses = Object.keys(groupedTickets).sort((a, b) => {
-    const indexA = statusOrder.indexOf(a);
-    const indexB = statusOrder.indexOf(b);
-    if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-    if (indexA === -1 && indexB !== -1) return 1;
-    if (indexA !== -1 && indexB === -1) return -1;
-    return a.localeCompare(b);
-  });
+  const groupedTickets = useMemo(() => {
+    const grouped = filteredTickets.reduce((acc, ticket) => {
+      const status = ticket.status || "Chưa xác định";
+      if (!acc[status]) acc[status] = [];
+      acc[status].push(ticket);
+      return acc;
+    }, {} as Record<string, SupportTicket[]>);
+
+    // Sắp xếp mỗi nhóm theo thời gian (Mới nhất lên trên)
+    Object.keys(grouped).forEach((status) => {
+      grouped[status].sort((a, b) => {
+        const tA = new Date(a.time || "").getTime();
+        const tB = new Date(b.time || "").getTime();
+        if (!isNaN(tA) && !isNaN(tB)) return tB - tA;
+        return (b.time || "").localeCompare(a.time || "");
+      });
+    });
+
+    return grouped;
+  }, [filteredTickets]);
+
+  const sortedStatuses = useMemo(() => {
+    const statusOrder = ["Đang xử lý", "Đã trả lời", "Đã hoàn thành"];
+    return Object.keys(groupedTickets).sort((a, b) => {
+      const indexA = statusOrder.indexOf(a);
+      const indexB = statusOrder.indexOf(b);
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+      if (indexA === -1 && indexB !== -1) return 1;
+      if (indexA !== -1 && indexB === -1) return -1;
+      return a.localeCompare(b);
+    });
+  }, [groupedTickets]);
 
   // =========================================================================
-  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN
+  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN (Dùng useCallback)
   // =========================================================================
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -166,7 +178,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     }
   }, [navigate, triggerToast]);
 
-  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem("token");
     const headers = {
       ...options.headers,
@@ -181,12 +193,12 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       return Promise.reject("Unauthorized");
     }
     return response;
-  };
+  }, [navigate, triggerToast]);
 
   // =========================================================================
   // API FETCH: ACCOUNTS
   // =========================================================================
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts`);
       if (response.ok) {
@@ -199,18 +211,18 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       if (error !== "Unauthorized") console.error("Error fetching accounts:", error);
       triggerToast("Không thể kết nối đến Backend Server!");
     }
-  };
+  }, [fetchWithAuth, triggerToast]);
 
   useEffect(() => {
     if (activeTab === "accounts") fetchAccounts();
-  }, [activeTab]);
+  }, [activeTab, fetchAccounts]);
 
   // =========================================================================
   // API FETCH: SCHEDULES
   // =========================================================================
   const [schedules, setSchedules] = useState<LichTiemChungSRS[]>([]);
 
-  const fetchSchedules = async () => {
+  const fetchSchedules = useCallback(async () => {
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
       if (response.ok) {
@@ -223,18 +235,18 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       if (error !== "Unauthorized") console.error("Error fetching schedules:", error);
       triggerToast("Không thể kết nối đến Backend Server!");
     }
-  };
+  }, [fetchWithAuth, triggerToast]);
 
   useEffect(() => {
     if (activeTab === "schedules") {
       fetchSchedules();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchSchedules]);
 
   // =========================================================================
   // API FETCH: TICKETS CẤP CAO
   // =========================================================================
-  const fetchHighLevelTickets = async () => {
+  const fetchHighLevelTickets = useCallback(async () => {
     setIsTicketsLoading(true);
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/admin/feedback/high-level`);
@@ -250,13 +262,13 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     } finally {
       setIsTicketsLoading(false);
     }
-  };
+  }, [fetchWithAuth, triggerToast]);
 
   useEffect(() => {
     if (activeTab === "feedback") {
       fetchHighLevelTickets();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchHighLevelTickets]);
 
   // Cập nhật Chat View khi có tin nhắn mới
   useEffect(() => {
@@ -264,7 +276,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       const updated = ticketsList.find((t) => t.id === selectedTicket.id);
       if (updated) setSelectedTicket(updated);
     }
-  }, [ticketsList]);
+  }, [ticketsList, selectedTicket?.id]);
 
   // Tự động cuộn xuống tin nhắn cuối
   useEffect(() => {
@@ -278,23 +290,25 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const [scheduleSearchStartDate, setScheduleSearchStartDate] = useState<string>("");
   const [scheduleSearchEndDate, setScheduleSearchEndDate] = useState<string>("");
 
-  const filteredSchedules = schedules.filter((s) => {
-    if (!scheduleSearchStartDate && !scheduleSearchEndDate) return true;
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter((s) => {
+      if (!scheduleSearchStartDate && !scheduleSearchEndDate) return true;
 
-    const scheduleDate = new Date(`${s.nam}-${s.thang}-${s.ngay}`);
+      const scheduleDate = new Date(`${s.nam}-${s.thang}-${s.ngay}`);
 
-    if (scheduleSearchStartDate) {
-      const startDate = new Date(scheduleSearchStartDate);
-      if (scheduleDate < startDate) return false;
-    }
+      if (scheduleSearchStartDate) {
+        const startDate = new Date(scheduleSearchStartDate);
+        if (scheduleDate < startDate) return false;
+      }
 
-    if (scheduleSearchEndDate) {
-      const endDate = new Date(scheduleSearchEndDate);
-      if (scheduleDate > endDate) return false;
-    }
+      if (scheduleSearchEndDate) {
+        const endDate = new Date(scheduleSearchEndDate);
+        if (scheduleDate > endDate) return false;
+      }
 
-    return true;
-  });
+      return true;
+    });
+  }, [schedules, scheduleSearchStartDate, scheduleSearchEndDate]);
 
   useEffect(() => {
     if (filteredSchedules.length > 0) {
@@ -303,7 +317,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     } else {
       setSelectedSchedule(null);
     }
-  }, [schedules, scheduleSearchStartDate, scheduleSearchEndDate]);
+  }, [filteredSchedules, selectedSchedule?.maLichTiem]);
 
   useEffect(() => {
     if (schedules.length > 0 && !selectedSchedule) setSelectedSchedule(schedules[0]);
@@ -334,32 +348,33 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   });
   const [accErrors, setAccErrors] = useState<Record<string, string>>({});
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhoneChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (val.length > 10) val = val.substring(0, 10);
     let formatted = val;
     if (val.length > 3 && val.length <= 6) formatted = `${val.slice(0, 3)} ${val.slice(3)}`;
     else if (val.length > 6) formatted = `${val.slice(0, 3)} ${val.slice(3, 6)} ${val.slice(6)}`;
-    setAccForm({ ...accForm, sdt: formatted });
-    if (accErrors.sdt) setAccErrors({ ...accErrors, sdt: "" });
-  };
+    
+    setAccForm(prev => ({ ...prev, sdt: formatted }));
+    setAccErrors(prev => prev.sdt ? { ...prev, sdt: "" } : prev);
+  }, []);
 
-  const handleNumberOnlyChange = (field: keyof typeof accForm, maxLength: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNumberOnlyChange = useCallback((field: keyof typeof accForm, maxLength: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, "");
     if (val.length > maxLength) val = val.substring(0, maxLength);
-    setAccForm({ ...accForm, [field]: val });
-    if (accErrors[field]) setAccErrors({ ...accErrors, [field]: "" });
-  };
+    setAccForm(prev => ({ ...prev, [field]: val }));
+    setAccErrors(prev => prev[field] ? { ...prev, [field]: "" } : prev);
+  }, []);
 
-  const formatDisplayPhone = (phone?: string) => {
+  const formatDisplayPhone = useCallback((phone?: string) => {
     if (!phone) return "Chưa cập nhật";
     const val = phone.replace(/\D/g, "");
     if (val.length <= 3) return val;
     if (val.length <= 6) return `${val.slice(0, 3)} ${val.slice(3)}`;
     return `${val.slice(0, 3)} ${val.slice(3, 6)} ${val.slice(6)}`;
-  };
+  }, []);
 
-  const getRoleBadgeStyle = (roleName?: string) => {
+  const getRoleBadgeStyle = useCallback((roleName?: string) => {
     if (!roleName) return "bg-slate-100 text-slate-500 border-slate-200";
     const name = roleName.toLowerCase();
     if (name.includes("admin")) return "bg-rose-50 text-rose-700 border-rose-200";
@@ -369,9 +384,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (name.includes("y tế")) return "bg-blue-50 text-blue-700 border-blue-200";
     if (name.includes("khách")) return "bg-slate-100 text-slate-700 border-slate-300";
     return "bg-gray-100 text-gray-600 border-gray-200";
-  };
+  }, []);
 
-  const ROLE_TABS = [
+  const ROLE_TABS = useMemo(() => [
     { id: "all", label: "Tất cả" },
     { id: "admin", label: "Admin" },
     { id: "y tế", label: "Y Tế" },
@@ -379,9 +394,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     { id: "tài chính", label: "Tài Chính" },
     { id: "hỗ trợ", label: "Hỗ Trợ" },
     { id: "khách", label: "Khách Hàng" },
-  ];
+  ], []);
 
-  const checkRoleMatch = (phanQuyenStr: string | undefined, filterId: string) => {
+  const checkRoleMatch = useCallback((phanQuyenStr: string | undefined, filterId: string) => {
     if (!phanQuyenStr) return false;
     const str = phanQuyenStr.toLowerCase();
     if (filterId === "admin") return str.includes("admin");
@@ -391,25 +406,30 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (filterId === "hỗ trợ") return str.includes("hỗ trợ");
     if (filterId === "khách") return str.includes("khách") && !str.includes("hỗ trợ");
     return false;
-  };
+  }, []);
 
-  const getRoleCount = (filterId: string) => {
+  const getRoleCount = useCallback((filterId: string) => {
     if (filterId === "all") return accounts.length;
     return accounts.filter((a) => checkRoleMatch(a.phanQuyen, filterId)).length;
-  };
+  }, [accounts, checkRoleMatch]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, roleFilter]);
 
-  const filteredAccounts = accounts.filter((a) => {
-    const matchSearch = a.hoTen.toLowerCase().includes(searchQuery.toLowerCase()) || a.tenDangNhap.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchRole = roleFilter === "all" || checkRoleMatch(a.phanQuyen, roleFilter);
-    return matchSearch && matchRole;
-  });
+  const filteredAccounts = useMemo(() => {
+    return accounts.filter((a) => {
+      const matchSearch = a.hoTen.toLowerCase().includes(searchQuery.toLowerCase()) || a.tenDangNhap.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchRole = roleFilter === "all" || checkRoleMatch(a.phanQuyen, roleFilter);
+      return matchSearch && matchRole;
+    });
+  }, [accounts, searchQuery, roleFilter, checkRoleMatch]);
 
-  const totalPages = Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE) || 1;
-  const currentAccounts = filteredAccounts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalPages = useMemo(() => Math.ceil(filteredAccounts.length / ITEMS_PER_PAGE) || 1, [filteredAccounts.length]);
+  
+  const currentAccounts = useMemo(() => {
+    return filteredAccounts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  }, [filteredAccounts, currentPage]);
 
   // =========================================================================
   // XỬ LÝ FORM LỊCH TIÊM CHỦNG
@@ -431,82 +451,85 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const [vaccineTypes, setVaccineTypes] = useState<{ maLoaiVacXin: number; tenLoaiVacXin: string }[]>([]);
   const [vaccinesList, setVaccinesList] = useState<any[]>([]);
 
-  const fetchVaccineTypes = async () => {
+  const fetchVaccineTypes = useCallback(async () => {
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/vaccine-types`);
       if (res.ok) setVaccineTypes(await res.json());
     } catch (err) {
       if (err !== "Unauthorized") console.error(err);
     }
-  };
+  }, [fetchWithAuth]);
 
-  const fetchVaccinesList = async () => {
+  const fetchVaccinesList = useCallback(async () => {
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
       if (res.ok) setVaccinesList(await res.json());
     } catch (err) {
       if (err !== "Unauthorized") console.error(err);
     }
-  };
+  }, [fetchWithAuth]);
 
   useEffect(() => {
     if (activeTab === "schedules") {
       fetchVaccineTypes();
       fetchVaccinesList();
     }
-  }, [activeTab]);
+  }, [activeTab, fetchVaccineTypes, fetchVaccinesList]);
 
-  const handleVaccineSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleVaccineSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedMaVacXin = Number(e.target.value);
     const selectedVac = vaccinesList.find((v) => v.maVacXin === selectedMaVacXin);
 
     if (selectedVac) {
       const typeObj = vaccineTypes.find((t) => t.tenLoaiVacXin === selectedVac.loaiVacXin);
       const newMaLoaiVacXin = typeObj ? typeObj.maLoaiVacXin : 0;
-      setScheduleForm({
-        ...scheduleForm,
+      setScheduleForm(prev => ({
+        ...prev,
         maVacXin: selectedMaVacXin,
         maLoaiVacXin: newMaLoaiVacXin,
         loaiVacXinName: selectedVac.loaiVacXin || "Chưa phân loại",
-        doTuoi: selectedVac.doTuoiTiemChung || scheduleForm.doTuoi,
-      });
+        doTuoi: selectedVac.doTuoiTiemChung || prev.doTuoi,
+      }));
     } else {
-      setScheduleForm({ ...scheduleForm, maVacXin: 0, maLoaiVacXin: 0, loaiVacXinName: "" });
+      setScheduleForm(prev => ({ ...prev, maVacXin: 0, maLoaiVacXin: 0, loaiVacXinName: "" }));
     }
-    setScheduleErrors({ ...scheduleErrors, maVacXin: "" });
-  };
+    setScheduleErrors(prev => ({ ...prev, maVacXin: "" }));
+  }, [vaccinesList, vaccineTypes]);
 
-  const toggleDoctor = (doctorName: string) => {
+  const toggleDoctor = useCallback((doctorName: string) => {
     setScheduleForm((prev) => {
       const exists = prev.selectedDoctors.includes(doctorName);
       if (exists) return { ...prev, selectedDoctors: prev.selectedDoctors.filter((d) => d !== doctorName) };
       return { ...prev, selectedDoctors: [...prev.selectedDoctors, doctorName] };
     });
-  };
+  }, []);
 
   const [scheduleErrors, setScheduleErrors] = useState<Record<string, string>>({});
-  const handleDateChange = (dateStr: string) => setScheduleForm({ ...scheduleForm, dateInput: dateStr });
+  
+  const handleDateChange = useCallback((dateStr: string) => {
+    setScheduleForm(prev => ({ ...prev, dateInput: dateStr }));
+  }, []);
 
   // =========================================================================
   // LOGIC XÓA (DELETE)
   // =========================================================================
-  const handleDeleteScheduleClick = (sch: LichTiemChungSRS) => {
+  const handleDeleteScheduleClick = useCallback((sch: LichTiemChungSRS) => {
     setItemToDelete({
       id: sch.maLichTiem,
       type: "schedule",
       name: sch.tenVacXin || sch.loaiVacXin || sch.maLichTiem,
     });
-  };
+  }, []);
 
-  const handleDeleteAccountClick = (acc: TaiKhoan) => {
+  const handleDeleteAccountClick = useCallback((acc: TaiKhoan) => {
     setItemToDelete({
       id: acc.maTaiKhoan,
       type: "account",
       name: acc.tenDangNhap,
     });
-  };
+  }, []);
 
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     if (!itemToDelete) return;
 
     if (itemToDelete.type === "schedule") {
@@ -544,12 +567,12 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     }
 
     setItemToDelete(null); 
-  };
+  }, [itemToDelete, fetchWithAuth, triggerToast, fetchSchedules, fetchAccounts]);
 
   // =========================================================================
   // RESET FORMS
   // =========================================================================
-  const resetAccountForm = () => {
+  const resetAccountForm = useCallback(() => {
     setAccForm({
       tenDangNhap: "", matKhau: "", maQuyen: 5, hoTen: "", cmnd: "", noiO: "", moTa: "",
       email: "", namSinh: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
@@ -557,9 +580,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     setAccErrors({});
     setEditingAccountId(null);
     setShowAddAccount(false);
-  };
+  }, []);
 
-  const resetScheduleForm = () => {
+  const resetScheduleForm = useCallback(() => {
     setScheduleForm({
       dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
       soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [],
@@ -567,12 +590,12 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     setScheduleErrors({});
     setEditingScheduleId(null);
     setShowAddSchedule(false);
-  };
+  }, []);
 
   // =========================================================================
   // EDIT FORMS
   // =========================================================================
-  const handleEditAccount = (acc: TaiKhoan) => {
+  const handleEditAccount = useCallback((acc: TaiKhoan) => {
     let formattedPhone = acc.sdt ? acc.sdt.replace(/\D/g, "") : "";
     if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
       formattedPhone = `${formattedPhone.slice(0, 3)} ${formattedPhone.slice(3)}`;
@@ -599,9 +622,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
 
     setEditingAccountId(acc.maTaiKhoan);
     setShowAddAccount(true);
-  };
+  }, []);
 
-  const handleEditSchedule = (sch: LichTiemChungSRS) => {
+  const handleEditSchedule = useCallback((sch: LichTiemChungSRS) => {
     setScheduleForm({
       dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`,
       thoiGian: sch.thoiGian,
@@ -616,12 +639,12 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     });
     setEditingScheduleId(sch.maLichTiem);
     setShowAddSchedule(true);
-  };
+  }, []);
 
   // =========================================================================
   // SAVE FORMS
   // =========================================================================
-  const handleSaveAccount = async (e: React.FormEvent) => {
+  const handleSaveAccount = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
 
@@ -701,9 +724,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       if (error !== "Unauthorized") console.error(error);
       triggerToast("Lỗi kết nối đến máy chủ!");
     }
-  };
+  }, [accForm, editingAccountId, accounts, fetchWithAuth, triggerToast, onNameChange, fetchAccounts, resetAccountForm]);
 
-  const handleSaveSchedule = async (e: React.FormEvent) => {
+  const handleSaveSchedule = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
     if (!scheduleForm.dateInput) newErrors.dateInput = "Vui lòng chọn ngày tiêm";
@@ -757,18 +780,18 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       if (error !== "Unauthorized") console.error(error);
       triggerToast("Lỗi kết nối đến máy chủ!");
     }
-  };
+  }, [scheduleForm, editingScheduleId, fetchWithAuth, triggerToast, fetchSchedules, resetScheduleForm]);
 
   // =========================================================================
   // XỬ LÝ CHAT ADMIN CHO PHẢN HỒI CẤP CAO
   // =========================================================================
-  const selectTicketForProcessing = (t: SupportTicket) => {
+  const selectTicketForProcessing = useCallback((t: SupportTicket) => {
     setSelectedTicket(t);
     setTicketResponse("");
     setTicketErrors({});
-  };
+  }, []);
 
-  const handleProcessTicket = async (e: React.FormEvent) => {
+  const handleProcessTicket = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTicket || !ticketResponse.trim()) return;
 
@@ -795,9 +818,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     } finally {
       setIsReplying(false);
     }
-  };
+  }, [selectedTicket, ticketResponse, fetchWithAuth, fetchHighLevelTickets, triggerToast]);
 
-  const handleCompleteTicket = async () => {
+  const handleCompleteTicket = useCallback(async () => {
     if (!selectedTicket) return;
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/complete/${selectedTicket.id}`, { method: "PUT" });
@@ -808,9 +831,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     } catch (err) {
       triggerToast("Lỗi cập nhật trạng thái");
     }
-  };
+  }, [selectedTicket, fetchWithAuth, triggerToast, fetchHighLevelTickets]);
 
-  const renderChatHistory = (jsonStr?: string) => {
+  const renderChatHistory = useCallback((jsonStr?: string) => {
     if (!jsonStr || jsonStr === "null") return null;
     try {
       const messages: ChatMessage[] = JSON.parse(jsonStr);
@@ -832,7 +855,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     } catch (e) {
       return <div className="text-center text-xs text-slate-400">Lỗi hiển thị nội dung chat.</div>;
     }
-  };
+  }, []);
 
 
   return (

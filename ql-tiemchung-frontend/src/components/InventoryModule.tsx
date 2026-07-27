@@ -14,6 +14,9 @@ import {
   Truck,
 } from "lucide-react";
 
+// Thay thế fetch bằng axiosClient
+import axiosClient from "../utils/axiosClient";
+
 // --- INTERFACES ---
 export interface KhoVacXin {
   soLo: number;
@@ -39,6 +42,7 @@ interface ItemDB {
   id: number;
   name: string;
 }
+
 interface VacXinDB extends ItemDB {
   loaiVacXin?: any;
   hamLuong: string;
@@ -61,21 +65,6 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
   const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
-    const response = await fetch(url, { ...options, headers });
-
-    if (response.status === 401 || response.status === 403) {
-      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject(new Error("Unauthorized"));
-    }
-    return response;
-  }, [triggerToast]);
-
   const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
     if (!forceRefetch && apiCache.current[url]) {
       const cached = apiCache.current[url];
@@ -83,14 +72,19 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         return cached.data;
       }
     }
-    const response = await fetchWithAuth(url);
-    if (response.ok) {
-      const data = await response.json();
+    
+    try {
+      const response = await axiosClient.get(url);
+      const data = response.data;
       apiCache.current[url] = { data, timestamp: Date.now() };
       return data;
+    } catch (error: any) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+         triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      }
+      throw error;
     }
-    throw new Error("Lỗi khi tải dữ liệu từ máy chủ");
-  }, [fetchWithAuth]);
+  }, [triggerToast]);
 
   // =========================================================================
   // STATES DỮ LIỆU
@@ -106,11 +100,11 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const fetchInventoryData = useCallback(async (force = false) => {
     try {
       setLoading(true);
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, force);
+      const data = await fetchWithCache(`/api/inventory/vaccines`, force);
       setVaccines(data);
       setError(null);
     } catch (err: any) {
-      if (err.message !== "Unauthorized") setError(err.message);
+      if (err.message !== "Unauthorized") setError(err.response?.data?.error || "Lỗi tải dữ liệu kho");
     } finally {
       setLoading(false);
     }
@@ -119,9 +113,9 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
   const fetchMetadata = useCallback(async (force = false) => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`, force),
-        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`, force),
-        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`, force),
+        fetchWithCache(`/api/inventory/vaccine-types`, force),
+        fetchWithCache(`/api/inventory/vaccine-list`, force),
+        fetchWithCache(`/api/inventory/suppliers`, force),
       ]);
       if (resType) {
         setLoaiVacXinList(resType.map((d: any) => ({ id: d.maLoaiVacXin, name: d.tenLoaiVacXin })));
@@ -328,12 +322,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
         maNhaCungCap: isNewSupplier ? null : importForm.maNhaCungCap,
       };
 
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Lưu thất bại");
+      await axiosClient.post(`/api/inventory/vaccines`, payload);
       triggerToast(editingVacId ? "Cập nhật lô vắc-xin thành công!" : "Thao tác nhập kho thành công!");
 
       fetchInventoryData(true); // Force refetch to get updated list
@@ -341,9 +330,9 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       setActiveTab("view");
       setEditingVacId(null);
     } catch (error: any) {
-      if (error.message !== "Unauthorized") triggerToast("Lỗi khi lưu Database");
+      triggerToast(error.response?.data?.error || "Lỗi khi lưu Database");
     }
-  }, [importForm, isNewVaccine, isNewSupplier, editingVacId, fetchWithAuth, fetchInventoryData, fetchMetadata, triggerToast]);
+  }, [importForm, isNewVaccine, isNewSupplier, editingVacId, fetchInventoryData, fetchMetadata, triggerToast]);
 
   // --- HÀM XỬ LÝ XUẤT KHO ---
   const handleExportSubmit = useCallback(async (e: React.FormEvent) => {
@@ -363,10 +352,7 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
     }
 
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${exportingVac.soLo}/export?quantity=${exportQuantity}`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Lỗi khi xuất kho");
+      await axiosClient.post(`/api/inventory/vaccines/${exportingVac.soLo}/export?quantity=${exportQuantity}`);
       
       triggerToast(`Xuất thành công ${exportQuantity} liều vắc-xin ${exportingVac.tenVacXin}`);
       
@@ -375,22 +361,22 @@ export default function InventoryModule({ triggerToast }: InventoryModuleProps) 
       setExportErrors({});
       fetchInventoryData(true); // Force refetch to reflect new inventory
     } catch (err: any) {
-      if (err.message !== "Unauthorized") triggerToast(err.message);
+      triggerToast(err.response?.data?.error || "Lỗi khi xuất kho");
     }
-  }, [exportingVac, exportQuantity, fetchWithAuth, fetchInventoryData, triggerToast]);
+  }, [exportingVac, exportQuantity, fetchInventoryData, triggerToast]);
 
   const confirmDelete = useCallback(async () => {
     if (itemToDelete === null) return;
     try {
-      await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${itemToDelete}`, { method: "DELETE" });
+      await axiosClient.delete(`/api/inventory/vaccines/${itemToDelete}`);
       triggerToast("Hủy Lô Vắc-xin thành công!");
       fetchInventoryData(true); // Force refetch to reflect deletion
     } catch (err: any) {
-      if (err.message !== "Unauthorized") triggerToast("Lỗi xóa lô");
+      triggerToast(err.response?.data?.error || "Lỗi xóa lô");
     } finally {
       setItemToDelete(null);
     }
-  }, [itemToDelete, fetchWithAuth, fetchInventoryData, triggerToast]);
+  }, [itemToDelete, fetchInventoryData, triggerToast]);
 
   // --- HÀM NẠP DỮ LIỆU ĐỂ CHỈNH SỬA ---
   const handleEditClick = useCallback((v: KhoVacXin) => {

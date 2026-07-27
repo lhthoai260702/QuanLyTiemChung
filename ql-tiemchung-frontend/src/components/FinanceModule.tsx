@@ -1,5 +1,3 @@
-// src/components/FinanceModule.tsx
-
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -23,6 +21,9 @@ import {
   Activity,
   AlertCircle,
 } from "lucide-react";
+
+// Thay thế fetch bằng axiosClient
+import axiosClient from "../utils/axiosClient";
 
 interface FinanceModuleProps {
   invoices: Invoice[];
@@ -215,34 +216,6 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN (WITH CACHE)
   // =========================================================================
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
-      navigate("/");
-    }
-  }, [navigate, triggerToast]);
-
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
-
-    const response = await fetch(url, { ...options, headers });
-
-    if (response.status === 401 || response.status === 403) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      navigate("/");
-      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject("Unauthorized");
-    }
-
-    return response;
-  }, [navigate, triggerToast]);
-
   const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
     if (!forceRefetch && apiCache.current[url]) {
       const cached = apiCache.current[url];
@@ -250,14 +223,19 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         return cached.data;
       }
     }
-    const response = await fetchWithAuth(url);
-    if (response.ok) {
-      const data = await response.json();
+    
+    try {
+      const response = await axiosClient.get(url);
+      const data = response.data;
       apiCache.current[url] = { data, timestamp: Date.now() };
       return data;
+    } catch (error: any) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+         triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      }
+      throw error;
     }
-    throw new Error("Fetch failed");
-  }, [fetchWithAuth]);
+  }, [triggerToast]);
 
   // ==========================================
   // CALL API
@@ -265,9 +243,9 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
   const fetchMetadata = useCallback(async (force = false) => {
     try {
       const [resType, resVac, resSup] = await Promise.all([
-        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-types`, force),
-        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccine-list`, force),
-        fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/suppliers`, force),
+        fetchWithCache(`/api/inventory/vaccine-types`, force),
+        fetchWithCache(`/api/inventory/vaccine-list`, force),
+        fetchWithCache(`/api/inventory/suppliers`, force),
       ]);
       if (resType) {
         setLoaiVacXinList(resType.map((d: any) => ({ id: d.maLoaiVacXin, name: d.tenLoaiVacXin })));
@@ -289,35 +267,35 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       if (resSup) {
         setSupplierList(resSup.map((d: any) => ({ id: d.maNhaCungCap, name: d.tenNhaCungCap })));
       }
-    } catch (e) {
-      if (e !== "Unauthorized") console.error("Lỗi lấy siêu dữ liệu", e);
+    } catch (e: any) {
+      if (e.message !== "Unauthorized") console.error("Lỗi lấy siêu dữ liệu", e);
     }
   }, [fetchWithCache]);
 
   const fetchCustomerTransactions = useCallback(async (force = false) => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions`, force);
+      const data = await fetchWithCache(`/api/finance/customer-transactions`, force);
       setCustomerTxs(data);
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin khách hàng!");
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin khách hàng!");
     }
   }, [fetchWithCache, triggerToast]);
 
   const fetchSupplierTransactions = useCallback(async (force = false) => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, force);
+      const data = await fetchWithCache(`/api/inventory/vaccines`, force);
       setSupplierTxs(data);
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Lỗi kết nối tải dữ liệu nhà cung cấp!");
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") triggerToast("Lỗi kết nối tải dữ liệu nhà cung cấp!");
     }
   }, [fetchWithCache, triggerToast]);
 
   const fetchVaccinePrices = useCallback(async (force = false) => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices`, force);
+      const data = await fetchWithCache(`/api/finance/vaccine-prices`, force);
       setVaccinePrices(data);
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin giá vắc-xin!");
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") triggerToast("Không thể kết nối tải thông tin giá vắc-xin!");
     }
   }, [fetchWithCache, triggerToast]);
 
@@ -365,36 +343,24 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
 
     try {
       if (type === "customer") {
-        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions/${id}`, { method: "DELETE" });
-        if (response.ok) {
-          setCustomerTxs((prev) => prev.filter((tx) => tx.id !== id));
-          triggerToast("Đã hủy và xóa mềm hóa đơn thành công!");
-        } else {
-          triggerToast("Tác vụ lỗi: Hủy hóa đơn thất bại!");
-        }
+        await axiosClient.delete(`/api/finance/customer-transactions/${id}`);
+        setCustomerTxs((prev) => prev.filter((tx) => tx.id !== id));
+        triggerToast("Đã hủy và xóa mềm hóa đơn thành công!");
       } else if (type === "supplier") {
-        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines/${id}`, { method: "DELETE" });
-        if (response.ok) {
-          setSupplierTxs((prev) => prev.filter((tx) => tx.soLo !== id));
-          triggerToast("Hủy hóa đơn nhập lô thành công!");
-        } else {
-          triggerToast("Lỗi xóa giao dịch");
-        }
+        await axiosClient.delete(`/api/inventory/vaccines/${id}`);
+        setSupplierTxs((prev) => prev.filter((tx) => tx.soLo !== id));
+        triggerToast("Hủy hóa đơn nhập lô thành công!");
       } else if (type === "price") {
-        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices/${id}`, { method: "DELETE" });
-        if (response.ok) {
-          triggerToast("Đã xóa bảng giá vắc-xin thành công!");
-          fetchVaccinePrices(true);
-        } else {
-          triggerToast("Lỗi khi thực hiện xóa trên máy chủ!");
-        }
+        await axiosClient.delete(`/api/finance/vaccine-prices/${id}`);
+        triggerToast("Đã xóa bảng giá vắc-xin thành công!");
+        fetchVaccinePrices(true);
       }
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ");
+    } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Lỗi kết nối máy chủ");
     } finally {
       setDeleteModal({ isOpen: false, type: null, id: null, message: "", actionTitle: "" });
     }
-  }, [deleteModal, fetchWithAuth, triggerToast, fetchVaccinePrices]);
+  }, [deleteModal, triggerToast, fetchVaccinePrices]);
 
   // ==========================================
   // HANDLERS: KHÁCH HÀNG
@@ -429,23 +395,15 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
     }
     try {
       if (editingCustomerTxId) {
-        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/customer-transactions/${editingCustomerTxId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(customerForm),
-        });
-        if (response.ok) {
-          fetchCustomerTransactions(true);
-          triggerToast("Cập nhật hóa đơn và đồng bộ hồ sơ bệnh án thành công!");
-          resetCustomerForm();
-        } else {
-          triggerToast("Lỗi cập nhật hóa đơn trên máy chủ!");
-        }
+        await axiosClient.put(`/api/finance/customer-transactions/${editingCustomerTxId}`, customerForm);
+        fetchCustomerTransactions(true);
+        triggerToast("Cập nhật hóa đơn và đồng bộ hồ sơ bệnh án thành công!");
+        resetCustomerForm();
       }
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ!");
+    } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Lỗi cập nhật hóa đơn trên máy chủ!");
     }
-  }, [customerForm, editingCustomerTxId, fetchWithAuth, fetchCustomerTransactions, triggerToast, resetCustomerForm]);
+  }, [customerForm, editingCustomerTxId, fetchCustomerTransactions, triggerToast, resetCustomerForm]);
 
   // ==========================================
   // HANDLERS: NHÀ CUNG CẤP
@@ -609,21 +567,16 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
         maNhaCungCap: isNewSupplier ? null : supplierForm.maNhaCungCap,
       };
 
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/inventory/vaccines`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Lưu thất bại");
+      await axiosClient.post(`/api/inventory/vaccines`, payload);
       triggerToast("Thao tác khởi tạo chứng từ nhập thành công!");
 
       fetchSupplierTransactions(true);
       fetchMetadata(true);
       resetSupplierForm();
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Lỗi khi lưu Database");
+    } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Lỗi khi lưu Database");
     }
-  }, [supplierForm, isNewVaccine, isNewSupplier, editingSupplierTxId, fetchWithAuth, fetchSupplierTransactions, fetchMetadata, resetSupplierForm, triggerToast]);
+  }, [supplierForm, isNewVaccine, isNewSupplier, editingSupplierTxId, fetchSupplierTransactions, fetchMetadata, resetSupplierForm, triggerToast]);
 
   // ==========================================
   // HANDLERS: QUẢN LÝ GIÁ VẮC XIN
@@ -657,22 +610,14 @@ export default function FinanceModule({ invoices, setInvoices, vaccines, systemL
       return;
     }
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/finance/vaccine-prices/${priceForm.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(priceForm),
-      });
-      if (response.ok) {
-        triggerToast("Cập nhật giá vắc-xin thành công!");
-        fetchVaccinePrices(true);
-        resetPriceForm();
-      } else {
-        triggerToast("Lỗi cập nhật giá trên máy chủ!");
-      }
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast("Lỗi cập nhật hệ thống!");
+      await axiosClient.put(`/api/finance/vaccine-prices/${priceForm.id}`, priceForm);
+      triggerToast("Cập nhật giá vắc-xin thành công!");
+      fetchVaccinePrices(true);
+      resetPriceForm();
+    } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Lỗi cập nhật hệ thống!");
     }
-  }, [priceForm, fetchWithAuth, fetchVaccinePrices, resetPriceForm, triggerToast]);
+  }, [priceForm, fetchVaccinePrices, resetPriceForm, triggerToast]);
 
   // ==========================================
   // LỌC DỮ LIỆU BẰNG useMemo

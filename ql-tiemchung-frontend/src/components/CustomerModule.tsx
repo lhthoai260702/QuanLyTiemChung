@@ -18,6 +18,8 @@ import {
   Filter,
 } from "lucide-react";
 
+import axiosClient from "../utils/axiosClient";
+
 interface CustomerModuleProps {
   triggerToast: (msg: string) => void;
   onNameChange?: (name: string) => void;
@@ -63,17 +65,6 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
   const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    const response = await fetch(url, { ...options, headers });
-    if (response.status === 401 || response.status === 403) {
-      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject("Unauthorized");
-    }
-    return response;
-  }, [triggerToast]);
-
   const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
     if (!forceRefetch && apiCache.current[url]) {
       const cached = apiCache.current[url];
@@ -81,14 +72,19 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
         return cached.data; // Trả về dữ liệu từ cache
       }
     }
-    const response = await fetchWithAuth(url);
-    if (response.ok) {
-      const data = await response.json();
+    
+    try {
+      const response = await axiosClient.get(url);
+      const data = response.data;
       apiCache.current[url] = { data, timestamp: Date.now() }; // Lưu vào cache
       return data;
+    } catch (error: any) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+         triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      }
+      throw error;
     }
-    throw new Error("Fetch failed");
-  }, [fetchWithAuth]);
+  }, [triggerToast]);
 
   // --- STATES DỮ LIỆU CHÍNH ---
   const [profile, setProfile] = useState({ id: "" });
@@ -102,20 +98,20 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   // Lấy danh sách bệnh (Sử dụng Cache)
   const fetchDiseases = useCallback(async () => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/diseases`);
+      const data = await fetchWithCache(`/api/customer/diseases`);
       setDiseases(data);
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error(error);
     }
   }, [fetchWithCache]);
 
   // Lấy danh sách FAQ (Sử dụng Cache)
   const fetchFaqs = useCallback(async () => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/faqs`);
+      const data = await fetchWithCache(`/api/customer/faqs`);
       setFaqs(data);
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error(error);
     }
   }, [fetchWithCache]);
 
@@ -123,17 +119,17 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
   const fetchMyFeedbacks = useCallback(async () => {
     if (!profile.id) return;
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/my-feedbacks/${profile.id}`, true);
+      const data = await fetchWithCache(`/api/customer/my-feedbacks/${profile.id}`, true);
       setMyFeedbacks(data);
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error(error);
     }
   }, [fetchWithCache, profile.id]);
 
   // Lấy dữ liệu cá nhân & Lịch sử tiêm (Lấy mới mỗi lần vào tab để đảm bảo data mới nhất)
   const fetchPatientData = useCallback(async () => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/profile`, true);
+      const data = await fetchWithCache(`/api/customer/profile`, true);
       setProfile({ id: data.id });
       
       const formattedHistory = data.history.map((h: any, i: number) => ({
@@ -149,28 +145,28 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
         thoiGianTacDung: h.thoiGianTacDung || "",
       }));
       setHistory(formattedHistory);
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error(error);
     }
   }, [fetchWithCache]);
 
   // Lấy danh sách Vắc-xin (Sử dụng Cache)
   const fetchVaccines = useCallback(async () => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
+      const data = await fetchWithCache(`/api/customer/vaccines`);
       setVaccines(data);
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error(error);
     }
   }, [fetchWithCache]);
 
   // Lấy danh sách lịch tiêm trung tâm (Sử dụng Cache)
   const fetchSchedules = useCallback(async () => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
+      const data = await fetchWithCache(`/api/admin/schedules`);
       setSchedules(data);
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") console.error(error);
     }
   }, [fetchWithCache]);
 
@@ -219,39 +215,32 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
 
     try {
       setIsReplying(true);
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feedbackId: selectedFeedbackForChat.id,
-          replyContent: replyMessage,
-          sender: "customer",
-        }),
+      await axiosClient.post(`/api/customer/feedback/reply`, {
+        feedbackId: selectedFeedbackForChat.id,
+        replyContent: replyMessage,
+        sender: "customer",
       });
-      if (!res.ok) throw new Error("API lỗi");
+      
       setReplyMessage("");
       await fetchMyFeedbacks(); // Cập nhật lại tin nhắn
-    } catch (err) {
-      triggerToast("Lỗi gửi tin nhắn");
+    } catch (err: any) {
+      triggerToast(err.response?.data?.error || "Lỗi gửi tin nhắn");
     } finally {
       setIsReplying(false);
     }
-  }, [replyMessage, selectedFeedbackForChat, fetchWithAuth, fetchMyFeedbacks, triggerToast]);
+  }, [replyMessage, selectedFeedbackForChat, fetchMyFeedbacks, triggerToast]);
 
   const handleCompleteFeedback = useCallback(async () => {
     if (!selectedFeedbackForChat) return;
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/complete/${selectedFeedbackForChat.id}`, {
-        method: "PUT",
-      });
-      if (!res.ok) throw new Error("Lỗi");
+      await axiosClient.put(`/api/customer/feedback/complete/${selectedFeedbackForChat.id}`);
       triggerToast("Đã đánh dấu hoàn thành!");
       setShowConfirmCompleteModal(false);
       await fetchMyFeedbacks();
-    } catch (err) {
-      triggerToast("Lỗi cập nhật trạng thái");
+    } catch (err: any) {
+      triggerToast(err.response?.data?.error || "Lỗi cập nhật trạng thái");
     }
-  }, [selectedFeedbackForChat, fetchWithAuth, triggerToast, fetchMyFeedbacks]);
+  }, [selectedFeedbackForChat, triggerToast, fetchMyFeedbacks]);
 
   const renderChatHistory = useCallback((jsonStr?: string) => {
     if (!jsonStr || jsonStr === "null") return null;
@@ -319,19 +308,16 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
     try {
       const endpoint = feedbackType === "after_vaccine" ? "/api/customer/feedback/normal" : "/api/customer/feedback/high-level";
       const payload = { ...feedbackForm, maBenhNhan: profile.id };
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("API trả về lỗi");
+      
+      await axiosClient.post(endpoint, payload);
+
       triggerToast(feedbackType === "after_vaccine" ? "Gửi thành công" : "Phản hồi gửi đi thành công.");
       handleCancelFeedback();
       setActiveTab("my_feedbacks"); 
-    } catch (error) {
-      if (error !== "Unauthorized") triggerToast(feedbackType === "after_vaccine" ? "Gửi thất bại" : "Phản hồi gửi thất bại");
+    } catch (error: any) {
+      triggerToast(error.response?.data?.error || (feedbackType === "after_vaccine" ? "Gửi thất bại" : "Phản hồi gửi thất bại"));
     }
-  }, [feedbackType, feedbackForm, profile.id, fetchWithAuth, triggerToast, handleCancelFeedback]);
+  }, [feedbackType, feedbackForm, profile.id, triggerToast, handleCancelFeedback]);
 
   const handleConfirmBooking = useCallback(async () => {
     if (bookModal.type === "vaccine") {
@@ -353,20 +339,17 @@ export default function CustomerModule({ triggerToast, onNameChange }: CustomerM
             ? `${bookModal.data.nam}-${bookModal.data.thang}-${bookModal.data.ngay}`
             : bookingDate || new Date().toISOString().split("T")[0];
       }
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/book`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "Có lỗi xảy ra khi đăng ký");
+      
+      await axiosClient.post(`/api/customer/book`, payload);
+      
       triggerToast("Đăng ký thành công! Hệ thống đã lưu phiếu đăng ký lịch tiêm vào CSDL.");
       setBookModal({ isOpen: false, type: "vaccine", data: null });
       setBookingDate("");
       setBookingTime("");
     } catch (err: any) {
-      if (err !== "Unauthorized") triggerToast("Lỗi: " + err.message);
+      triggerToast("Lỗi: " + (err.response?.data?.error || "Có lỗi xảy ra khi đăng ký"));
     }
-  }, [bookModal, bookingDate, bookingTime, profile.id, fetchWithAuth, triggerToast]);
+  }, [bookModal, bookingDate, bookingTime, profile.id, triggerToast]);
 
   // State lọc Vắc xin
   const [vacSearchType, setVacSearchType] = useState("Tất cả");

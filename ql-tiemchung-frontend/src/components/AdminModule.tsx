@@ -22,6 +22,9 @@ import {
   Filter
 } from "lucide-react";
 
+// Thay thế fetch bằng axiosClient
+import axiosClient from "../utils/axiosClient";
+
 // --- ĐỊNH NGHĨA KIỂU DỮ LIỆU ---
 export interface TaiKhoan {
   maTaiKhoan: number | string;
@@ -85,7 +88,7 @@ export interface LichTiemChungSRS {
   ghiChu: string;
   danhSachBacSi: string[];
   danhSachNguoiDangKy: NguoiDangKy[];
-  flag_delete: boolean;
+  flagDelete?: boolean;
 }
 
 interface AdminModuleProps {
@@ -106,7 +109,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const [ticketsList, setTicketsList] = useState<SupportTicket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [ticketResponse, setTicketResponse] = useState("");
-  const [ticketErrors, setTicketErrors] = useState<Record<string, string>>({});
   const [isTicketsLoading, setIsTicketsLoading] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -120,7 +122,64 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>("Tất cả");
 
   // =========================================================================
-  // TỐI ƯU HÓA: LOGIC LỌC, NHÓM VÀ SẮP XẾP TICKETS BẰNG useMemo
+  // API FETCH: ACCOUNTS
+  // =========================================================================
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const response = await axiosClient.get("/api/admin/accounts");
+      // Axios tự map thành mảng, ta gán thẳng vào State
+      setAccounts(response.data);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") {
+        console.error("Error fetching accounts:", error);
+        triggerToast("Không thể tải danh sách người dùng!");
+      }
+    }
+  }, [triggerToast]);
+
+  useEffect(() => {
+    if (activeTab === "accounts") fetchAccounts();
+  }, [activeTab, fetchAccounts]);
+
+  // =========================================================================
+  // API FETCH: SCHEDULES
+  // =========================================================================
+  const [schedules, setSchedules] = useState<LichTiemChungSRS[]>([]);
+
+  const fetchSchedules = useCallback(async () => {
+    try {
+      const response = await axiosClient.get("/api/admin/schedules");
+      setSchedules(response.data);
+    } catch (error: any) {
+      if (error.message !== "Unauthorized") triggerToast("Không thể tải danh sách lịch tiêm!");
+    }
+  }, [triggerToast]);
+
+  useEffect(() => {
+    if (activeTab === "schedules") fetchSchedules();
+  }, [activeTab, fetchSchedules]);
+
+  // =========================================================================
+  // API FETCH: TICKETS CẤP CAO
+  // =========================================================================
+  const fetchHighLevelTickets = useCallback(async () => {
+    setIsTicketsLoading(true);
+    try {
+      const res = await axiosClient.get("/api/customer/admin/feedback/high-level");
+      setTicketsList(res.data);
+    } catch (err: any) {
+      if (err.message !== "Unauthorized") triggerToast("Không thể tải danh sách phản hồi cấp cao.");
+    } finally {
+      setIsTicketsLoading(false);
+    }
+  }, [triggerToast]);
+
+  useEffect(() => {
+    if (activeTab === "feedback") fetchHighLevelTickets();
+  }, [activeTab, fetchHighLevelTickets]);
+
+  // =========================================================================
+  // TỐI ƯU HÓA LỌC DỮ LIỆU TICKETS (Bỏ qua nếu k thuộc tab này)
   // =========================================================================
   const uniqueTicketStatuses = useMemo(() => {
     return ["Tất cả", ...Array.from(new Set(ticketsList.map((t) => t.status).filter(Boolean)))];
@@ -142,7 +201,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       return acc;
     }, {} as Record<string, SupportTicket[]>);
 
-    // Sắp xếp mỗi nhóm theo thời gian (Mới nhất lên trên)
     Object.keys(grouped).forEach((status) => {
       grouped[status].sort((a, b) => {
         const tA = new Date(a.time || "").getTime();
@@ -167,109 +225,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     });
   }, [groupedTickets]);
 
-  // =========================================================================
-  // BẢO MẬT & HÀM GỌI API CHUNG CÓ ĐÍNH KÈM TOKEN (Dùng useCallback)
-  // =========================================================================
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
-      navigate("/");
-    }
-  }, [navigate, triggerToast]);
-
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
-    const response = await fetch(url, { ...options, headers });
-    if (response.status === 401 || response.status === 403) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      navigate("/");
-      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject("Unauthorized");
-    }
-    return response;
-  }, [navigate, triggerToast]);
-
-  // =========================================================================
-  // API FETCH: ACCOUNTS
-  // =========================================================================
-  const fetchAccounts = useCallback(async () => {
-    try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts`);
-      if (response.ok) {
-        const data = await response.json();
-        setAccounts(data);
-      } else {
-        triggerToast("Lỗi khi tải danh sách người dùng từ máy chủ!");
-      }
-    } catch (error) {
-      if (error !== "Unauthorized") console.error("Error fetching accounts:", error);
-      triggerToast("Không thể kết nối đến Backend Server!");
-    }
-  }, [fetchWithAuth, triggerToast]);
-
-  useEffect(() => {
-    if (activeTab === "accounts") fetchAccounts();
-  }, [activeTab, fetchAccounts]);
-
-  // =========================================================================
-  // API FETCH: SCHEDULES
-  // =========================================================================
-  const [schedules, setSchedules] = useState<LichTiemChungSRS[]>([]);
-
-  const fetchSchedules = useCallback(async () => {
-    try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`);
-      if (response.ok) {
-        const data = await response.json();
-        setSchedules(data);
-      } else {
-        triggerToast("Lỗi khi tải danh sách lịch tiêm chủng!");
-      }
-    } catch (error) {
-      if (error !== "Unauthorized") console.error("Error fetching schedules:", error);
-      triggerToast("Không thể kết nối đến Backend Server!");
-    }
-  }, [fetchWithAuth, triggerToast]);
-
-  useEffect(() => {
-    if (activeTab === "schedules") {
-      fetchSchedules();
-    }
-  }, [activeTab, fetchSchedules]);
-
-  // =========================================================================
-  // API FETCH: TICKETS CẤP CAO
-  // =========================================================================
-  const fetchHighLevelTickets = useCallback(async () => {
-    setIsTicketsLoading(true);
-    try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/admin/feedback/high-level`);
-      if (res.ok) {
-        const data = await res.json();
-        setTicketsList(data);
-      } else {
-        triggerToast("Lỗi lấy danh sách phản hồi cấp cao.");
-      }
-    } catch (err) {
-      if (err !== "Unauthorized") console.error(err);
-      triggerToast("Không thể tải danh sách phản hồi cấp cao.");
-    } finally {
-      setIsTicketsLoading(false);
-    }
-  }, [fetchWithAuth, triggerToast]);
-
-  useEffect(() => {
-    if (activeTab === "feedback") {
-      fetchHighLevelTickets();
-    }
-  }, [activeTab, fetchHighLevelTickets]);
-
   // Cập nhật Chat View khi có tin nhắn mới
   useEffect(() => {
     if (selectedTicket) {
@@ -284,7 +239,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   }, [selectedTicket?.chiTietPhanHoi]);
 
   // =========================================================================
-  // XỬ LÝ GIAO DIỆN LỊCH TIÊM CHỦNG
+  // XỬ LÝ LỌC & GIAO DIỆN LỊCH TIÊM CHỦNG
   // =========================================================================
   const [selectedSchedule, setSelectedSchedule] = useState<LichTiemChungSRS | null>(null);
   const [scheduleSearchStartDate, setScheduleSearchStartDate] = useState<string>("");
@@ -293,19 +248,10 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const filteredSchedules = useMemo(() => {
     return schedules.filter((s) => {
       if (!scheduleSearchStartDate && !scheduleSearchEndDate) return true;
-
       const scheduleDate = new Date(`${s.nam}-${s.thang}-${s.ngay}`);
 
-      if (scheduleSearchStartDate) {
-        const startDate = new Date(scheduleSearchStartDate);
-        if (scheduleDate < startDate) return false;
-      }
-
-      if (scheduleSearchEndDate) {
-        const endDate = new Date(scheduleSearchEndDate);
-        if (scheduleDate > endDate) return false;
-      }
-
+      if (scheduleSearchStartDate && scheduleDate < new Date(scheduleSearchStartDate)) return false;
+      if (scheduleSearchEndDate && scheduleDate > new Date(scheduleSearchEndDate)) return false;
       return true;
     });
   }, [schedules, scheduleSearchStartDate, scheduleSearchEndDate]);
@@ -319,16 +265,10 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     }
   }, [filteredSchedules, selectedSchedule?.maLichTiem]);
 
-  useEffect(() => {
-    if (schedules.length > 0 && !selectedSchedule) setSelectedSchedule(schedules[0]);
-  }, [schedules, selectedSchedule]);
-
+  // =========================================================================
+  // XỬ LÝ FORM TÀI KHOẢN (ACCOUNTS)
+  // =========================================================================
   const [editingAccountId, setEditingAccountId] = useState<number | string | null>(null);
-  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
-
-  // =========================================================================
-  // XỬ LÝ FORM TÀI KHOẢN
-  // =========================================================================
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [accForm, setAccForm] = useState({
     tenDangNhap: "",
@@ -421,7 +361,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     return accounts.filter((a) => {
       const matchSearch = a.hoTen.toLowerCase().includes(searchQuery.toLowerCase()) || a.tenDangNhap.toLowerCase().includes(searchQuery.toLowerCase());
       const matchRole = roleFilter === "all" || checkRoleMatch(a.phanQuyen, roleFilter);
-      return matchSearch && matchRole;
+      return matchSearch && matchRole && !a.flagDelete; // Ẩn tài khoản đã xóa mềm
     });
   }, [accounts, searchQuery, roleFilter, checkRoleMatch]);
 
@@ -431,147 +371,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     return filteredAccounts.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   }, [filteredAccounts, currentPage]);
 
-  // =========================================================================
-  // XỬ LÝ FORM LỊCH TIÊM CHỦNG
-  // =========================================================================
-  const [showAddSchedule, setShowAddSchedule] = useState(false);
-  const [scheduleForm, setScheduleForm] = useState({
-    dateInput: "",
-    thoiGian: "",
-    maLoaiVacXin: 0,
-    loaiVacXinName: "",
-    maVacXin: 0,
-    soLuong: 0,
-    doTuoi: "",
-    diaDiem: "",
-    ghiChu: "",
-    selectedDoctors: [] as string[],
-  });
-
-  const [vaccineTypes, setVaccineTypes] = useState<{ maLoaiVacXin: number; tenLoaiVacXin: string }[]>([]);
-  const [vaccinesList, setVaccinesList] = useState<any[]>([]);
-
-  const fetchVaccineTypes = useCallback(async () => {
-    try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/vaccine-types`);
-      if (res.ok) setVaccineTypes(await res.json());
-    } catch (err) {
-      if (err !== "Unauthorized") console.error(err);
-    }
-  }, [fetchWithAuth]);
-
-  const fetchVaccinesList = useCallback(async () => {
-    try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/vaccines`);
-      if (res.ok) setVaccinesList(await res.json());
-    } catch (err) {
-      if (err !== "Unauthorized") console.error(err);
-    }
-  }, [fetchWithAuth]);
-
-  useEffect(() => {
-    if (activeTab === "schedules") {
-      fetchVaccineTypes();
-      fetchVaccinesList();
-    }
-  }, [activeTab, fetchVaccineTypes, fetchVaccinesList]);
-
-  const handleVaccineSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    const selectedMaVacXin = Number(e.target.value);
-    const selectedVac = vaccinesList.find((v) => v.maVacXin === selectedMaVacXin);
-
-    if (selectedVac) {
-      const typeObj = vaccineTypes.find((t) => t.tenLoaiVacXin === selectedVac.loaiVacXin);
-      const newMaLoaiVacXin = typeObj ? typeObj.maLoaiVacXin : 0;
-      setScheduleForm(prev => ({
-        ...prev,
-        maVacXin: selectedMaVacXin,
-        maLoaiVacXin: newMaLoaiVacXin,
-        loaiVacXinName: selectedVac.loaiVacXin || "Chưa phân loại",
-        doTuoi: selectedVac.doTuoiTiemChung || prev.doTuoi,
-      }));
-    } else {
-      setScheduleForm(prev => ({ ...prev, maVacXin: 0, maLoaiVacXin: 0, loaiVacXinName: "" }));
-    }
-    setScheduleErrors(prev => ({ ...prev, maVacXin: "" }));
-  }, [vaccinesList, vaccineTypes]);
-
-  const toggleDoctor = useCallback((doctorName: string) => {
-    setScheduleForm((prev) => {
-      const exists = prev.selectedDoctors.includes(doctorName);
-      if (exists) return { ...prev, selectedDoctors: prev.selectedDoctors.filter((d) => d !== doctorName) };
-      return { ...prev, selectedDoctors: [...prev.selectedDoctors, doctorName] };
-    });
-  }, []);
-
-  const [scheduleErrors, setScheduleErrors] = useState<Record<string, string>>({});
-  
-  const handleDateChange = useCallback((dateStr: string) => {
-    setScheduleForm(prev => ({ ...prev, dateInput: dateStr }));
-  }, []);
-
-  // =========================================================================
-  // LOGIC XÓA (DELETE)
-  // =========================================================================
-  const handleDeleteScheduleClick = useCallback((sch: LichTiemChungSRS) => {
-    setItemToDelete({
-      id: sch.maLichTiem,
-      type: "schedule",
-      name: sch.tenVacXin || sch.loaiVacXin || sch.maLichTiem,
-    });
-  }, []);
-
-  const handleDeleteAccountClick = useCallback((acc: TaiKhoan) => {
-    setItemToDelete({
-      id: acc.maTaiKhoan,
-      type: "account",
-      name: acc.tenDangNhap,
-    });
-  }, []);
-
-  const confirmDelete = useCallback(async () => {
-    if (!itemToDelete) return;
-
-    if (itemToDelete.type === "schedule") {
-      const numericId = String(itemToDelete.id).replace("LTC", "");
-      try {
-        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules/${numericId}`, {
-          method: "DELETE",
-        });
-        if (response.ok) {
-          triggerToast("Hủy lịch tiêm chủng thành công!");
-          setSelectedSchedule(null);
-          fetchSchedules();
-        } else {
-          triggerToast("Lỗi khi thực hiện xóa lịch tiêm trên máy chủ!");
-        }
-      } catch (error) {
-        if (error !== "Unauthorized") console.error("Error deleting schedule:", error);
-        triggerToast("Không thể kết nối đến máy chủ!");
-      }
-    } else if (itemToDelete.type === "account") {
-      try {
-        const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts/${itemToDelete.id}`, {
-          method: "DELETE",
-        });
-        if (response.ok) {
-          triggerToast("Xóa tài khoản người dùng thành công!");
-          fetchAccounts();
-        } else {
-          triggerToast("Lỗi khi thực hiện xóa tài khoản trên máy chủ!");
-        }
-      } catch (error) {
-        if (error !== "Unauthorized") console.error("Error deleting account:", error);
-        triggerToast("Không thể kết nối đến máy chủ!");
-      }
-    }
-
-    setItemToDelete(null); 
-  }, [itemToDelete, fetchWithAuth, triggerToast, fetchSchedules, fetchAccounts]);
-
-  // =========================================================================
-  // RESET FORMS
-  // =========================================================================
   const resetAccountForm = useCallback(() => {
     setAccForm({
       tenDangNhap: "", matKhau: "", maQuyen: 5, hoTen: "", cmnd: "", noiO: "", moTa: "",
@@ -582,19 +381,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     setShowAddAccount(false);
   }, []);
 
-  const resetScheduleForm = useCallback(() => {
-    setScheduleForm({
-      dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
-      soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [],
-    });
-    setScheduleErrors({});
-    setEditingScheduleId(null);
-    setShowAddSchedule(false);
-  }, []);
-
-  // =========================================================================
-  // EDIT FORMS
-  // =========================================================================
   const handleEditAccount = useCallback((acc: TaiKhoan) => {
     let formattedPhone = acc.sdt ? acc.sdt.replace(/\D/g, "") : "";
     if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
@@ -608,9 +394,9 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       matKhau: "",
       maQuyen: acc.maQuyen || 5,
       hoTen: acc.hoTen,
-      cmnd: acc.cmnd,
-      noiO: acc.noiO,
-      moTa: acc.moTa,
+      cmnd: acc.cmnd || "",
+      noiO: acc.noiO || "",
+      moTa: acc.moTa || "",
       email: acc.email || "",
       namSinh: acc.namSinh?.toString() || "",
       sdt: formattedPhone,
@@ -624,26 +410,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     setShowAddAccount(true);
   }, []);
 
-  const handleEditSchedule = useCallback((sch: LichTiemChungSRS) => {
-    setScheduleForm({
-      dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`,
-      thoiGian: sch.thoiGian,
-      maLoaiVacXin: sch.maLoaiVacXin || 0,
-      loaiVacXinName: sch.loaiVacXin || "",
-      maVacXin: sch.maVacXin || 0,
-      soLuong: sch.soLuong,
-      doTuoi: sch.doTuoi,
-      diaDiem: sch.diaDiem,
-      ghiChu: sch.ghiChu,
-      selectedDoctors: sch.danhSachBacSi || [],
-    });
-    setEditingScheduleId(sch.maLichTiem);
-    setShowAddSchedule(true);
-  }, []);
-
-  // =========================================================================
-  // SAVE FORMS
-  // =========================================================================
   const handleSaveAccount = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
@@ -689,42 +455,135 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     };
 
     try {
-      const url = editingAccountId
-        ? `${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts/${editingAccountId}`
-        : `${import.meta.env.VITE_API_BASE_URL}/api/admin/accounts`;
-      const response = await fetchWithAuth(url, {
-        method: editingAccountId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        triggerToast(editingAccountId ? "Cập nhật tài khoản thành công!" : "Tạo mới và phân luồng thành công!");
-        if (editingAccountId) {
-          const currentUserStr = localStorage.getItem("user");
-          if (currentUserStr) {
-            try {
-              const currentUser = JSON.parse(currentUserStr);
-              if (currentUser.tenDangNhap === accForm.tenDangNhap || currentUser.username === accForm.tenDangNhap) {
-                if (onNameChange) {
-                  onNameChange(accForm.hoTen);
-                }
-              }
-            } catch (e) {
-              console.error("Lỗi parse user từ localStorage:", e);
-            }
-          }
-        }
-        fetchAccounts();
-        resetAccountForm();
+      const url = editingAccountId ? `/api/admin/accounts/${editingAccountId}` : `/api/admin/accounts`;
+      if (editingAccountId) {
+          await axiosClient.put(url, payload);
       } else {
-        triggerToast("Lỗi khi lưu tài khoản trên máy chủ!");
+          await axiosClient.post(url, payload);
       }
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
-      triggerToast("Lỗi kết nối đến máy chủ!");
+      
+      triggerToast(editingAccountId ? "Cập nhật tài khoản thành công!" : "Tạo mới và phân luồng thành công!");
+      
+      if (editingAccountId) {
+        const currentUserStr = localStorage.getItem("user");
+        if (currentUserStr) {
+          try {
+            const currentUser = JSON.parse(currentUserStr);
+            if (currentUser.tenDangNhap === accForm.tenDangNhap || currentUser.username === accForm.tenDangNhap) {
+              if (onNameChange) onNameChange(accForm.hoTen);
+            }
+          } catch (e) {}
+        }
+      }
+      fetchAccounts();
+      resetAccountForm();
+    } catch (error: any) {
+      triggerToast(error.response?.data?.error || "Lỗi khi lưu tài khoản!");
     }
-  }, [accForm, editingAccountId, accounts, fetchWithAuth, triggerToast, onNameChange, fetchAccounts, resetAccountForm]);
+  }, [accForm, editingAccountId, accounts, triggerToast, onNameChange, fetchAccounts, resetAccountForm]);
+
+
+  // =========================================================================
+  // XỬ LÝ FORM LỊCH TIÊM CHỦNG
+  // =========================================================================
+  const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
+  const [showAddSchedule, setShowAddSchedule] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    dateInput: "",
+    thoiGian: "",
+    maLoaiVacXin: 0,
+    loaiVacXinName: "",
+    maVacXin: 0,
+    soLuong: 0,
+    doTuoi: "",
+    diaDiem: "",
+    ghiChu: "",
+    selectedDoctors: [] as string[],
+  });
+
+  const [vaccineTypes, setVaccineTypes] = useState<{ maLoaiVacXin: number; tenLoaiVacXin: string }[]>([]);
+  const [vaccinesList, setVaccinesList] = useState<any[]>([]);
+  const [scheduleErrors, setScheduleErrors] = useState<Record<string, string>>({});
+
+  const fetchVaccineTypes = useCallback(async () => {
+    try {
+      const res = await axiosClient.get(`/api/admin/vaccine-types`);
+      setVaccineTypes(res.data);
+    } catch (err) {}
+  }, []);
+
+  const fetchVaccinesList = useCallback(async () => {
+    try {
+      const res = await axiosClient.get(`/api/customer/vaccines`);
+      setVaccinesList(res.data);
+    } catch (err) {}
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "schedules") {
+      fetchVaccineTypes();
+      fetchVaccinesList();
+    }
+  }, [activeTab, fetchVaccineTypes, fetchVaccinesList]);
+
+  const handleVaccineSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedMaVacXin = Number(e.target.value);
+    const selectedVac = vaccinesList.find((v) => v.maVacXin === selectedMaVacXin);
+
+    if (selectedVac) {
+      const typeObj = vaccineTypes.find((t) => t.tenLoaiVacXin === selectedVac.loaiVacXin);
+      const newMaLoaiVacXin = typeObj ? typeObj.maLoaiVacXin : 0;
+      setScheduleForm(prev => ({
+        ...prev,
+        maVacXin: selectedMaVacXin,
+        maLoaiVacXin: newMaLoaiVacXin,
+        loaiVacXinName: selectedVac.loaiVacXin || "Chưa phân loại",
+        doTuoi: selectedVac.doTuoiTiemChung || prev.doTuoi,
+      }));
+    } else {
+      setScheduleForm(prev => ({ ...prev, maVacXin: 0, maLoaiVacXin: 0, loaiVacXinName: "" }));
+    }
+    setScheduleErrors(prev => ({ ...prev, maVacXin: "" }));
+  }, [vaccinesList, vaccineTypes]);
+
+  const toggleDoctor = useCallback((doctorName: string) => {
+    setScheduleForm((prev) => {
+      const exists = prev.selectedDoctors.includes(doctorName);
+      if (exists) return { ...prev, selectedDoctors: prev.selectedDoctors.filter((d) => d !== doctorName) };
+      return { ...prev, selectedDoctors: [...prev.selectedDoctors, doctorName] };
+    });
+  }, []);
+
+  const handleDateChange = useCallback((dateStr: string) => {
+    setScheduleForm(prev => ({ ...prev, dateInput: dateStr }));
+  }, []);
+
+  const resetScheduleForm = useCallback(() => {
+    setScheduleForm({
+      dateInput: "", thoiGian: "", maLoaiVacXin: 0, loaiVacXinName: "", maVacXin: 0,
+      soLuong: 0, doTuoi: "", diaDiem: "", ghiChu: "", selectedDoctors: [],
+    });
+    setScheduleErrors({});
+    setEditingScheduleId(null);
+    setShowAddSchedule(false);
+  }, []);
+
+  const handleEditSchedule = useCallback((sch: LichTiemChungSRS) => {
+    setScheduleForm({
+      dateInput: `${sch.nam}-${sch.thang}-${sch.ngay}`,
+      thoiGian: sch.thoiGian,
+      maLoaiVacXin: sch.maLoaiVacXin || 0,
+      loaiVacXinName: sch.loaiVacXin || "",
+      maVacXin: sch.maVacXin || 0,
+      soLuong: sch.soLuong,
+      doTuoi: sch.doTuoi,
+      diaDiem: sch.diaDiem,
+      ghiChu: sch.ghiChu,
+      selectedDoctors: sch.danhSachBacSi || [],
+    });
+    setEditingScheduleId(sch.maLichTiem);
+    setShowAddSchedule(true);
+  }, []);
 
   const handleSaveSchedule = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -732,11 +591,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     if (!scheduleForm.dateInput) newErrors.dateInput = "Vui lòng chọn ngày tiêm";
     if (!scheduleForm.thoiGian.trim()) newErrors.thoiGian = "Vui lòng nhập thời gian tiêm";
     if (!scheduleForm.maVacXin) newErrors.maVacXin = "Vui lòng chọn tên vắc xin";
-    if (!scheduleForm.soLuong) {
-      newErrors.soLuong = "Vui lòng nhập số lượng";
-    } else if (scheduleForm.soLuong <= 0) {
-      newErrors.soLuong = "Số lượng phải lớn hơn 0";
-    }
+    if (!scheduleForm.soLuong || scheduleForm.soLuong <= 0) newErrors.soLuong = "Số lượng phải lớn hơn 0";
     if (!scheduleForm.doTuoi.trim()) newErrors.doTuoi = "Vui lòng nhập độ tuổi khuyên dùng";
     if (!scheduleForm.diaDiem.trim()) newErrors.diaDiem = "Vui lòng nhập địa điểm tổ chức";
 
@@ -759,28 +614,58 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
     };
 
     try {
-      const url = editingScheduleId
-        ? `${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules/${editingScheduleId.replace("LTC", "")}`
-        : `${import.meta.env.VITE_API_BASE_URL}/api/admin/schedules`;
-
-      const response = await fetchWithAuth(url, {
-        method: editingScheduleId ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        triggerToast(editingScheduleId ? "Cập nhật lịch tiêm thành công!" : "Tạo lịch tiêm mới thành công!");
-        fetchSchedules();
-        resetScheduleForm();
+      const url = editingScheduleId ? `/api/admin/schedules/${editingScheduleId.replace("LTC", "")}` : `/api/admin/schedules`;
+      
+      if (editingScheduleId) {
+          await axiosClient.put(url, payload);
       } else {
-        triggerToast("Lỗi khi lưu lịch tiêm trên máy chủ!");
+          await axiosClient.post(url, payload);
       }
-    } catch (error) {
-      if (error !== "Unauthorized") console.error(error);
-      triggerToast("Lỗi kết nối đến máy chủ!");
+
+      triggerToast(editingScheduleId ? "Cập nhật lịch tiêm thành công!" : "Tạo lịch tiêm mới thành công!");
+      fetchSchedules();
+      resetScheduleForm();
+    } catch (error: any) {
+      triggerToast(error.response?.data?.error || "Lỗi khi lưu lịch tiêm!");
     }
-  }, [scheduleForm, editingScheduleId, fetchWithAuth, triggerToast, fetchSchedules, resetScheduleForm]);
+  }, [scheduleForm, editingScheduleId, triggerToast, fetchSchedules, resetScheduleForm]);
+
+
+  // =========================================================================
+  // LOGIC XÓA (DELETE) CHUNG
+  // =========================================================================
+  const handleDeleteScheduleClick = useCallback((sch: LichTiemChungSRS) => {
+    setItemToDelete({ id: sch.maLichTiem, type: "schedule", name: sch.tenVacXin || sch.loaiVacXin || sch.maLichTiem });
+  }, []);
+
+  const handleDeleteAccountClick = useCallback((acc: TaiKhoan) => {
+    setItemToDelete({ id: acc.maTaiKhoan, type: "account", name: acc.tenDangNhap });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!itemToDelete) return;
+
+    if (itemToDelete.type === "schedule") {
+      const numericId = String(itemToDelete.id).replace("LTC", "");
+      try {
+        await axiosClient.delete(`/api/admin/schedules/${numericId}`);
+        triggerToast("Hủy lịch tiêm chủng thành công!");
+        setSelectedSchedule(null);
+        fetchSchedules();
+      } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Không thể xóa lịch tiêm!");
+      }
+    } else if (itemToDelete.type === "account") {
+      try {
+        await axiosClient.delete(`/api/admin/accounts/${itemToDelete.id}`);
+        triggerToast("Xóa tài khoản người dùng thành công!");
+        fetchAccounts();
+      } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Không thể xóa tài khoản!");
+      }
+    }
+    setItemToDelete(null); 
+  }, [itemToDelete, triggerToast, fetchSchedules, fetchAccounts]);
 
   // =========================================================================
   // XỬ LÝ CHAT ADMIN CHO PHẢN HỒI CẤP CAO
@@ -788,7 +673,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
   const selectTicketForProcessing = useCallback((t: SupportTicket) => {
     setSelectedTicket(t);
     setTicketResponse("");
-    setTicketErrors({});
   }, []);
 
   const handleProcessTicket = useCallback(async (e: React.FormEvent) => {
@@ -797,41 +681,31 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
 
     try {
       setIsReplying(true);
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feedbackId: selectedTicket.id, 
-          replyContent: ticketResponse,
-          sender: "admin", 
-        }),
+      await axiosClient.post("/api/customer/feedback/reply", {
+        feedbackId: selectedTicket.id, 
+        replyContent: ticketResponse,
+        sender: "admin", 
       });
 
-      if (res.ok) {
-        setTicketResponse("");
-        await fetchHighLevelTickets(); 
-      } else {
-        triggerToast("Lỗi gửi phản hồi.");
-      }
-    } catch (err) {
-      if (err !== "Unauthorized") triggerToast("Lỗi kết nối máy chủ.");
+      setTicketResponse("");
+      await fetchHighLevelTickets(); 
+    } catch (err: any) {
+      triggerToast(err.response?.data?.error || "Lỗi gửi phản hồi.");
     } finally {
       setIsReplying(false);
     }
-  }, [selectedTicket, ticketResponse, fetchWithAuth, fetchHighLevelTickets, triggerToast]);
+  }, [selectedTicket, ticketResponse, fetchHighLevelTickets, triggerToast]);
 
   const handleCompleteTicket = useCallback(async () => {
     if (!selectedTicket) return;
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/complete/${selectedTicket.id}`, { method: "PUT" });
-      if (res.ok) {
-        triggerToast("Đã đóng phản hồi thành công!");
-        await fetchHighLevelTickets();
-      }
-    } catch (err) {
+      await axiosClient.put(`/api/customer/feedback/complete/${selectedTicket.id}`);
+      triggerToast("Đã đóng phản hồi thành công!");
+      await fetchHighLevelTickets();
+    } catch (err: any) {
       triggerToast("Lỗi cập nhật trạng thái");
     }
-  }, [selectedTicket, fetchWithAuth, triggerToast, fetchHighLevelTickets]);
+  }, [selectedTicket, triggerToast, fetchHighLevelTickets]);
 
   const renderChatHistory = useCallback((jsonStr?: string) => {
     if (!jsonStr || jsonStr === "null") return null;
@@ -856,7 +730,6 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
       return <div className="text-center text-xs text-slate-400">Lỗi hiển thị nội dung chat.</div>;
     }
   }, []);
-
 
   return (
     <div className="space-y-6 animate-fade-in relative h-full flex flex-col">
@@ -1678,128 +1551,7 @@ export default function AdminModule({ triggerToast = alert, onNameChange }: Admi
         </div>
       )}
 
-      {/* ========================================= TAB PHẢN HỒI CẤP CAO (GIAO DIỆN CHAT) ========================================= */}
-      {/* {activeTab === "feedback" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px] pb-4">
-          <div className="lg:col-span-5 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm flex flex-col h-full">
-            <div className="p-4 bg-amber-50/50 border-b border-slate-200">
-              <h3 className="font-bold text-slate-800 text-sm">Hòm thư Góp ý / Khiếu nại</h3>
-              <p className="text-xs text-slate-500 mt-1">Dành riêng cho Ban Giám Đốc xử lý</p>
-            </div>
-
-            <div className="p-3 border-b border-slate-100 bg-slate-50/50">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Tìm kiếm nhanh..."
-                  className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-xs outline-none focus:ring-1 focus:ring-blue-500 bg-white"
-                />
-              </div>
-            </div>
-
-            <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
-              {isTicketsLoading ? (
-                <div className="p-8 text-center text-xs text-slate-400">Đang tải dữ liệu...</div>
-              ) : ticketsList.length > 0 ? (
-                ticketsList.map((t) => (
-                  <div
-                    key={t.id}
-                    onClick={() => selectTicketForProcessing(t)}
-                    className={`p-4 cursor-pointer text-sm transition-colors flex flex-col space-y-2 ${
-                      selectedTicket?.id === t.id ? "bg-amber-50/50 border-l-4 border-amber-500" : "hover:bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="font-mono text-xs font-bold text-slate-400">{t.id}</span>
-                        <p className="font-bold text-slate-800 text-sm mt-0.5">{t.customerName}</p>
-                      </div>
-                      <span
-                        className={`text-[9px] font-bold px-2 py-0.5 rounded whitespace-nowrap ${
-                          t.status === "Đã hoàn thành" ? "bg-slate-100 text-slate-500" : t.status === "Đã trả lời" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
-                        }`}
-                      >
-                        {t.status}
-                      </span>
-                    </div>
-                    <div className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded inline-block w-max">
-                      Loại: {t.type || "Chưa xác định"}
-                    </div>
-                    <div className="text-xs text-slate-600 line-clamp-2">{t.comments}</div>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center text-xs text-slate-400">Không có phản hồi cấp cao nào.</div>
-              )}
-            </div>
-          </div>
-
-          <div className="lg:col-span-7 h-full flex-col min-h-0 flex">
-            {!selectedTicket ? (
-              <div className="bg-slate-50 rounded-xl border border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm flex-1 flex items-center justify-center">
-                Vui lòng chọn một thư bên trái để xem nội dung và trả lời.
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
-                <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0 z-10">
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                      Hỗ trợ VIP {selectedTicket.id}
-                    </h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Khách hàng: <span className="font-semibold text-blue-600">{selectedTicket.customerName}</span> ({selectedTicket.email})
-                    </p>
-                  </div>
-                  {selectedTicket.status === "Đã hoàn thành" ? (
-                    <span className="px-3 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Đã đóng
-                    </span>
-                  ) : (
-                    <button
-                      onClick={handleCompleteTicket}
-                      className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
-                    >
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Đánh dấu Hoàn thành
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex-1 overflow-y-auto min-h-0 p-4 bg-slate-50/50">
-                  {renderChatHistory(selectedTicket.chiTietPhanHoi)}
-                  <div ref={chatEndRef} />
-                </div>
-
-                <div className="p-4 bg-white border-t border-slate-200 shrink-0">
-                  {selectedTicket.status === "Đã hoàn thành" ? (
-                    <div className="text-center text-xs text-slate-400 italic py-2">Khách hàng đã xác nhận giải quyết xong sự cố này.</div>
-                  ) : (
-                    <form onSubmit={handleProcessTicket} className="flex gap-2">
-                      <input
-                        type="text"
-                        required
-                        value={ticketResponse}
-                        onChange={(e) => setTicketResponse(e.target.value)}
-                        placeholder="Nhập nội dung trả lời (Đại diện BGD)..."
-                        className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-amber-500 focus:bg-white transition-all"
-                      />
-                      <button
-                        type="submit"
-                        disabled={isReplying || !ticketResponse.trim()}
-                        className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center transition-colors shadow-sm"
-                      >
-                        <Send className="w-4 h-4" />
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )} */}
-
-      {/* ========================================= TAB PHẢN HỒI CẤP CAO (GIAO DIỆN CHAT ĐỒNG BỘ SUPPORT) ========================================= */}
+      {/* ========================================= TAB PHẢN HỒI CẤP CAO ========================================= */}
       {activeTab === "feedback" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start h-[600px] pb-4">
           {/* Cột trái: Danh sách phản hồi */}

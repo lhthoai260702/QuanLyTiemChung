@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Syringe, User, Lock, ArrowRight, AlertCircle, ShieldCheck, RefreshCcw } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
+import axiosClient, { setAccessToken } from '../utils/axiosClient';
 
 const Login: React.FC = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [isLoading, setIsLoading] = useState(false); // Thêm trạng thái loading để tránh spam click
+    const [isLoading, setIsLoading] = useState(false);
     const navigate = useNavigate();
 
     // === STATE & REF CHO CAPTCHA ===
@@ -15,19 +16,16 @@ const Login: React.FC = () => {
     const [captchaText, setCaptchaText] = useState('');
     const [captchaInput, setCaptchaInput] = useState('');
 
-    // Dùng useCallback cho drawCaptcha để tránh tạo lại hàm
     const drawCaptcha = useCallback((text: string) => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Xóa nền cũ và tô nền xám nhạt
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#f8fafc'; // Màu nền
+        ctx.fillStyle = '#f8fafc';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Vẽ các đường nhiễu (noise lines) để đánh lừa bot
         for (let i = 0; i < 7; i++) {
             ctx.beginPath();
             ctx.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
@@ -37,19 +35,16 @@ const Login: React.FC = () => {
             ctx.stroke();
         }
 
-        // Cấu hình font chữ và in mã lên Canvas
         ctx.font = 'bold 24px "Courier New", monospace';
         ctx.fillStyle = '#334155';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         
-        // Vẽ chữ hơi lệch một chút để tạo độ khó cho máy đọc
         ctx.setTransform(1, Math.random() * 0.1 - 0.05, Math.random() * 0.1 - 0.05, 1, 0, 0);
         ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 2);
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // Trả lại gốc
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
     }, []);
 
-    // Hàm sinh ngẫu nhiên mã CAPTCHA
     const generateCaptcha = useCallback(() => {
         const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
         let captcha = '';
@@ -60,20 +55,18 @@ const Login: React.FC = () => {
         drawCaptcha(captcha);
     }, [drawCaptcha]);
 
-    // Khởi tạo CAPTCHA ngay khi load trang
     useEffect(() => {
         generateCaptcha();
     }, [generateCaptcha]);
     // ==================================
 
-    // Hàm đăng nhập truyền thống (Username/Password)
+    // Hàm đăng nhập truyền thống
     const handleLogin = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
 
-        // 1. KIỂM TRA CAPTCHA TRƯỚC KHI GỌI API
         if (captchaInput !== captchaText) {
             setError('Mã xác nhận (CAPTCHA) không chính xác!');
-            generateCaptcha(); // Bắt buộc nhập lại mã mới
+            generateCaptcha();
             setCaptchaInput('');
             return;
         }
@@ -82,13 +75,9 @@ const Login: React.FC = () => {
         setError('');
 
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
-
-            const data = await response.json();
+            // Thay thế fetch bằng axiosClient
+            const response = await axiosClient.post('/api/auth/login', { username, password });
+            const data = response.data;
 
             if (data.success) {
                 localStorage.setItem('user', JSON.stringify({ 
@@ -96,18 +85,21 @@ const Login: React.FC = () => {
                     maQuyen: data.maQuyen
                 }));
                 
+                // LƯU TOKEN VÀO BỘ NHỚ RAM, KHÔNG DÙNG LOCALSTORAGE NỮA
                 if (data.token) {
-                    localStorage.setItem('token', data.token);
+                    setAccessToken(data.token);
                 }
 
                 navigate('/app');
             } else {
                 setError(data.message || 'Tên đăng nhập hoặc mật khẩu không chính xác.');
-                generateCaptcha(); // Refresh mã khi sai pass
+                generateCaptcha();
                 setCaptchaInput('');
             }
-        } catch (err) {
-            setError('Lỗi kết nối đến server! Vui lòng kiểm tra lại Backend.');
+        } catch (err: any) {
+            setError(err.response?.data?.message || err.response?.data || 'Lỗi kết nối đến server! Vui lòng kiểm tra lại Backend.');
+            generateCaptcha();
+            setCaptchaInput('');
         } finally {
             setIsLoading(false);
         }
@@ -120,13 +112,9 @@ const Login: React.FC = () => {
         setError('');
         
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/google`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: googleToken })
-            });
-            
-            const data = await response.json();
+            // Thay thế fetch bằng axiosClient
+            const response = await axiosClient.post('/api/auth/google', { token: googleToken });
+            const data = response.data;
             
             if (data.success) { 
                 localStorage.setItem('user', JSON.stringify({ 
@@ -134,15 +122,16 @@ const Login: React.FC = () => {
                     maQuyen: data.maQuyen 
                 }));
                 
+                // LƯU TOKEN VÀO BỘ NHỚ RAM
                 if (data.token) {
-                    localStorage.setItem('token', data.token);
+                    setAccessToken(data.token);
                 }
                 navigate('/app'); 
             } else {
                 setError(data.message || 'Xác thực Google thất bại!');
             }
-        } catch (error) {
-            setError('Lỗi kết nối đến server khi xác thực Google!');
+        } catch (err: any) {
+            setError(err.response?.data?.message || err.response?.data || 'Lỗi kết nối đến server khi xác thực Google!');
         } finally {
             setIsLoading(false);
         }
@@ -230,7 +219,6 @@ const Login: React.FC = () => {
                                 />
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                                {/* Thẻ Canvas vẽ CAPTCHA */}
                                 <canvas 
                                     ref={canvasRef} 
                                     width="110" 
@@ -239,7 +227,6 @@ const Login: React.FC = () => {
                                     onClick={!isLoading ? generateCaptcha : undefined} 
                                     title="Nhấn để đổi mã mới"
                                 ></canvas>
-                                {/* Nút Refresh */}
                                 <button 
                                     type="button" 
                                     onClick={generateCaptcha} 
@@ -252,7 +239,6 @@ const Login: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    {/* ============================== */}
 
                     <div className="pt-2">
                         <button

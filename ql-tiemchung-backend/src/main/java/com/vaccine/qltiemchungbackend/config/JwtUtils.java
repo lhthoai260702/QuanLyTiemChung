@@ -10,16 +10,6 @@ import org.springframework.stereotype.Component;
 import java.security.Key;
 import java.util.Date;
 
-/**
- * JwtUtils
- * * Version 1.0
- * * Date: 03-07-2026
- * * Copyright
- * * Modification Logs:
- * DATE       AUTHOR    DESCRIPTION
- * -----------------------------------------------------------------------
- * 03-07-2026 lhthoai   Create
- */
 @Component
 public class JwtUtils {
 
@@ -27,23 +17,15 @@ public class JwtUtils {
     private String secretKey;
 
     @Value("${jwt.expiration}")
-    private long expireDuration;
+    private long expireDuration; // VD: 15 phút (900000 ms) cho Access Token
 
-    /**
-     * Lấy khóa ký bảo mật (Signing Key) dựa trên chuỗi bí mật
-     *
-     * @return Key
-     */
+    @Value("${jwt.refreshExpiration:604800000}")
+    private long refreshExpireDuration; // Mặc định 7 ngày cho Refresh Token
+
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secretKey.getBytes());
     }
 
-    /**
-     * Tạo chuỗi token JWT dựa trên tên người dùng
-     *
-     * @param username
-     * @return String
-     */
     public String generateToken(String username) {
         return Jwts.builder()
                 .setSubject(username)
@@ -53,12 +35,16 @@ public class JwtUtils {
                 .compact();
     }
 
-    /**
-     * Kiểm tra tính hợp lệ và thời hạn của token
-     *
-     * @param token
-     * @return boolean
-     */
+    // HÀM MỚI: Tạo Refresh Token
+    public String generateRefreshToken(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + refreshExpireDuration))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder().setSigningKey(getSigningKey()).build().parseClaimsJws(token);
@@ -68,12 +54,6 @@ public class JwtUtils {
         }
     }
 
-    /**
-     * Lấy tên người dùng (subject) từ chuỗi token
-     *
-     * @param token
-     * @return String
-     */
     public String getUsernameFromToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getSigningKey())

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Save, User, Shield, ArrowLeft, KeyRound } from "lucide-react";
+import axiosClient from "../utils/axiosClient";
 
 interface ProfileForm {
   tenDangNhap: string;
@@ -23,12 +24,6 @@ interface ProfileTabProps {
   onBack?: () => void;
 }
 
-// =========================================================================
-// CACHE SYSTEM BÊN NGOÀI COMPONENT ĐỂ GIỮ DỮ LIỆU KHI REMOUNT (CHUYỂN TAB)
-// =========================================================================
-const profileCache: { data: any; timestamp: number } = { data: null, timestamp: 0 };
-const CACHE_TTL = 5 * 60 * 1000; // 5 phút
-
 export default function ProfileTab({ triggerToast, onNameChange, onBack }: ProfileTabProps) {
   const [profile, setProfile] = useState<ProfileForm>({
     tenDangNhap: "", hoTen: "", cmnd: "", noiO: "", moTa: "", email: "", sdt: "",
@@ -41,30 +36,12 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
   const [userRole, setUserRole] = useState<number>(1);
 
   // =========================================================================
-  // BẢO MẬT & API
+  // API LẤY DỮ LIỆU PROFILE BẰNG AXIOS
   // =========================================================================
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = { ...options.headers, Authorization: `Bearer ${token}` };
-    return fetch(url, { ...options, headers });
-  }, []);
-
-  const loadProfile = useCallback(async (forceRefetch = false) => {
+  const loadProfile = useCallback(async () => {
     try {
-      let data;
-      
-      // Kỹ thuật Caching
-      if (!forceRefetch && profileCache.data && Date.now() - profileCache.timestamp < CACHE_TTL) {
-        data = profileCache.data;
-      } else {
-        const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/profile`);
-        if (!res.ok) return;
-        data = await res.json();
-        
-        // Lưu vào Cache
-        profileCache.data = data;
-        profileCache.timestamp = Date.now();
-      }
+      const response = await axiosClient.get(`/api/profile`);
+      const data = response.data;
 
       let formattedPhone = data.sdt ? data.sdt.replace(/\D/g, "") : "";
       if (formattedPhone.length > 3 && formattedPhone.length <= 6) {
@@ -100,10 +77,12 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
         else if (u.maQuyen === 5) setUserRoleBadge("Nhân viên Y tế");
         else if (u.maQuyen === 6) setUserRoleBadge("Khách hàng");
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      if (e.response?.status !== 401 && e.response?.status !== 403) {
+         console.error("Lỗi lấy thông tin profile:", e);
+      }
     }
-  }, [fetchWithAuth]);
+  }, []);
 
   useEffect(() => {
     loadProfile();
@@ -170,29 +149,16 @@ export default function ProfileTab({ triggerToast, onNameChange, onBack }: Profi
     };
 
     try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/profile`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      
-      if (res.ok) {
-        triggerToast("Cập nhật thông tin thành công!");
-        setProfile((prev) => ({ ...prev, matKhau: "" })); // Reset password field sau khi update thành công
-        
-        // Invalidate Cache để lần sau loadProfile sẽ lấy dữ liệu mới
-        profileCache.timestamp = 0; 
-
-        if (onNameChange) onNameChange(profile.hoTen);
-      } else {
-        triggerToast("Lỗi: Cập nhật thông tin thất bại!");
-      }
-    } catch (e) {
-      triggerToast("Lỗi kết nối máy chủ");
+      await axiosClient.put(`/api/profile`, payload);
+      triggerToast("Cập nhật thông tin thành công!");
+      setProfile((prev) => ({ ...prev, matKhau: "" })); 
+      if (onNameChange) onNameChange(profile.hoTen);
+    } catch (e: any) {
+        triggerToast(e.response?.data?.error || "Lỗi: Cập nhật thông tin thất bại!");
     } finally {
       setLoading(false);
     }
-  }, [profile, userRole, fetchWithAuth, triggerToast, onNameChange]);
+  }, [profile, userRole, triggerToast, onNameChange]);
 
   return (
     <div className="space-y-6 animate-fade-in relative h-full flex flex-col">

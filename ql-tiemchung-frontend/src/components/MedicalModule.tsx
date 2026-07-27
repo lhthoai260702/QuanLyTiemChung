@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { Search, Edit, Save, MapPin, Calendar, Syringe, Pill, X, Filter, FileText, UserPlus, List } from "lucide-react";
+import axiosClient from "../utils/axiosClient";
 
 export interface HistoryRecord {
   recordId: number;
@@ -58,8 +58,6 @@ export default function MedicalModule({ patients, setPatients, triggerToast }: M
 
   const [historyFilter, setHistoryFilter] = useState<FilterStatus>("Tất cả");
 
-  const navigate = useNavigate();
-
   // STATE CHO FORM TẠO BỆNH NHÂN MỚI
   const [createForm, setCreateForm] = useState({
     tenDangNhap: "",
@@ -83,31 +81,6 @@ export default function MedicalModule({ patients, setPatients, triggerToast }: M
   const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
   const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
-      navigate("/");
-    }
-  }, [navigate, triggerToast]);
-
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
-    const response = await fetch(url, { ...options, headers });
-    if (response.status === 401 || response.status === 403) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      navigate("/");
-      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject(new Error("Unauthorized"));
-    }
-    return response;
-  }, [navigate, triggerToast]);
-
   const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
     if (!forceRefetch && apiCache.current[url]) {
       const cached = apiCache.current[url];
@@ -115,32 +88,36 @@ export default function MedicalModule({ patients, setPatients, triggerToast }: M
         return cached.data;
       }
     }
-    const response = await fetchWithAuth(url);
-    if (response.ok) {
-      const data = await response.json();
+    try {
+      const response = await axiosClient.get(url);
+      const data = response.data;
       apiCache.current[url] = { data, timestamp: Date.now() };
       return data;
+    } catch (error: any) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+         triggerToast("Từ chối quyền truy cập hoặc phiên làm việc đã hết hạn!");
+      }
+      throw error;
     }
-    throw new Error("Lỗi khi tải dữ liệu từ máy chủ");
-  }, [fetchWithAuth]);
+  }, [triggerToast]);
 
   // =========================================================================
   // FETCH DỮ LIỆU
   // =========================================================================
   const fetchPatients = useCallback(async (force = false) => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/medical/patients`, force);
+      const data = await fetchWithCache(`/api/medical/patients`, force);
       setPatients(data);
       return data;
     } catch (error: any) {
-      if (error.message !== "Unauthorized") triggerToast("Không thể kết nối đến Máy chủ Backend!");
+       console.error("Lỗi lấy danh sách bệnh nhân:", error);
     }
     return null;
-  }, [fetchWithCache, setPatients, triggerToast]);
+  }, [fetchWithCache, setPatients]);
 
   const fetchVaccinesForCombobox = useCallback(async () => {
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/medical/vaccines`);
+      const data = await fetchWithCache(`/api/medical/vaccines`);
       setVaccineOptions(data);
     } catch (error) {}
   }, [fetchWithCache]);
@@ -291,28 +268,19 @@ export default function MedicalModule({ patients, setPatients, triggerToast }: M
     };
 
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/patients/account`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      await axiosClient.post(`/api/medical/patients/account`, payload);
 
-      if (response.ok) {
-        triggerToast("Tạo hồ sơ bệnh nhân thành công!");
-        setCreateForm({
-          tenDangNhap: "", matKhau: "", hoTen: "", cmnd: "", noiO: "", moTa: "",
-          email: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
-        });
-        fetchPatients(true); // Force refetch sau khi tạo mới
-        setActiveMainTab("list");
-      } else {
-        const result = await response.json();
-        triggerToast(result.error || "Tài khoản đã tồn tại hoặc lỗi máy chủ!");
-      }
-    } catch (error) {
-      triggerToast("Lỗi kết nối máy chủ");
+      triggerToast("Tạo hồ sơ bệnh nhân thành công!");
+      setCreateForm({
+        tenDangNhap: "", matKhau: "", hoTen: "", cmnd: "", noiO: "", moTa: "",
+        email: "", sdt: "", ngaySinh: "", diaChi: "", nguoiGiamHo: "", gioiTinh: "Nam",
+      });
+      fetchPatients(true); // Force refetch sau khi tạo mới
+      setActiveMainTab("list");
+    } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Tài khoản đã tồn tại hoặc lỗi máy chủ!");
     }
-  }, [createForm, fetchWithAuth, fetchPatients, triggerToast]);
+  }, [createForm, fetchPatients, triggerToast]);
 
   // =========================================================================
   // CẬP NHẬT HỒ SƠ
@@ -337,33 +305,29 @@ export default function MedicalModule({ patients, setPatients, triggerToast }: M
     }
 
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/patients/${selectedPatient?.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fullName: updateForm.fullName,
-          gender: updateForm.gender,
-          age: parseInt(updateForm.age),
-          guardianName: updateForm.guardianName,
-          address: updateForm.address,
-          phone: updateForm.phone,
-          cmnd: updateForm.cmnd,
-          email: updateForm.email,
-          matKhau: updateForm.matKhau,
-        }),
+      await axiosClient.put(`/api/medical/patients/${selectedPatient?.id}`, {
+        fullName: updateForm.fullName,
+        gender: updateForm.gender,
+        age: parseInt(updateForm.age),
+        guardianName: updateForm.guardianName,
+        address: updateForm.address,
+        phone: updateForm.phone,
+        cmnd: updateForm.cmnd,
+        email: updateForm.email,
+        matKhau: updateForm.matKhau,
       });
 
-      if (response.ok) {
-        triggerToast("Cập nhật hồ sơ thành công!");
-        const updatedPatients = await fetchPatients(true);
-        if (updatedPatients && selectedPatient) {
-          const freshPatient = updatedPatients.find((p: Patient) => p.id === selectedPatient.id);
-          if (freshPatient) setSelectedPatient(freshPatient);
-        }
-        setRightPaneMode("detail");
-      } else triggerToast(`Lỗi cập nhật server.`);
-    } catch (error) {}
-  }, [updateForm, selectedPatient, fetchWithAuth, fetchPatients, triggerToast]);
+      triggerToast("Cập nhật hồ sơ thành công!");
+      const updatedPatients = await fetchPatients(true);
+      if (updatedPatients && selectedPatient) {
+        const freshPatient = updatedPatients.find((p: Patient) => p.id === selectedPatient.id);
+        if (freshPatient) setSelectedPatient(freshPatient);
+      }
+      setRightPaneMode("detail");
+    } catch (error: any) {
+       triggerToast(error.response?.data?.error || `Lỗi cập nhật server.`);
+    }
+  }, [updateForm, selectedPatient, fetchPatients, triggerToast]);
 
   // =========================================================================
   // CẬP NHẬT LỊCH SỬ TIÊM
@@ -386,52 +350,40 @@ export default function MedicalModule({ patients, setPatients, triggerToast }: M
     }
 
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/history/${editingHistory.recordId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: editingHistory.date,
-          time: editingHistory.time,
-          status: editingHistory.status,
-          sideEffect: editingHistory.sideEffect,
-          thoiGianTacDung: editingHistory.thoiGianTacDung,
-          ghiChu: editingHistory.ghiChu,
-        }),
+      await axiosClient.put(`/api/medical/history/${editingHistory.recordId}`, {
+        date: editingHistory.date,
+        time: editingHistory.time,
+        status: editingHistory.status,
+        sideEffect: editingHistory.sideEffect,
+        thoiGianTacDung: editingHistory.thoiGianTacDung,
+        ghiChu: editingHistory.ghiChu,
       });
 
-      if (response.ok) {
-        triggerToast("Cập nhật lịch sử tiêm thành công!");
-        const updatedPatients = await fetchPatients(true);
-        if (updatedPatients && selectedPatient) {
-          const freshPatient = updatedPatients.find((p: Patient) => p.id === selectedPatient.id);
-          if (freshPatient) setSelectedPatient(freshPatient);
-        }
-        setRightPaneMode("detail");
-      } else {
-        const errorText = await response.text();
-        triggerToast(errorText);
+      triggerToast("Cập nhật lịch sử tiêm thành công!");
+      const updatedPatients = await fetchPatients(true);
+      if (updatedPatients && selectedPatient) {
+        const freshPatient = updatedPatients.find((p: Patient) => p.id === selectedPatient.id);
+        if (freshPatient) setSelectedPatient(freshPatient);
       }
-    } catch (error) {}
-  }, [editingHistory, selectedPatient, fetchWithAuth, fetchPatients, triggerToast]);
+      setRightPaneMode("detail");
+    } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Lỗi cập nhật trạng thái");
+    }
+  }, [editingHistory, selectedPatient, fetchPatients, triggerToast]);
 
   const handleProceedToVNPay = useCallback(async () => {
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/payment/create`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editingHistory),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        window.location.href = data.url;
+      const response = await axiosClient.post(`/api/payment/create`, editingHistory);
+      
+      if (response.data && response.data.url) {
+        window.location.href = response.data.url;
       } else {
         triggerToast("Có lỗi xảy ra khi tạo link thanh toán VNPay!");
       }
-    } catch (error) {
-      triggerToast("Lỗi kết nối máy chủ");
+    } catch (error: any) {
+      triggerToast(error.response?.data?.error || "Lỗi kết nối máy chủ");
     }
-  }, [editingHistory, fetchWithAuth, triggerToast]);
+  }, [editingHistory, triggerToast]);
 
   // =========================================================================
   // KÊ ĐƠN
@@ -449,32 +401,26 @@ export default function MedicalModule({ patients, setPatients, triggerToast }: M
     }
 
     try {
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/medical/prescribe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId: parseInt(prescribeForm.patientId),
-          vaccineId: parseInt(prescribeForm.vaccineId),
-          date: prescribeForm.date,
-          time: prescribeForm.time,
-          ghiChu: prescribeForm.ghiChu,
-        }),
+      await axiosClient.post(`/api/medical/prescribe`, {
+        patientId: parseInt(prescribeForm.patientId),
+        vaccineId: parseInt(prescribeForm.vaccineId),
+        date: prescribeForm.date,
+        time: prescribeForm.time,
+        ghiChu: prescribeForm.ghiChu,
       });
 
-      if (response.ok) {
-        triggerToast("Kê đơn và lên lịch thành công!");
-        const updatedPatients = await fetchPatients(true);
-        if (updatedPatients && selectedPatient) {
-          const freshPatient = updatedPatients.find((p: Patient) => p.id === selectedPatient.id);
-          if (freshPatient) setSelectedPatient(freshPatient);
-        }
-        setRightPaneMode("detail");
-        setActiveInnerTab("history");
-      } else {
-        triggerToast("Lỗi kê đơn từ server.");
+      triggerToast("Kê đơn và lên lịch thành công!");
+      const updatedPatients = await fetchPatients(true);
+      if (updatedPatients && selectedPatient) {
+        const freshPatient = updatedPatients.find((p: Patient) => p.id === selectedPatient.id);
+        if (freshPatient) setSelectedPatient(freshPatient);
       }
-    } catch (error) {}
-  }, [prescribeForm, selectedPatient, fetchWithAuth, fetchPatients, triggerToast]);
+      setRightPaneMode("detail");
+      setActiveInnerTab("history");
+    } catch (error: any) {
+        triggerToast(error.response?.data?.error || "Lỗi kê đơn từ server.");
+    }
+  }, [prescribeForm, selectedPatient, fetchPatients, triggerToast]);
 
   // =========================================================================
   // MEMOIZE LỊCH SỬ TIÊM CHỦNG

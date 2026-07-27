@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { FAQ, SystemLog } from "../types";
-import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail, CheckCircle2, Filter } from "lucide-react";
+import { HelpCircle, MessageSquare, Plus, Send, Save, Bell, Search, X, Mail, CheckCircle2, Filter, ArrowLeft } from "lucide-react";
+import axiosClient from "../utils/axiosClient";
 
 export interface FAQType {
   id?: string | number | null;
@@ -56,31 +57,6 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const apiCache = useRef<Record<string, { data: any; timestamp: number }>>({});
   const CACHE_TTL = 5 * 60 * 1000; // 5 phút
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      triggerToast("Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn!");
-      navigate("/");
-    }
-  }, [navigate, triggerToast]);
-
-  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
-    const token = localStorage.getItem("token");
-    const headers = {
-      ...options.headers,
-      Authorization: `Bearer ${token}`,
-    };
-    const response = await fetch(url, { ...options, headers });
-    if (response.status === 401 || response.status === 403) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-      navigate("/");
-      triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
-      return Promise.reject(new Error("Unauthorized"));
-    }
-    return response;
-  }, [navigate, triggerToast]);
-
   const fetchWithCache = useCallback(async (url: string, forceRefetch = false) => {
     if (!forceRefetch && apiCache.current[url]) {
       const cached = apiCache.current[url];
@@ -88,14 +64,20 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
         return cached.data;
       }
     }
-    const response = await fetchWithAuth(url);
-    if (response.ok) {
-      const data = await response.json();
+    
+    try {
+      const response = await axiosClient.get(url);
+      const data = response.data;
       apiCache.current[url] = { data, timestamp: Date.now() };
       return data;
+    } catch (error: any) {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+         triggerToast("Phiên đăng nhập đã hết hạn hoặc bạn không có quyền. Vui lòng đăng nhập lại!");
+      }
+      throw error;
     }
-    throw new Error("Lỗi khi tải dữ liệu từ máy chủ");
-  }, [fetchWithAuth]);
+  }, [triggerToast]);
+
 
   // ==========================================
   // STATE: MÀN HÌNH 1 - NHẮC NHỞ TIÊM CHỦNG
@@ -109,7 +91,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchReminders = useCallback(async (force = false) => {
     setIsLoadingReminders(true);
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/support/reminders`, force);
+      const data = await fetchWithCache(`/api/support/reminders`, force);
       const today = new Date();
       const offset = today.getTimezoneOffset();
       const localToday = new Date(today.getTime() - offset * 60 * 1000).toISOString().split("T")[0];
@@ -147,7 +129,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchFaqs = useCallback(async (force = false) => {
     setIsLoadingFaqs(true);
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/support/faqs`, force);
+      const data = await fetchWithCache(`/api/support/faqs`, force);
       setFaqsList(data);
     } catch (error: any) {
       if (error.message !== "Unauthorized") console.error("Lỗi kết nối:", error);
@@ -167,6 +149,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const [ticketStatusFilter, setTicketStatusFilter] = useState<string>("Tất cả"); // Bổ sung bộ lọc trạng thái
   const [isLoadingTickets, setIsLoadingTickets] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
+  const [showConfirmCompleteModal, setShowConfirmCompleteModal] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Xử lý Debounce cho ô tìm kiếm
@@ -180,7 +163,7 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
   const fetchTickets = useCallback(async (force = false) => {
     setIsLoadingTickets(true);
     try {
-      const data = await fetchWithCache(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/list`, force);
+      const data = await fetchWithCache(`/api/customer/feedback/list`, force);
       const mapped = data.map((t: any) => ({
         id: `PH-${t.id}`,
         customerName: t.customerName,
@@ -280,29 +263,21 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
 
     try {
       const isEditing = selectedFaq.id != null;
-      const url = isEditing
-        ? `${import.meta.env.VITE_API_BASE_URL}/api/support/faqs/${selectedFaq.id}`
-        : `${import.meta.env.VITE_API_BASE_URL}/api/support/faqs`;
+      const url = isEditing ? `/api/support/faqs/${selectedFaq.id}` : `/api/support/faqs`;
 
-      const method = isEditing ? "PUT" : "POST";
-
-      const response = await fetchWithAuth(url, {
-        method: method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: faqQuestion, answer: faqAnswer }),
-      });
-
-      if (response.ok) {
-        triggerToast(isEditing ? "Đã cập nhật câu hỏi thành công" : "Đã thêm câu hỏi FAQ thành công");
-        fetchFaqs(true); // Force refetch sau khi lưu
-        setSelectedFaq(null);
+      if (isEditing) {
+          await axiosClient.put(url, { question: faqQuestion, answer: faqAnswer });
       } else {
-        triggerToast("Lỗi khi lưu dữ liệu vào hệ thống!");
+          await axiosClient.post(url, { question: faqQuestion, answer: faqAnswer });
       }
+
+      triggerToast(isEditing ? "Đã cập nhật câu hỏi thành công" : "Đã thêm câu hỏi FAQ thành công");
+      fetchFaqs(true); // Force refetch sau khi lưu
+      setSelectedFaq(null);
     } catch (error: any) {
-      if (error.message !== "Unauthorized") triggerToast("Lỗi kết nối tới máy chủ!");
+        triggerToast(error.response?.data?.error || "Lỗi kết nối tới máy chủ!");
     }
-  }, [selectedFaq, faqQuestion, faqAnswer, fetchWithAuth, fetchFaqs, triggerToast]);
+  }, [selectedFaq, faqQuestion, faqAnswer, fetchFaqs, triggerToast]);
 
   // ---------- HANDLERS GIẢI ĐÁP (TICKETS CHAT) ----------
   const selectTicketForProcessing = useCallback((t: SupportTicket) => {
@@ -315,32 +290,38 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
     if (!selectedTicket || !replyMessage.trim()) return;
 
     // Giữ nguyên ID gốc để backend phân loại
-    const realId = String(selectedTicket.id);
+    const realId = String(selectedTicket.id).replace("PH-", "");
 
     try {
       setIsReplying(true);
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/customer/feedback/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          feedbackId: realId,
-          replyContent: replyMessage,
-          sender: "support", // Định danh là CSKH
-        }),
+      await axiosClient.post(`/api/customer/feedback/reply`, {
+        feedbackId: realId,
+        replyContent: replyMessage,
+        sender: "support", // Định danh là CSKH
       });
 
-      if (res.ok) {
-        setReplyMessage("");
-        await fetchTickets(true); // Force refetch để lấy tin nhắn mới
-      } else {
-        triggerToast("Lỗi gửi phản hồi");
-      }
+      setReplyMessage("");
+      await fetchTickets(true); // Force refetch để lấy tin nhắn mới
     } catch (err: any) {
-      if (err.message !== "Unauthorized") triggerToast("Lỗi gửi tin nhắn");
+      triggerToast(err.response?.data?.error || "Lỗi gửi phản hồi");
     } finally {
       setIsReplying(false);
     }
-  }, [selectedTicket, replyMessage, fetchWithAuth, fetchTickets, triggerToast]);
+  }, [selectedTicket, replyMessage, fetchTickets, triggerToast]);
+
+  const handleCompleteTicket = useCallback(async () => {
+    if (!selectedTicket) return;
+    const realId = String(selectedTicket.id).replace("PH-", "");
+    try {
+      await axiosClient.put(`/api/customer/feedback/complete/${realId}`);
+      triggerToast("Đã đóng phản hồi thành công!");
+      setShowConfirmCompleteModal(false);
+      await fetchTickets(true);
+    } catch (err: any) {
+      triggerToast(err.response?.data?.error || "Lỗi cập nhật trạng thái");
+    }
+  }, [selectedTicket, triggerToast, fetchTickets]);
+
 
   const renderChatHistory = useCallback((jsonStr?: string) => {
     if (!jsonStr || jsonStr === "null") return null;
@@ -814,13 +795,21 @@ export default function SupportModule({ faqs, setFaqs, systemLogs, setSystemLogs
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full min-h-0 overflow-hidden">
                 {/* Chat Header */}
                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0 z-10">
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                      Phiên hỗ trợ {selectedTicket.id}
-                    </h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      Khách hàng: <span className="font-semibold text-blue-600">{selectedTicket.customerName}</span> ({selectedTicket.email})
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setSelectedTicket(null)}
+                      className="lg:hidden p-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                        Phiên hỗ trợ {selectedTicket.id}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Khách hàng: <span className="font-semibold text-blue-600">{selectedTicket.customerName}</span> ({selectedTicket.email})
+                      </p>
+                    </div>
                   </div>
                   {selectedTicket.status === "Đã hoàn thành" && (
                     <span className="px-3 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">

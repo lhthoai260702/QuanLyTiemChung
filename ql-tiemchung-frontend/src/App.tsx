@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   initialUsers,
   initialVaccines,
@@ -8,31 +8,19 @@ import {
   initialFAQs,
   initialInvoices,
   initialSystemLogs,
-  initialStockLogs
-} from './mockData';
-import { useNavigate } from 'react-router-dom';
-import {
-  UserAccount,
-  Vaccine,
-  Patient,
-  Appointment,
-  SupportTicket,
-  FAQ,
-  Invoice,
-  SystemLog,
-  StockLog
-} from './types';
+  initialStockLogs,
+} from "./mockData";
+import { useNavigate } from "react-router-dom";
+import { UserAccount, Vaccine, Patient, Appointment, SupportTicket, FAQ, Invoice, SystemLog, StockLog } from "./types";
 
-// Importing submodules
-import AdminModule from './components/AdminModule';
-import InventoryModule from './components/InventoryModule';
-import MedicalModule from './components/MedicalModule';
-import CustomerModule from './components/CustomerModule';
-import SupportModule from './components/SupportModule';
-import FinanceModule from './components/FinanceModule';
-import ProfileTab from './components/ProfileTab'; // Component trang Hồ sơ
+import AdminModule from "./components/AdminModule";
+import InventoryModule from "./components/InventoryModule";
+import MedicalModule from "./components/MedicalModule";
+import CustomerModule from "./components/CustomerModule";
+import SupportModule from "./components/SupportModule";
+import FinanceModule from "./components/FinanceModule";
+import ProfileTab from "./components/ProfileTab";
 
-// Lucide icons
 import {
   Syringe,
   Shield,
@@ -46,136 +34,190 @@ import {
   LogOut,
   AlertCircle,
   ChevronDown,
-  User
-} from 'lucide-react';
+  User,
+  RefreshCcw,
+} from "lucide-react";
 
-type RoleType = 'Admin' | 'Inventory' | 'Medical' | 'Customer' | 'Support' | 'Finance';
+// === IMPORT AXIOS CLIENT VÀ CƠ CHẾ TOKEN ===
+import axiosClient, { setAccessToken, getAccessToken } from "./utils/axiosClient";
+
+type RoleType = "Admin" | "Inventory" | "Medical" | "Customer" | "Support" | "Finance";
 
 export default function App() {
+  // Trạng thái chờ khởi tạo để gọi Refresh Token nếu cần
+  const [isInitializing, setIsInitializing] = useState(true);
+
   // 1. Core States with localStorage persistence
   const [users, setUsers] = useState<UserAccount[]>(() => {
-    const saved = localStorage.getItem('mediflow_users');
+    const saved = localStorage.getItem("mediflow_users");
     return saved ? JSON.parse(saved) : initialUsers;
   });
 
   const [vaccines, setVaccines] = useState<Vaccine[]>(() => {
-    const saved = localStorage.getItem('mediflow_vaccines');
+    const saved = localStorage.getItem("mediflow_vaccines");
     return saved ? JSON.parse(saved) : initialVaccines;
   });
 
   const [patients, setPatients] = useState<Patient[]>(() => {
-    const saved = localStorage.getItem('mediflow_patients');
+    const saved = localStorage.getItem("mediflow_patients");
     return saved ? JSON.parse(saved) : initialPatients;
   });
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = localStorage.getItem('mediflow_appointments');
+    const saved = localStorage.getItem("mediflow_appointments");
     return saved ? JSON.parse(saved) : initialAppointments;
   });
 
   const [tickets, setTickets] = useState<SupportTicket[]>(() => {
-    const saved = localStorage.getItem('mediflow_tickets');
+    const saved = localStorage.getItem("mediflow_tickets");
     return saved ? JSON.parse(saved) : initialTickets;
   });
 
   const [faqs, setFaqs] = useState<FAQ[]>(() => {
-    const saved = localStorage.getItem('mediflow_faqs');
+    const saved = localStorage.getItem("mediflow_faqs");
     return saved ? JSON.parse(saved) : initialFAQs;
   });
 
   const [invoices, setInvoices] = useState<Invoice[]>(() => {
-    const saved = localStorage.getItem('mediflow_invoices');
+    const saved = localStorage.getItem("mediflow_invoices");
     return saved ? JSON.parse(saved) : initialInvoices;
   });
 
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>(() => {
-    const saved = localStorage.getItem('mediflow_system_logs');
+    const saved = localStorage.getItem("mediflow_system_logs");
     return saved ? JSON.parse(saved) : initialSystemLogs;
   });
 
   const [stockLogs, setStockLogs] = useState<StockLog[]>(() => {
-    const saved = localStorage.getItem('mediflow_stock_logs');
+    const saved = localStorage.getItem("mediflow_stock_logs");
     return saved ? JSON.parse(saved) : initialStockLogs;
   });
 
   const navigate = useNavigate();
-  const handleLogout = () => {
-    localStorage.removeItem('user'); // Xóa thông tin đã lưu
-    localStorage.removeItem('token'); // Xóa token
-    navigate('/login'); // Chuyển hướng về trang đăng nhập
+
+  // === ĐÃ CẬP NHẬT HÀM LOGOUT BẢO MẬT HƠN ===
+  const handleLogout = async () => {
+    try {
+      await axiosClient.post("/api/auth/logout"); // Xóa Cookie từ Backend
+    } catch (e) {
+      console.warn("Lỗi khi đăng xuất ở server", e);
+    }
+    localStorage.removeItem("user");
+    setAccessToken(null); // Xóa token RAM
+    navigate("/login");
   };
 
   // 2. Navigation Active States
-  const [activeRole, setActiveRole] = useState<RoleType>('Admin');
-  const [viewMode, setViewMode] = useState<'hub' | 'module' | 'profile'>('hub');
-  
-  // STATE LƯU LẠI MÀN HÌNH TRƯỚC ĐÓ ĐỂ QUAY VỀ
-  const [previousViewMode, setPreviousViewMode] = useState<'hub' | 'module'>('hub');
-  
-  const [toastMessage, setToastMessage] = useState<{message: string, type: 'success' | 'error'} | null>(null);
-  
-  // STATE LƯU THÔNG TIN NGƯỜI DÙNG ĐĂNG NHẬP VÀ PHÂN QUYỀN
+  const [activeRole, setActiveRole] = useState<RoleType>("Admin");
+  const [viewMode, setViewMode] = useState<"hub" | "module" | "profile">("hub");
+
+  const [previousViewMode, setPreviousViewMode] = useState<"hub" | "module">("hub");
+  const [toastMessage, setToastMessage] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
   const [loggedInName, setLoggedInName] = useState<string>("Người dùng");
   const [userRole, setUserRole] = useState<number>(1);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // 3. Persist hooks
-  useEffect(() => { localStorage.setItem('mediflow_users', JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem('mediflow_vaccines', JSON.stringify(vaccines)); }, [vaccines]);
-  useEffect(() => { localStorage.setItem('mediflow_patients', JSON.stringify(patients)); }, [patients]);
-  useEffect(() => { localStorage.setItem('mediflow_appointments', JSON.stringify(appointments)); }, [appointments]);
-  useEffect(() => { localStorage.setItem('mediflow_tickets', JSON.stringify(tickets)); }, [tickets]);
-  useEffect(() => { localStorage.setItem('mediflow_faqs', JSON.stringify(faqs)); }, [faqs]);
-  useEffect(() => { localStorage.setItem('mediflow_invoices', JSON.stringify(invoices)); }, [invoices]);
-  useEffect(() => { localStorage.setItem('mediflow_system_logs', JSON.stringify(systemLogs)); }, [systemLogs]);
-  useEffect(() => { localStorage.setItem('mediflow_stock_logs', JSON.stringify(stockLogs)); }, [stockLogs]);
-
-  // LẤY HỌ TÊN VÀ QUYỀN TỪ LOCAL STORAGE KHI COMPONENT MOUNT
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        const userData = JSON.parse(userStr);
-        if (userData && userData.hoTen) {
-          setLoggedInName(userData.hoTen);
-        } else if (userData && userData.name) {
-          setLoggedInName(userData.name);
-        }
+    localStorage.setItem("mediflow_users", JSON.stringify(users));
+  }, [users]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_vaccines", JSON.stringify(vaccines));
+  }, [vaccines]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_patients", JSON.stringify(patients));
+  }, [patients]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_appointments", JSON.stringify(appointments));
+  }, [appointments]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_tickets", JSON.stringify(tickets));
+  }, [tickets]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_faqs", JSON.stringify(faqs));
+  }, [faqs]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_invoices", JSON.stringify(invoices));
+  }, [invoices]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_system_logs", JSON.stringify(systemLogs));
+  }, [systemLogs]);
+  useEffect(() => {
+    localStorage.setItem("mediflow_stock_logs", JSON.stringify(stockLogs));
+  }, [stockLogs]);
 
-        if (userData && userData.maQuyen) {
-          setUserRole(userData.maQuyen);
-          if (userData.maQuyen !== 1) {
-            setViewMode('module');
-            if (userData.maQuyen === 2) setActiveRole('Inventory');
-            else if (userData.maQuyen === 3) setActiveRole('Finance');
-            else if (userData.maQuyen === 4) setActiveRole('Support');
-            else if (userData.maQuyen === 5) setActiveRole('Medical');
-            else if (userData.maQuyen === 6) setActiveRole('Customer');
+  // === KHÔI PHỤC PHIÊN LÀM VIỆC & REFRESH TOKEN TỰ ĐỘNG ===
+  useEffect(() => {
+    const initializeApp = async () => {
+      const userStr = localStorage.getItem("user");
+
+      // Nếu có user lưu nhưng RAM lại rỗng token (VD: Vừa ấn F5)
+      if (userStr && !getAccessToken()) {
+        try {
+          const res = await axiosClient.post("/api/auth/refresh");
+          if (res.data.token) {
+            setAccessToken(res.data.token);
           }
+        } catch (error) {
+          // Token hết hạn / Lỗi Cookie -> Văng ra ngoài luôn
+          localStorage.removeItem("user");
+          navigate("/login");
+          setIsInitializing(false);
+          return;
         }
-      } catch (e) {
-        setLoggedInName(userStr);
       }
-    }
-  }, []);
+
+      // Nạp Role và Tên nếu khôi phục thành công
+      if (userStr) {
+        try {
+          const userData = JSON.parse(userStr);
+          if (userData && userData.hoTen) {
+            setLoggedInName(userData.hoTen);
+          } else if (userData && userData.name) {
+            setLoggedInName(userData.name);
+          }
+
+          if (userData && userData.maQuyen) {
+            setUserRole(userData.maQuyen);
+            if (userData.maQuyen !== 1) {
+              setViewMode("module");
+              if (userData.maQuyen === 2) setActiveRole("Inventory");
+              else if (userData.maQuyen === 3) setActiveRole("Finance");
+              else if (userData.maQuyen === 4) setActiveRole("Support");
+              else if (userData.maQuyen === 5) setActiveRole("Medical");
+              else if (userData.maQuyen === 6) setActiveRole("Customer");
+            }
+          }
+        } catch (e) {
+          setLoggedInName(userStr);
+        }
+      }
+
+      // Xong tiến trình khôi phục
+      setIsInitializing(false);
+    };
+
+    initializeApp();
+  }, [navigate]);
 
   const triggerToast = useCallback((message: string) => {
-    let type: 'success' | 'error' = 'success';
+    let type: "success" | "error" = "success";
     const lowerMsg = message.toLowerCase();
-    
+
     if (
-      lowerMsg.includes('lỗi') || 
-      lowerMsg.includes('thất bại') || 
-      lowerMsg.includes('không thể') || 
-      lowerMsg.includes('vui lòng') || 
-      lowerMsg.includes('hết hạn') ||
-      lowerMsg.includes('chưa đăng nhập')
+      lowerMsg.includes("lỗi") ||
+      lowerMsg.includes("thất bại") ||
+      lowerMsg.includes("không thể") ||
+      lowerMsg.includes("vui lòng") ||
+      lowerMsg.includes("hết hạn") ||
+      lowerMsg.includes("chưa đăng nhập")
     ) {
-      type = 'error';
+      type = "error";
     }
-    
+
     setToastMessage({ message, type });
-    
+
     setTimeout(() => {
       setToastMessage(null);
     }, 4500);
@@ -183,31 +225,41 @@ export default function App() {
 
   const handleNameChange = useCallback((newName: string) => {
     setLoggedInName(newName);
-    const userStr = localStorage.getItem('user');
+    const userStr = localStorage.getItem("user");
     if (userStr) {
       try {
         const userData = JSON.parse(userStr);
         if (userData.hoTen !== undefined) userData.hoTen = newName;
         if (userData.name !== undefined) userData.name = newName;
-        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem("user", JSON.stringify(userData));
       } catch (e) {
-        localStorage.setItem('user', newName); 
+        localStorage.setItem("user", newName);
       }
     }
   }, []);
 
+  // Màn hình chờ tải nếu đang khôi phục phiên
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-sky-50 flex items-center justify-center font-sans">
+        <div className="flex flex-col items-center gap-4 text-blue-600">
+          <RefreshCcw className="w-10 h-10 animate-spin text-blue-500" />
+          <h2 className="font-bold text-lg animate-pulse tracking-wide">Đang khôi phục phiên làm việc...</h2>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-sky-50 flex flex-col font-sans select-none antialiased overflow-x-hidden">
-      
       {/* ========================================================= */}
       {/* 1. UNIFIED NAVBAR CỐ ĐỊNH CHUNG */}
       {/* ========================================================= */}
       <nav className="h-16 bg-white border-b border-sky-100 flex items-center justify-between px-6 sm:px-8 shrink-0 shadow-sm z-10 relative">
-        {/* Nút bấm để quay về trang chủ (Hub) hoặc về Module tương ứng */}
-        <div 
+        <div
           onClick={() => {
-            if (userRole === 1) setViewMode('hub');
-            else setViewMode('module');
+            if (userRole === 1) setViewMode("hub");
+            else setViewMode("module");
           }}
           className="flex items-center gap-3 transition-opacity cursor-pointer hover:opacity-80"
           title={userRole === 1 ? "Về Trang chủ" : "Về Phân hệ Công việc"}
@@ -219,7 +271,7 @@ export default function App() {
             VaccineFlow Pro
           </span>
         </div>
-        
+
         {/* DROPDOWN USER PROFILE */}
         <div className="relative">
           <button
@@ -232,22 +284,22 @@ export default function App() {
             <span className="text-sm font-bold text-slate-800 hidden sm:block">{loggedInName}</span>
             <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
           </button>
-          
+
           {isDropdownOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50">
-              <button 
+              <button
                 onClick={() => {
-                  if (viewMode !== 'profile') {
-                    setPreviousViewMode(viewMode as 'hub' | 'module');
+                  if (viewMode !== "profile") {
+                    setPreviousViewMode(viewMode as "hub" | "module");
                   }
-                  setViewMode('profile');
+                  setViewMode("profile");
                   setIsDropdownOpen(false);
                 }}
                 className="w-full text-left px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 border-b border-slate-100 cursor-pointer transition-colors font-medium"
               >
                 <User className="w-4 h-4" /> Xem hồ sơ
               </button>
-              <button 
+              <button
                 onClick={() => {
                   handleLogout();
                   setIsDropdownOpen(false);
@@ -264,21 +316,16 @@ export default function App() {
       {/* ========================================================= */}
       {/* 2. KHU VỰC HIỂN THỊ NỘI DUNG (THAY ĐỔI THEO TRẠNG THÁI) */}
       {/* ========================================================= */}
-      {viewMode === 'profile' ? (
+      {viewMode === "profile" ? (
         <div className="flex-1 flex overflow-hidden">
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative">
             <div className="max-w-3xl mx-auto">
-              <ProfileTab 
-                triggerToast={triggerToast} 
-                onNameChange={handleNameChange}
-                onBack={() => setViewMode(previousViewMode)} // Quay lại màn hình trước đó
-              />
+              <ProfileTab triggerToast={triggerToast} onNameChange={handleNameChange} onBack={() => setViewMode(previousViewMode)} />
             </div>
           </main>
         </div>
-      ) : viewMode === 'hub' ? (
+      ) : viewMode === "hub" ? (
         <div className="flex-1 flex flex-col">
-          {/* Main Content Hub */}
           <main className="flex-1 max-w-7xl mx-auto w-full p-6 sm:p-10 flex flex-col justify-center my-auto">
             <div className="mb-8">
               <span className="text-xs font-extrabold text-blue-600 tracking-widest uppercase mb-1.5 block">Hệ thống Tiêm chủng VaccineFlow Pro</span>
@@ -288,10 +335,20 @@ export default function App() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
               {/* Card 1: Admin */}
               {userRole === 1 && (
-                <button onClick={() => { setActiveRole('Admin'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-blue-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                  <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 text-white relative z-10"><Shield className="w-7 h-7" /></div>
+                <button
+                  onClick={() => {
+                    setActiveRole("Admin");
+                    setViewMode("module");
+                  }}
+                  className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-blue-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full"
+                >
+                  <div className="w-14 h-14 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-200 text-white relative z-10">
+                    <Shield className="w-7 h-7" />
+                  </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-blue-700 transition-colors">Administrator</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có toàn quyền đối với hệ thống, như sửa, thêm, xóa dữ liệu, phân quyền cho các user khác.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">
+                    Có toàn quyền đối với hệ thống, như sửa, thêm, xóa dữ liệu, phân quyền cho các user khác.
+                  </p>
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-blue-600">
                     <span>Quản trị toàn quyền hệ thống</span>
                     <ArrowRight className="w-4 h-4" />
@@ -301,10 +358,20 @@ export default function App() {
 
               {/* Card 2: Inventory */}
               {(userRole === 1 || userRole === 2) && (
-                <button onClick={() => { setActiveRole('Inventory'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-emerald-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                  <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-200 text-white relative z-10"><Archive className="w-7 h-7" /></div>
+                <button
+                  onClick={() => {
+                    setActiveRole("Inventory");
+                    setViewMode("module");
+                  }}
+                  className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-emerald-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full"
+                >
+                  <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-200 text-white relative z-10">
+                    <Archive className="w-7 h-7" />
+                  </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-emerald-700 transition-colors">Quản lí kho</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng quản lí các thông tin về kho thuốc của trung tâm.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">
+                    Có chức năng quản lí các thông tin về kho thuốc của trung tâm.
+                  </p>
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-emerald-600">
                     <span>Quản lý danh mục vắc-xin</span>
                     <ArrowRight className="w-4 h-4" />
@@ -314,10 +381,20 @@ export default function App() {
 
               {/* Card 3: Finance */}
               {(userRole === 1 || userRole === 3) && (
-                <button onClick={() => { setActiveRole('Finance'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-cyan-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                  <div className="w-14 h-14 bg-cyan-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-cyan-200 text-white relative z-10"><DollarSign className="w-7 h-7" /></div>
+                <button
+                  onClick={() => {
+                    setActiveRole("Finance");
+                    setViewMode("module");
+                  }}
+                  className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-cyan-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full"
+                >
+                  <div className="w-14 h-14 bg-cyan-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-cyan-200 text-white relative z-10">
+                    <DollarSign className="w-7 h-7" />
+                  </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-cyan-700 transition-colors">Tài chính</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng quản lí các thông tin về tài chính của trung tâm.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">
+                    Có chức năng quản lí các thông tin về tài chính của trung tâm.
+                  </p>
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-cyan-600">
                     <span>Quản lý giao dịch và giá</span>
                     <ArrowRight className="w-4 h-4" />
@@ -327,10 +404,20 @@ export default function App() {
 
               {/* Card 4: Support */}
               {(userRole === 1 || userRole === 4) && (
-                <button onClick={() => { setActiveRole('Support'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-purple-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                  <div className="w-14 h-14 bg-purple-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-purple-200 text-white relative z-10"><MessageSquare className="w-7 h-7" /></div>
+                <button
+                  onClick={() => {
+                    setActiveRole("Support");
+                    setViewMode("module");
+                  }}
+                  className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-purple-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full"
+                >
+                  <div className="w-14 h-14 bg-purple-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-purple-200 text-white relative z-10">
+                    <MessageSquare className="w-7 h-7" />
+                  </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-purple-700 transition-colors">Hỗ trợ khách hàng</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có chức năng nắm bắt thông tin, hỗ trợ và phản hồi các thông tin từ khách hàng.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">
+                    Có chức năng nắm bắt thông tin, hỗ trợ và phản hồi các thông tin từ khách hàng.
+                  </p>
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-purple-600">
                     <span>Giải đáp và Nhắc nhở tiêm</span>
                     <ArrowRight className="w-4 h-4" />
@@ -340,10 +427,20 @@ export default function App() {
 
               {/* Card 5: Medical */}
               {(userRole === 1 || userRole === 5) && (
-                <button onClick={() => { setActiveRole('Medical'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-rose-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                  <div className="w-14 h-14 bg-rose-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-rose-200 text-white relative z-10"><Activity className="w-7 h-7" /></div>
+                <button
+                  onClick={() => {
+                    setActiveRole("Medical");
+                    setViewMode("module");
+                  }}
+                  className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-rose-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full"
+                >
+                  <div className="w-14 h-14 bg-rose-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-rose-200 text-white relative z-10">
+                    <Activity className="w-7 h-7" />
+                  </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-rose-700 transition-colors">Quản lý khách hàng</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Là người trực tiếp khám chữa bệnh cho bệnh nhân, có chức năng cập nhật thông tình trạng của bệnh nhân, kê đơn thuốc.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">
+                    Là người trực tiếp khám chữa bệnh cho bệnh nhân, có chức năng cập nhật thông tình trạng của bệnh nhân, kê đơn thuốc.
+                  </p>
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-rose-600">
                     <span>Quản lý hồ sơ bệnh án</span>
                     <ArrowRight className="w-4 h-4" />
@@ -352,11 +449,22 @@ export default function App() {
               )}
 
               {/* Card 6: Customer */}
-              {(userRole === 6) && (
-                <button onClick={() => { setActiveRole('Customer'); setViewMode('module'); }} className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-amber-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full">
-                  <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-amber-200 text-white relative z-10"><Users className="w-7 h-7" /></div>
+              {userRole === 6 && (
+                <button
+                  onClick={() => {
+                    setActiveRole("Customer");
+                    setViewMode("module");
+                  }}
+                  className="bg-white rounded-3xl p-6 border-2 border-white shadow-xl shadow-blue-900/5 hover:border-amber-200/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 text-left relative overflow-hidden group outline-none cursor-pointer flex flex-col h-full"
+                >
+                  <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-amber-200 text-white relative z-10">
+                    <Users className="w-7 h-7" />
+                  </div>
                   <h3 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-amber-700 transition-colors">Khách hàng</h3>
-                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">Có quyền xem thông tin từng loại vắc xin, đăng kí tiêm phòng; xem lịch tiêm phòng; xem hồ sơ tiêm phòng cá nhân; yêu cầu hỗ trợ từ trung tâm; xem tình hình dịch bệnh; feedback cho quản lý.</p>
+                  <p className="text-sm text-slate-500 leading-relaxed mb-6 flex-grow">
+                    Có quyền xem thông tin từng loại vắc xin, đăng kí tiêm phòng; xem lịch tiêm phòng; xem hồ sơ tiêm phòng cá nhân; yêu cầu hỗ trợ từ
+                    trung tâm; xem tình hình dịch bệnh; feedback cho quản lý.
+                  </p>
                   <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-50 text-[11px] font-bold uppercase tracking-wider text-amber-600">
                     <span>Tra cứu và Đăng ký lịch</span>
                     <ArrowRight className="w-4 h-4" />
@@ -371,47 +479,21 @@ export default function App() {
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 relative">
             {/* 3. CORE SUBMODULE SWITCHBOARD */}
             <div className="max-w-7xl mx-auto">
-              {activeRole === 'Admin' && (
-                <AdminModule
-                  triggerToast={triggerToast}
-                  onNameChange={handleNameChange}
-                />
+              {activeRole === "Admin" && <AdminModule triggerToast={triggerToast} onNameChange={handleNameChange} />}
+
+              {activeRole === "Inventory" && <InventoryModule triggerToast={triggerToast} onNameChange={handleNameChange} />}
+
+              {activeRole === "Medical" && (
+                <MedicalModule patients={patients} setPatients={setPatients} vaccines={vaccines} triggerToast={triggerToast} />
               )}
 
-              {activeRole === 'Inventory' && (
-                <InventoryModule
-                  triggerToast={triggerToast}
-                  onNameChange={handleNameChange}
-                />
+              {activeRole === "Customer" && <CustomerModule triggerToast={triggerToast} onNameChange={handleNameChange} />}
+
+              {activeRole === "Support" && (
+                <SupportModule faqs={faqs} setFaqs={setFaqs} systemLogs={systemLogs} setSystemLogs={setSystemLogs} triggerToast={triggerToast} />
               )}
 
-              {activeRole === 'Medical' && (
-                <MedicalModule
-                  patients={patients}
-                  setPatients={setPatients}
-                  vaccines={vaccines}
-                  triggerToast={triggerToast}
-                />
-              )}
-
-              {activeRole === 'Customer' && (
-                <CustomerModule
-                  triggerToast={triggerToast}
-                  onNameChange={handleNameChange}
-                />
-              )}
-
-              {activeRole === 'Support' && (
-                <SupportModule
-                  faqs={faqs}
-                  setFaqs={setFaqs}
-                  systemLogs={systemLogs}
-                  setSystemLogs={setSystemLogs}
-                  triggerToast={triggerToast}
-                />
-              )}
-
-              {activeRole === 'Finance' && (
+              {activeRole === "Finance" && (
                 <FinanceModule
                   invoices={invoices}
                   setInvoices={setInvoices}
@@ -427,18 +509,17 @@ export default function App() {
       )}
 
       {/* FOOTER */}
-      <footer className="h-10 bg-slate-900 border-t border-slate-800 shrink-0">
-      </footer>
+      <footer className="h-10 bg-slate-900 border-t border-slate-800 shrink-0"></footer>
 
       {/* 4. REAL-TIME EVENT POPUP TOAST NOTIFIER */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white rounded-xl shadow-2xl p-4 max-w-sm border border-slate-700/80 animate-slide-in flex items-start gap-3">
-          <div className={`${toastMessage.type === 'error' ? 'bg-red-500 text-white' : 'bg-emerald-500 text-slate-950'} p-1.5 rounded-lg shrink-0`}>
-            {toastMessage.type === 'error' ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
+          <div className={`${toastMessage.type === "error" ? "bg-red-500 text-white" : "bg-emerald-500 text-slate-950"} p-1.5 rounded-lg shrink-0`}>
+            {toastMessage.type === "error" ? <AlertCircle className="w-5 h-5" /> : <CheckCircle2 className="w-5 h-5" />}
           </div>
           <div className="space-y-1">
-            <h4 className={`text-xs font-bold font-sans tracking-wide ${toastMessage.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
-              {toastMessage.type === 'error' ? 'CẢNH BÁO LỖI' : 'THÔNG BÁO HỆ THỐNG'}
+            <h4 className={`text-xs font-bold font-sans tracking-wide ${toastMessage.type === "error" ? "text-red-400" : "text-emerald-400"}`}>
+              {toastMessage.type === "error" ? "CẢNH BÁO LỖI" : "THÔNG BÁO HỆ THỐNG"}
             </h4>
             <p className="text-xs text-slate-300 leading-relaxed font-semibold">{toastMessage.message}</p>
           </div>

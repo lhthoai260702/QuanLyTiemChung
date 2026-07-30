@@ -6,6 +6,7 @@ import com.vaccine.qltiemchungbackend.repository.LoaiVacXinRepository;
 import com.vaccine.qltiemchungbackend.service.LichTiemChungService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -78,6 +79,8 @@ public class LichTiemChungController {
         try {
             lichTiemChungService.updateSchedule(id, request);
             return ResponseEntity.ok().body("{\"message\": \"Cập nhật lịch tiêm thành công!\"}");
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            throw ex;
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"Lỗi: " + e.getMessage() + "\"}");
         }

@@ -61,4 +61,8 @@ public class LoVacXin {
 
     @Column(name = "flag_delete")
     private Boolean flagDelete = false;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

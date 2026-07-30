@@ -172,7 +172,15 @@ public class InventoryService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy Lô Vắc-xin số: " + soLo));
         if (loVacXin.getSoLuong() < soLuongXuat) throw new RuntimeException("Số lượng xuất vượt quá tồn kho!");
         loVacXin.setSoLuong(loVacXin.getSoLuong() - soLuongXuat);
-        loVacXinRepository.save(loVacXin);
+
+        try {
+            System.out.println("Đang xử lý xuất kho... Giữ nguyên 5 giây để test tranh chấp!");
+            Thread.sleep(5000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        
+        loVacXinRepository.saveAndFlush(loVacXin);
     }
 
     /**

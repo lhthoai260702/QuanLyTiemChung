@@ -42,7 +42,6 @@ public class CustomerService {
      */
     @Transactional
     public void bookVaccine(BookingRequestDTO request) {
-        // 1. Lấy thông tin Bệnh nhân
         BenhNhan bn = benhNhanRepository.findById(request.getMaBenhNhan())
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh nhân!"));
 
@@ -51,36 +50,36 @@ public class CustomerService {
         dk.setFlagDelete(false);
         dk.setTrangThai("Chưa tiêm");
 
-        // Phân nhánh logic: Đăng ký theo Lịch trung tâm hoặc Đăng ký trực tiếp vắc xin
         if (request.getMaLichTiem() != null) {
-            // Lấy thông tin lịch tiêm trung tâm
             com.vaccine.qltiemchungbackend.entity.LichTiemChung ltc = lichTiemChungRepository.findById(request.getMaLichTiem())
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy lịch tiêm chủng trung tâm!"));
+
+            // BỔ SUNG: Kiểm tra xem còn slot không và tiến hành trừ đi 1 người tiêm
+            if (ltc.getSoLuongNguoiTiem() <= 0) {
+                throw new RuntimeException("Lịch tiêm này đã hết chỗ!");
+            }
+            ltc.setSoLuongNguoiTiem(ltc.getSoLuongNguoiTiem() - 1);
+            lichTiemChungRepository.saveAndFlush(ltc); // <--- Gọi saveAndFlush
 
             if (ltc.getMaLoaiVacXin() == null) {
                 throw new RuntimeException("Lịch tiêm chủng này hiện chưa được phân bổ loại vắc-xin!");
             }
 
-            // Tìm lô vắc-xin còn hàng
             LoVacXin loVacXin = loVacXinRepository.findAvailableLotByLoaiVacXinId(ltc.getMaLoaiVacXin())
                     .orElseThrow(() -> new RuntimeException("Rất tiếc, vắc-xin cho lịch tiêm này hiện đã hết hàng trong kho!"));
 
             dk.setMaLo(loVacXin.getMaLo());
             dk.setThoiGianCanTiem(ltc.getNgayTiem() != null ? ltc.getNgayTiem() : request.getNgayMongMuon());
             dk.setGioTiem(ltc.getThoiGianChung());
-
-            // LƯU TRỰC TIẾP MÃ LỊCH TIÊM VÀO DATABASE
             dk.setMaLichTiem(ltc.getMaLichTiem());
 
         } else {
-            // Đăng ký trực tiếp từ tab thông tin vắc-xin
             LoVacXin loVacXin = loVacXinRepository.findAvailableLotByVaccineId(request.getMaVacXin())
                     .orElseThrow(() -> new RuntimeException("Rất tiếc, vắc-xin này hiện đã hết hàng trong kho!"));
 
             dk.setMaLo(loVacXin.getMaLo());
             dk.setThoiGianCanTiem(request.getNgayMongMuon());
             dk.setGioTiem(request.getGioMongMuon());
-            // Đăng ký tự do thì không có mã lịch tiêm (sẽ Null và lấy địa điểm mặc định là Trụ sở chính)
         }
 
         chiTietDkTiemRepository.save(dk);

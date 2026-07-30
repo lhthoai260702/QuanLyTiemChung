@@ -152,7 +152,7 @@ public class LichTiemChungService {
             ltc.setNgayTiem(LocalDate.parse(dto.getDateInput()));
         }
 
-        lichTiemChungRepository.save(ltc);
+        lichTiemChungRepository.saveAndFlush(ltc);
         lichTiemChungRepository.deleteChiTietNhanVienByLichTiem(id);
 
         if (dto.getSelectedDoctors() != null && !dto.getSelectedDoctors().isEmpty()) {

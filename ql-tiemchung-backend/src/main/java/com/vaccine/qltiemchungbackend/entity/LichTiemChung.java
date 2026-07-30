@@ -50,4 +50,8 @@ public class LichTiemChung {
 
     @Column(name = "flag_delete")
     private Boolean flagDelete;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

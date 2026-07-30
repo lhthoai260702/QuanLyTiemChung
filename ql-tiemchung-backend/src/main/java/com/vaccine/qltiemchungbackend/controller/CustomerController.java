@@ -14,6 +14,7 @@ import com.vaccine.qltiemchungbackend.service.CustomerService;
 import com.vaccine.qltiemchungbackend.service.SupportService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -108,6 +109,8 @@ public class CustomerController {
         try {
             customerService.bookVaccine(request);
             return ResponseEntity.ok().body("{\"message\": \"Đăng ký tiêm phòng thành công!\"}");
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            throw ex; // Bỏ qua ngoại lệ này cho GlobalExceptionHandler xử lý
         } catch (Exception e) {
             return ResponseEntity.badRequest().body("{\"error\": \"" + e.getMessage() + "\"}");
         }

@@ -9,6 +9,7 @@ import com.vaccine.qltiemchungbackend.repository.VacXinRepository;
 import com.vaccine.qltiemchungbackend.service.InventoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -108,6 +109,8 @@ public class InventoryController {
         try {
             inventoryService.exportVaccine(id, quantity);
             return ResponseEntity.ok().body("Xuất kho thành công");
+        } catch (ObjectOptimisticLockingFailureException ex) {
+            throw ex;
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
